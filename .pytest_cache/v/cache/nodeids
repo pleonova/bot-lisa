@@ -1,0 +1,7 @@
+[
+  "tests/test_retrieval.py::test_bm25_index_loads_phrase_library",
+  "tests/test_retrieval.py::test_bm25_search_returns_relevant_top_result",
+  "tests/test_retrieval.py::test_hybrid_search_returns_ranked_candidates",
+  "tests/test_retrieval.py::test_retrieval_service_health_endpoint",
+  "tests/test_retrieval.py::test_retrieval_service_search_endpoint"
+]

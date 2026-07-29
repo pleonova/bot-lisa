@@ -1,0 +1,47 @@
+# Bare-bones local orchestration for the three services.
+# Run from repo root: docker compose -f infra/docker-compose.yml up --build
+#
+# Swap-in path: this is what gets replaced by k8s manifests (infra/k8s/) once
+# you're ready to run on a real cluster -- same three containers, same env vars.
+version: "3.9"
+
+services:
+  retrieval-service:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    command: uvicorn services.retrieval_service.main:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+
+  orchestration-service:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    command: uvicorn services.orchestration_service.main:app --host 0.0.0.0 --port 8002
+    ports:
+      - "8002:8002"
+    environment:
+      - RETRIEVAL_SERVICE_URL=http://retrieval-service:8001
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    depends_on:
+      - retrieval-service
+
+  ingestion-service:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    command: uvicorn services.ingestion_service.main:app --host 0.0.0.0 --port 8003
+    ports:
+      - "8003:8003"
+    environment:
+      - ORCHESTRATION_SERVICE_URL=http://orchestration-service:8002
+    depends_on:
+      - orchestration-service
+
+  # Swap-in point for real message queue infra (Kafka / Redis Streams).
+  # Uncomment once services/common/events.py grows a KafkaEventBus implementation.
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "6379:6379"

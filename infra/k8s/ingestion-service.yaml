@@ -1,0 +1,43 @@
+# Scaffold only -- same pattern as retrieval-service.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingestion-service
+  labels:
+    app: ingestion-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ingestion-service
+  template:
+    metadata:
+      labels:
+        app: ingestion-service
+    spec:
+      containers:
+        - name: ingestion-service
+          image: infant-lang-bot:local
+          command: ["uvicorn", "services.ingestion_service.main:app", "--host", "0.0.0.0", "--port", "8003"]
+          ports:
+            - containerPort: 8003
+          env:
+            - name: ORCHESTRATION_SERVICE_URL
+              value: "http://orchestration-service:8002"
+          readinessProbe:
+            httpGet: { path: /health, port: 8003 }
+            initialDelaySeconds: 3
+          resources:
+            requests: { cpu: "100m", memory: "128Mi" }
+            limits: { cpu: "500m", memory: "256Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingestion-service
+spec:
+  selector:
+    app: ingestion-service
+  ports:
+    - port: 8003
+      targetPort: 8003

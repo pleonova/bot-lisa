@@ -1,0 +1,122 @@
+[
+  {
+    "id": "p001",
+    "ru": "Пойдём кушать!",
+    "gloss_en": "Let's go eat!",
+    "routine": "mealtime",
+    "tags": ["mealtime", "transition"],
+    "usage_count": 0
+  },
+  {
+    "id": "p002",
+    "ru": "Открой ротик.",
+    "gloss_en": "Open your little mouth.",
+    "routine": "mealtime",
+    "tags": ["mealtime", "instruction"],
+    "usage_count": 0
+  },
+  {
+    "id": "p003",
+    "ru": "Вкусно?",
+    "gloss_en": "Tasty?",
+    "routine": "mealtime",
+    "tags": ["mealtime", "question"],
+    "usage_count": 0
+  },
+  {
+    "id": "p004",
+    "ru": "Пора спать, малыш.",
+    "gloss_en": "Time to sleep, little one.",
+    "routine": "sleep",
+    "tags": ["sleep", "transition"],
+    "usage_count": 0
+  },
+  {
+    "id": "p005",
+    "ru": "Закрывай глазки.",
+    "gloss_en": "Close your little eyes.",
+    "routine": "sleep",
+    "tags": ["sleep", "instruction"],
+    "usage_count": 0
+  },
+  {
+    "id": "p006",
+    "ru": "Спокойной ночи.",
+    "gloss_en": "Good night.",
+    "routine": "sleep",
+    "tags": ["sleep", "farewell"],
+    "usage_count": 0
+  },
+  {
+    "id": "p007",
+    "ru": "Давай мыть ручки.",
+    "gloss_en": "Let's wash your little hands.",
+    "routine": "hygiene",
+    "tags": ["hygiene", "transition"],
+    "usage_count": 0
+  },
+  {
+    "id": "p008",
+    "ru": "Тёплая водичка, да?",
+    "gloss_en": "Warm little water, huh?",
+    "routine": "hygiene",
+    "tags": ["hygiene", "question"],
+    "usage_count": 0
+  },
+  {
+    "id": "p009",
+    "ru": "Молодец!",
+    "gloss_en": "Well done!",
+    "routine": "praise",
+    "tags": ["praise", "general"],
+    "usage_count": 0
+  },
+  {
+    "id": "p010",
+    "ru": "Умница какой!",
+    "gloss_en": "What a smart boy!",
+    "routine": "praise",
+    "tags": ["praise", "general"],
+    "usage_count": 0
+  },
+  {
+    "id": "p011",
+    "ru": "Пойдём гулять.",
+    "gloss_en": "Let's go for a walk.",
+    "routine": "play",
+    "tags": ["play", "transition"],
+    "usage_count": 0
+  },
+  {
+    "id": "p012",
+    "ru": "Какая красивая машинка!",
+    "gloss_en": "What a beautiful little car!",
+    "routine": "play",
+    "tags": ["play", "object"],
+    "usage_count": 0
+  },
+  {
+    "id": "p013",
+    "ru": "Дай мне ручку.",
+    "gloss_en": "Give me your little hand.",
+    "routine": "general",
+    "tags": ["general", "instruction"],
+    "usage_count": 0
+  },
+  {
+    "id": "p014",
+    "ru": "Смотри, киса!",
+    "gloss_en": "Look, kitty!",
+    "routine": "play",
+    "tags": ["play", "object"],
+    "usage_count": 0
+  },
+  {
+    "id": "p015",
+    "ru": "Ты хочешь пить?",
+    "gloss_en": "Do you want to drink?",
+    "routine": "mealtime",
+    "tags": ["mealtime", "question"],
+    "usage_count": 0
+  }
+]

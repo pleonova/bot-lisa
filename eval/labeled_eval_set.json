@@ -1,0 +1,42 @@
+[
+  {
+    "query": "малыш хочет кушать",
+    "routine": "mealtime",
+    "relevant_phrase_ids": ["p001", "p002", "p003", "p015"]
+  },
+  {
+    "query": "пора в кроватку",
+    "routine": "sleep",
+    "relevant_phrase_ids": ["p004", "p005", "p006"]
+  },
+  {
+    "query": "моем руки перед едой",
+    "routine": "hygiene",
+    "relevant_phrase_ids": ["p007", "p008"]
+  },
+  {
+    "query": "он сделал это сам",
+    "routine": "praise",
+    "relevant_phrase_ids": ["p009", "p010"]
+  },
+  {
+    "query": "идём на улицу играть",
+    "routine": "play",
+    "relevant_phrase_ids": ["p011", "p012", "p014"]
+  },
+  {
+    "query": "хочет пить водичку",
+    "routine": "mealtime",
+    "relevant_phrase_ids": ["p015", "p003"]
+  },
+  {
+    "query": "укладываем спать",
+    "routine": "sleep",
+    "relevant_phrase_ids": ["p004", "p005"]
+  },
+  {
+    "query": "видит кошку на улице",
+    "routine": "play",
+    "relevant_phrase_ids": ["p014"]
+  }
+]

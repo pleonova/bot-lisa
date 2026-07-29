@@ -1,0 +1,57 @@
+# Scaffold only -- not applied/tested here (no cluster in this environment).
+# Try it locally first with k3d or minikube:
+#   k3d cluster create infant-lang-bot
+#   docker build -t infant-lang-bot:local -f infra/Dockerfile .
+#   k3d image import infant-lang-bot:local -c infant-lang-bot
+#   kubectl apply -f infra/k8s/
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: retrieval-service
+  labels:
+    app: retrieval-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: retrieval-service
+  template:
+    metadata:
+      labels:
+        app: retrieval-service
+    spec:
+      containers:
+        - name: retrieval-service
+          image: infant-lang-bot:local
+          command: ["uvicorn", "services.retrieval_service.main:app", "--host", "0.0.0.0", "--port", "8001"]
+          ports:
+            - containerPort: 8001
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: retrieval-service
+spec:
+  selector:
+    app: retrieval-service
+  ports:
+    - port: 8001
+      targetPort: 8001
+  type: ClusterIP

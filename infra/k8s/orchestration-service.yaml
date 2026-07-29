@@ -1,0 +1,50 @@
+# Scaffold only -- same pattern as retrieval-service.yaml. See that file for
+# the k3d/minikube bootstrap steps.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestration-service
+  labels:
+    app: orchestration-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: orchestration-service
+  template:
+    metadata:
+      labels:
+        app: orchestration-service
+    spec:
+      containers:
+        - name: orchestration-service
+          image: infant-lang-bot:local
+          command: ["uvicorn", "services.orchestration_service.main:app", "--host", "0.0.0.0", "--port", "8002"]
+          ports:
+            - containerPort: 8002
+          env:
+            - name: RETRIEVAL_SERVICE_URL
+              value: "http://retrieval-service:8001"
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: infant-lang-bot-secrets
+                  key: anthropic-api-key
+                  optional: true
+          readinessProbe:
+            httpGet: { path: /health, port: 8002 }
+            initialDelaySeconds: 3
+          resources:
+            requests: { cpu: "100m", memory: "128Mi" }
+            limits: { cpu: "500m", memory: "256Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestration-service
+spec:
+  selector:
+    app: orchestration-service
+  ports:
+    - port: 8002
+      targetPort: 8002
