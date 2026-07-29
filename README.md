@@ -76,6 +76,7 @@ infra/
   terraform/                      # scaffold, no provider configured
 tests/
   test_retrieval.py
+android/                          # minimal Kotlin/Compose front end, see android/README.md
 .github/workflows/ci.yml
 ```
 

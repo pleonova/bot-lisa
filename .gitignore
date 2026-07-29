@@ -31,3 +31,14 @@ infra/terraform/.terraform.lock.hcl
 
 # Logs
 *.log
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/app/*.iml
+android/captures/
+
