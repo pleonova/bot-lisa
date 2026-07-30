@@ -20,13 +20,12 @@ data class AskResult(
  * Talks to services/ingestion_service (POST /event/voice), which forwards to
  * orchestration-service and returns its /ask response.
  *
- * BASE_URL defaults to the Android emulator's alias for the host machine's
- * localhost. If you're running on a real device, point this at your dev
- * machine's LAN IP instead (e.g. "http://192.168.1.42:8003").
+ * The server base URL is NOT hardcoded -- it's passed in by the caller (see
+ * ServerConfig.kt), which persists it in SharedPreferences. This lets you
+ * switch between emulator (http://10.0.2.2:8003) and a real device on your
+ * LAN (http://<mac-ip>:8003) without rebuilding.
  */
 object ApiClient {
-
-    private const val BASE_URL = "http://10.0.2.2:8003"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
@@ -35,15 +34,16 @@ object ApiClient {
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
-    suspend fun sendVoiceEvent(transcript: String, routineHint: String?): AskResult =
+    suspend fun sendVoiceEvent(baseUrl: String, transcript: String, routineHint: String?): AskResult =
         withContext(Dispatchers.IO) {
             val payload = JSONObject().apply {
                 put("transcript", transcript)
                 if (routineHint != null) put("routine_hint", routineHint)
             }
 
+            val normalizedBaseUrl = baseUrl.trimEnd('/')
             val request = Request.Builder()
-                .url("$BASE_URL/event/voice")
+                .url("$normalizedBaseUrl/event/voice")
                 .post(payload.toString().toRequestBody(jsonMediaType))
                 .build()
 

@@ -64,6 +64,13 @@ fun LisaScreen() {
     var result by remember { mutableStateOf<AskResult?>(null) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
+    var serverUrl by remember { mutableStateOf(ServerConfig.getBaseUrl(context)) }
+    var showServerSettings by remember { mutableStateOf(false) }
+
+    fun onServerUrlChange(newUrl: String) {
+        serverUrl = newUrl
+        ServerConfig.setBaseUrl(context, newUrl)
+    }
 
     // Launches the system speech-to-text UI and fills the transcript field
     // with whatever it heard.
@@ -108,6 +115,7 @@ fun LisaScreen() {
         scope.launch {
             try {
                 result = ApiClient.sendVoiceEvent(
+                    baseUrl = serverUrl,
                     transcript = transcript,
                     routineHint = routineHint.ifBlank { null },
                 )
@@ -128,11 +136,31 @@ fun LisaScreen() {
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text("RU Bot Lisa", style = MaterialTheme.typography.headlineSmall)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("RU Bot Lisa", style = MaterialTheme.typography.headlineSmall)
+            TextButton(onClick = { showServerSettings = !showServerSettings }) {
+                Text(if (showServerSettings) "Hide server settings" else "Server settings")
+            }
+        }
         Text(
             "Type or say what the caregiver/child said. Lisa will reply with a grounded Russian phrase.",
             style = MaterialTheme.typography.bodyMedium,
         )
+
+        if (showServerSettings) {
+            OutlinedTextField(
+                value = serverUrl,
+                onValueChange = { onServerUrlChange(it) },
+                label = { Text("Server URL") },
+                supportingText = { Text("Emulator: http://10.0.2.2:8003 · Real device: http://<mac-lan-ip>:8003") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+        }
 
         OutlinedTextField(
             value = transcript,

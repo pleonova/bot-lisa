@@ -19,17 +19,21 @@ shows the returned Russian phrase.
 
 ### Running on a real device instead
 
-Change `BASE_URL` in `app/src/main/java/com/rubotlisa/app/ApiClient.kt` to
-your dev machine's LAN IP (e.g. `http://192.168.1.42:8003`), and make sure
-the phone is on the same network and can reach that port.
+Tap "Server settings" in the app and change the URL to your dev machine's
+LAN IP (e.g. `http://192.168.1.42:8003` — find it with `ipconfig getifaddr en0`
+on Mac). It's saved automatically (SharedPreferences), no rebuild needed. Make
+sure the phone is on the same Wi-Fi network and can reach that port.
 
 ## What's here
 
 - `MainActivity.kt` — the whole UI: transcript field, mic button (uses
   Android's built-in speech-to-text intent, `ru-RU` locale), optional routine
-  hint field, send button, response card.
+  hint field, collapsible server URL setting, send button, response card.
 - `ApiClient.kt` — OkHttp call to `POST /event/voice`, parses the JSON
-  response into `AskResult`.
+  response into `AskResult`. Takes the base URL as a parameter rather than
+  hardcoding it.
+- `ServerConfig.kt` — persists the server base URL in SharedPreferences,
+  defaulting to the emulator alias `http://10.0.2.2:8003`.
 
 ## Known limitations
 
