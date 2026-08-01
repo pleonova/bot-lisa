@@ -1,0 +1,6 @@
+In this project's android/app/src/main/AndroidManifest.xml, we set:
+
+xml
+android:usesCleartextTraffic="true"
+
+That's the "cleartext allowed in the manifest" part — we told Android "yes, I know this is plain HTTP, allow it anyway," because your Mac's local FastAPI services don't have HTTPS certificates set up (setting up TLS for a localhost dev server is extra ceremony nobody wants for a scaffold). This flag should get removed (or scoped only to the debug build) once the backend actually has a real HTTPS endpoint — leaving it on in a shipped app is a real security smell, since it means the app could be tricked into sending data over an unencrypted connection anywhere, not just to your dev machine.
