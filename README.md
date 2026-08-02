@@ -89,3 +89,29 @@ android/                          # minimal Kotlin/Compose front end, see androi
 5. **Add a Java (or Scala) retrieval hot-path service** once you want to speak directly to the JD's "proficient in Java/Scala/C++" line — the retrieval service's `/search` endpoint is the natural candidate, since it's the latency-sensitive piece.
 6. **Swap the HTTP calls between services for a real queue** (Kafka or Redis Streams) using the `EventBus` interface in `events.py`.
 7. **Try the k8s manifests against k3d/minikube**, then fill in `terraform/main.tf` once you pick a cloud.
+
+## Paused features
+
+Things that are built, tested, and working, but not currently wired up to
+anything actively used — kept here so they don't get lost or accidentally
+re-discovered as "is this broken?" later.
+
+### Child-perception voice pipeline
+
+**What it is:** the original flow — `ingestion-service`'s `POST /event/voice`
+receives a transcript (something the child/caregiver said near the device),
+wraps it in a `PerceptionEvent`, and forwards it to `orchestration-service`'s
+`POST /ask`, which returns a single grounded Russian phrase to speak back.
+
+**Status:** code is untouched and still works — covered by `tests/`, runs
+fine standalone via `uvicorn services.ingestion_service.main:app --port 8003`.
+
+**Why paused:** the Android app was repurposed to be caregiver-facing instead
+(translate English → Russian, or expand on a Russian phrase with related
+ones from the library, via the new `POST /assist` endpoint on
+`orchestration-service`). The app no longer calls `/event/voice` or `/ask`.
+
+**Revisit when:** the caregiver-assist flow is solid and there's appetite to
+build the child-directed side back in — natural to pair with finishing the
+still-stubbed `POST /event/vision` endpoint (camera/book recognition), since
+both are pieces of the same "perception event" concept.
