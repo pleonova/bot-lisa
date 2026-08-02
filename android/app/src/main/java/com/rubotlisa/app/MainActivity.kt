@@ -26,17 +26,21 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 import java.io.IOException
-import java.util.Locale
 
 /**
- * Single-screen front end for ru-bot-lisa.
+ * Single-screen caregiver-assist front end for ru-bot-lisa.
  *
- * Flow: type or dictate a transcript -> POST to ingestion-service's
- * /event/voice endpoint -> show the returned Russian phrase.
+ * One text box, one behavior, auto-detected on the backend:
+ * - Type/dictate an English word or phrase -> get its baby-register Russian
+ *   translation (curated phrase library first, LLM fallback if nothing
+ *   matches).
+ * - Type/dictate a Russian phrase -> get related phrases from the library to
+ *   expand your own active vocabulary around it.
  *
- * Networking config lives in ApiClient.kt (BASE_URL). Defaults to
- * http://10.0.2.2:8003, which is how the Android emulator reaches
- * "localhost:8003" on your dev machine.
+ * Networking config lives in ApiClient.kt / ServerConfig.kt. Server URL
+ * defaults to http://10.0.2.2:8002 (orchestration-service, where /assist
+ * lives), editable in-app via "Server settings" -- no rebuild needed to
+ * switch between emulator and a real device.
  */
 class MainActivity : ComponentActivity() {
 
@@ -57,11 +61,10 @@ class MainActivity : ComponentActivity() {
 fun LisaScreen() {
     val scope = rememberCoroutineScope()
 
-    var transcript by remember { mutableStateOf("") }
-    var routineHint by remember { mutableStateOf("") }
+    var input by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
-    var result by remember { mutableStateOf<AskResult?>(null) }
+    var result by remember { mutableStateOf<AssistResult?>(null) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
     var serverUrl by remember { mutableStateOf(ServerConfig.getBaseUrl(context)) }
@@ -72,8 +75,10 @@ fun LisaScreen() {
         ServerConfig.setBaseUrl(context, newUrl)
     }
 
-    // Launches the system speech-to-text UI and fills the transcript field
-    // with whatever it heard.
+    // Launches the system speech-to-text UI and fills the input field with
+    // whatever it heard. Locale left as ru-RU by default since most dictation
+    // here will be Russian phrases to expand on; English typed input works
+    // fine too since it's just plain text either way.
     val speechLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { activityResult ->
@@ -82,7 +87,7 @@ fun LisaScreen() {
                 ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
                 ?.firstOrNull()
             if (!spoken.isNullOrBlank()) {
-                transcript = spoken
+                input = spoken
             }
         }
     }
@@ -91,7 +96,7 @@ fun LisaScreen() {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Say something in Russian…")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Say a Russian phrase, or type English to translate…")
         }
         runCatching { speechLauncher.launch(intent) }
             .onFailure { errorText = "No speech recognizer available on this device." }
@@ -109,16 +114,12 @@ fun LisaScreen() {
     }
 
     fun onSend() {
-        if (transcript.isBlank()) return
+        if (input.isBlank()) return
         errorText = null
         isLoading = true
         scope.launch {
             try {
-                result = ApiClient.sendVoiceEvent(
-                    baseUrl = serverUrl,
-                    transcript = transcript,
-                    routineHint = routineHint.ifBlank { null },
-                )
+                result = ApiClient.sendAssist(baseUrl = serverUrl, text = input)
             } catch (e: IOException) {
                 errorText = "Couldn't reach the server: ${e.message}"
             } catch (e: Exception) {
@@ -147,7 +148,7 @@ fun LisaScreen() {
             }
         }
         Text(
-            "Type or say what the caregiver/child said. Lisa will reply with a grounded Russian phrase.",
+            "Type an English word to translate it, or a Russian phrase to see related ones.",
             style = MaterialTheme.typography.bodyMedium,
         )
 
@@ -156,16 +157,16 @@ fun LisaScreen() {
                 value = serverUrl,
                 onValueChange = { onServerUrlChange(it) },
                 label = { Text("Server URL") },
-                supportingText = { Text("Emulator: http://10.0.2.2:8003 · Real device: http://<mac-lan-ip>:8003") },
+                supportingText = { Text("Emulator: http://10.0.2.2:8002 · Real device: http://<mac-lan-ip>:8002") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
         }
 
         OutlinedTextField(
-            value = transcript,
-            onValueChange = { transcript = it },
-            label = { Text("Transcript") },
+            value = input,
+            onValueChange = { input = it },
+            label = { Text("English word/phrase, or Russian phrase") },
             modifier = Modifier.fillMaxWidth(),
             trailingIcon = {
                 IconButton(onClick = { onMicClick() }) {
@@ -175,21 +176,14 @@ fun LisaScreen() {
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
         )
 
-        OutlinedTextField(
-            value = routineHint,
-            onValueChange = { routineHint = it },
-            label = { Text("Routine hint (optional, e.g. sleep, bath, meal)") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-
         Button(
             onClick = { onSend() },
-            enabled = transcript.isNotBlank() && !isLoading,
+            enabled = input.isNotBlank() && !isLoading,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Icon(Icons.Filled.Send, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text(if (isLoading) "Sending…" else "Send")
+            Text(if (isLoading) "Looking up…" else "Look up")
         }
 
         if (isLoading) {
@@ -206,13 +200,35 @@ fun LisaScreen() {
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text("Lisa says:", style = MaterialTheme.typography.labelLarge)
-                    Text(r.ru, style = MaterialTheme.typography.headlineSmall)
-                    Text("mode: ${r.mode} · ${r.latencyMs.toInt()} ms", style = MaterialTheme.typography.bodySmall)
-                    if (r.groundingPhrases.isNotEmpty()) {
-                        Text("Grounding phrases:", style = MaterialTheme.typography.labelMedium)
-                        r.groundingPhrases.forEach { phrase ->
-                            Text("• $phrase", style = MaterialTheme.typography.bodyMedium)
+                    if (r.mode == "translate" && r.translation != null) {
+                        Text("Translation:", style = MaterialTheme.typography.labelLarge)
+                        Text(r.translation.ru, style = MaterialTheme.typography.headlineSmall)
+                        Text(
+                            "\"${r.input}\" · source: ${r.source} · ${r.latencyMs.toInt()} ms",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    } else {
+                        Text("Related phrases:", style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            "for \"${r.input}\" · ${r.latencyMs.toInt()} ms",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+
+                    if (r.related.isNotEmpty()) {
+                        Spacer(Modifier.height(4.dp))
+                        if (r.mode == "translate") {
+                            Text("More related phrases:", style = MaterialTheme.typography.labelMedium)
+                        }
+                        r.related.forEach { phrase ->
+                            Column {
+                                Text("• ${phrase.ru}", style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    "   ${phrase.glossEn}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }

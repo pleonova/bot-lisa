@@ -12,8 +12,10 @@ object ServerConfig {
     private const val PREFS_NAME = "ru_bot_lisa_prefs"
     private const val KEY_BASE_URL = "base_url"
 
-    // Default: the Android emulator's alias for the host machine's localhost.
-    const val DEFAULT_BASE_URL = "http://10.0.2.2:8003"
+    // Default: the Android emulator's alias for the host machine's localhost,
+    // pointed at orchestration-service (port 8002) directly, since that's
+    // where the caregiver-facing /assist endpoint lives.
+    const val DEFAULT_BASE_URL = "http://10.0.2.2:8002"
 
     fun getBaseUrl(context: Context): String {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

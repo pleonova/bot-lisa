@@ -53,3 +53,51 @@ def generate(user_context: str, few_shot_phrases: list[dict]) -> dict:
     )
     text = "".join(block.text for block in response.content if block.type == "text")
     return {"mode": "live", "ru": text.strip()}
+
+
+TRANSLATE_SYSTEM_PROMPT_TEMPLATE = """You are helping a caregiver who is raising a bilingual infant/toddler \
+find the right Russian phrase for something they want to say. Translate the caregiver's English word or \
+phrase into short, authentic baby-register Russian: diminutives, warm tone, the way a Russian-speaking \
+parent actually talks to a very young child -- not textbook-formal Russian. Output ONLY the Russian \
+translation, nothing else (no quotes, no explanation).
+
+Phrases already in the caregiver's curated library, for register/style reference (not necessarily related \
+in meaning -- just match this tone):
+{examples}
+"""
+
+
+def build_translate_system_prompt(style_examples: list[dict]) -> str:
+    examples = "\n".join(f"- {p['ru']}  ({p['gloss_en']})" for p in style_examples) or "(library is empty)"
+    return TRANSLATE_SYSTEM_PROMPT_TEMPLATE.format(examples=examples)
+
+
+def translate(english_text: str, style_examples: list[dict]) -> dict:
+    """
+    Translate a caregiver's English word/phrase into baby-register Russian.
+
+    Caller (main.py's /assist endpoint) is responsible for checking the
+    curated phrase library FIRST and only calling this as a fallback --
+    per the project's core principle, hand-vetted phrases should win over
+    fresh LLM generations whenever a good match already exists.
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+
+    if not api_key:
+        return {
+            "mode": "mock",
+            "ru": f"[перевод: {english_text}]",
+            "note": "ANTHROPIC_API_KEY not set -- mock translation placeholder, not a real translation.",
+        }
+
+    import anthropic  # imported lazily so mock mode has zero extra deps
+
+    client = anthropic.Anthropic(api_key=api_key)
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=60,
+        system=build_translate_system_prompt(style_examples),
+        messages=[{"role": "user", "content": english_text}],
+    )
+    text = "".join(block.text for block in response.content if block.type == "text")
+    return {"mode": "live", "ru": text.strip()}

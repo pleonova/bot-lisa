@@ -6,24 +6,36 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-data class AskResult(
+data class Phrase(
     val ru: String,
-    val mode: String,
-    val groundingPhrases: List<String>,
+    val glossEn: String,
+)
+
+data class AssistResult(
+    val mode: String, // "translate" (English in) or "expand" (Russian in)
+    val source: String?, // translate mode only: "curated" | "live" | "mock"
+    val input: String,
+    val translation: Phrase?,
+    val related: List<Phrase>,
     val latencyMs: Double,
 )
 
 /**
- * Talks to services/ingestion_service (POST /event/voice), which forwards to
- * orchestration-service and returns its /ask response.
+ * Talks to services/orchestration_service's caregiver-facing POST /assist
+ * endpoint (distinct from /ask, which is the child-perception flow used
+ * internally by ingestion-service).
+ *
+ * One text box, auto-detected on the backend: English in -> translation
+ * (curated phrase library first, LLM fallback if no good match); Russian in
+ * -> related phrases to expand the caregiver's own vocabulary.
  *
  * The server base URL is NOT hardcoded -- it's passed in by the caller (see
- * ServerConfig.kt), which persists it in SharedPreferences. This lets you
- * switch between emulator (http://10.0.2.2:8003) and a real device on your
- * LAN (http://<mac-ip>:8003) without rebuilding.
+ * ServerConfig.kt), which persists it in SharedPreferences. Default points at
+ * orchestration-service directly (port 8002), since /assist lives there.
  */
 object ApiClient {
 
@@ -34,16 +46,13 @@ object ApiClient {
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
-    suspend fun sendVoiceEvent(baseUrl: String, transcript: String, routineHint: String?): AskResult =
+    suspend fun sendAssist(baseUrl: String, text: String): AssistResult =
         withContext(Dispatchers.IO) {
-            val payload = JSONObject().apply {
-                put("transcript", transcript)
-                if (routineHint != null) put("routine_hint", routineHint)
-            }
+            val payload = JSONObject().apply { put("text", text) }
 
             val normalizedBaseUrl = baseUrl.trimEnd('/')
             val request = Request.Builder()
-                .url("$normalizedBaseUrl/event/voice")
+                .url("$normalizedBaseUrl/assist")
                 .post(payload.toString().toRequestBody(jsonMediaType))
                 .build()
 
@@ -53,14 +62,20 @@ object ApiClient {
                     throw java.io.IOException("HTTP ${response.code}: $bodyString")
                 }
                 val root = JSONObject(bodyString)
-                val ask = root.getJSONObject("response")
-                val phrases = ask.getJSONArray("grounding_phrases")
-                AskResult(
-                    ru = ask.getString("ru"),
-                    mode = ask.getString("mode"),
-                    groundingPhrases = (0 until phrases.length()).map { phrases.getString(it) },
-                    latencyMs = ask.getDouble("latency_ms"),
+                AssistResult(
+                    mode = root.getString("mode"),
+                    source = if (root.isNull("source")) null else root.getString("source"),
+                    input = root.getString("input"),
+                    translation = root.optJSONObject("translation")?.toPhrase(),
+                    related = root.getJSONArray("related").toPhraseList(),
+                    latencyMs = root.getDouble("latency_ms"),
                 )
             }
         }
+
+    private fun JSONObject.toPhrase(): Phrase =
+        Phrase(ru = getString("ru"), glossEn = getString("gloss_en"))
+
+    private fun JSONArray.toPhraseList(): List<Phrase> =
+        (0 until length()).map { getJSONObject(it).toPhrase() }
 }
