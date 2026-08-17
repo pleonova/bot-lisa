@@ -1,8 +1,8 @@
 # Scaffold only -- not applied/tested here (no cluster in this environment).
 # Try it locally first with k3d or minikube:
-#   k3d cluster create infant-lang-bot
-#   docker build -t infant-lang-bot:local -f infra/Dockerfile .
-#   k3d image import infant-lang-bot:local -c infant-lang-bot
+#   k3d cluster create bot-lisa
+#   docker build -t bot-lisa:local -f infra/Dockerfile .
+#   k3d image import bot-lisa:local -c bot-lisa
 #   kubectl apply -f infra/k8s/
 apiVersion: apps/v1
 kind: Deployment
@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: retrieval-service
-          image: infant-lang-bot:local
+          image: bot-lisa:local
           command: ["uvicorn", "services.retrieval_service.main:app", "--host", "0.0.0.0", "--port", "8001"]
           ports:
             - containerPort: 8001

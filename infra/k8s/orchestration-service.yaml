@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: orchestration-service
-          image: infant-lang-bot:local
+          image: bot-lisa:local
           command: ["uvicorn", "services.orchestration_service.main:app", "--host", "0.0.0.0", "--port", "8002"]
           ports:
             - containerPort: 8002
@@ -28,7 +28,7 @@ spec:
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: infant-lang-bot-secrets
+                  name: bot-lisa-secrets
                   key: anthropic-api-key
                   optional: true
           readinessProbe:

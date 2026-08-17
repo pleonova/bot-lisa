@@ -1,7 +1,6 @@
 # Scaffold only -- intentionally not `terraform apply`-able yet, since that
 # needs a real cloud account/credentials. This documents the resources this
-# project would provision, matching the JD's "Kubernetes/Terraform and a
-# major cloud" line item with real IaC, not just a buzzword.
+# project would provision as real IaC.
 #
 # Fill in a provider block (AWS/GCP) and run `terraform init && terraform plan`
 # once you pick a target cloud. Fly.io/Vercel (current v1 hosting) don't need
@@ -20,12 +19,12 @@ terraform {
 
 # --- Planned resources (uncomment + configure once a cloud is chosen) ---
 
-# resource "aws_ecr_repository" "infant_lang_bot" {
-#   name = "infant-lang-bot"
+# resource "aws_ecr_repository" "bot_lisa" {
+#   name = "bot-lisa"
 # }
 #
 # resource "aws_eks_cluster" "main" {
-#   name     = "infant-lang-bot-cluster"
+#   name     = "bot-lisa-cluster"
 #   role_arn = aws_iam_role.eks_cluster.arn
 #   vpc_config {
 #     subnet_ids = var.subnet_ids
@@ -33,7 +32,7 @@ terraform {
 # }
 #
 # resource "aws_iam_role" "eks_cluster" {
-#   name = "infant-lang-bot-eks-role"
+#   name = "bot-lisa-eks-role"
 #   assume_role_policy = jsonencode({
 #     Version = "2012-10-17"
 #     Statement = [{

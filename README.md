@@ -86,7 +86,7 @@ android/                          # minimal Kotlin/Compose front end, see androi
 2. **Swap in real embeddings** in `embeddings.py` — this is the highest-value single change, since the hybrid/LTR/eval code around it doesn't need to change at all.
 3. **Grow the labeled eval set** past 8 examples — the LTR reranker and eval numbers both get more trustworthy with more data.
 4. **Wire up live LLM mode** — set `ANTHROPIC_API_KEY` and sanity-check `services/orchestration_service/llm_client.py`'s system prompt against real generations.
-5. **Add a Java (or Scala) retrieval hot-path service** once you want to speak directly to the JD's "proficient in Java/Scala/C++" line — the retrieval service's `/search` endpoint is the natural candidate, since it's the latency-sensitive piece.
+5. **Add a Java (or Scala) retrieval hot-path service** — the retrieval service's `/search` endpoint is the natural candidate, since it's the latency-sensitive piece.
 6. **Swap the HTTP calls between services for a real queue** (Kafka or Redis Streams) using the `EventBus` interface in `events.py`.
 7. **Try the k8s manifests against k3d/minikube**, then fill in `terraform/main.tf` once you pick a cloud.
 
