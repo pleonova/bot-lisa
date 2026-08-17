@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: ingestion-service
-          image: bot-lisa:local
+          image: registry.digitalocean.com/bot-lisa/bot-lisa:latest
           command: ["uvicorn", "services.ingestion_service.main:app", "--host", "0.0.0.0", "--port", "8003"]
           ports:
             - containerPort: 8003

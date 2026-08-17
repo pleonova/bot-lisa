@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: retrieval-service
-          image: bot-lisa:local
+          image: registry.digitalocean.com/bot-lisa/bot-lisa:latest
           command: ["uvicorn", "services.retrieval_service.main:app", "--host", "0.0.0.0", "--port", "8001"]
           ports:
             - containerPort: 8001

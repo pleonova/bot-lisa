@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: orchestration-service
-          image: bot-lisa:local
+          image: registry.digitalocean.com/bot-lisa/bot-lisa:latest
           command: ["uvicorn", "services.orchestration_service.main:app", "--host", "0.0.0.0", "--port", "8002"]
           ports:
             - containerPort: 8002
