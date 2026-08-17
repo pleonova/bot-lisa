@@ -1,4 +1,4 @@
-# RU Bot Lisa — Android front end
+# Bot Lisa — Android front end
 
 Minimal single-screen Kotlin + Jetpack Compose app for the **caregiver**, not
 the child-perception pipeline. One text box (type or dictate):

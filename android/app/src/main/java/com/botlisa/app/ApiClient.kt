@@ -1,4 +1,4 @@
-package com.rubotlisa.app
+package com.botlisa.app
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

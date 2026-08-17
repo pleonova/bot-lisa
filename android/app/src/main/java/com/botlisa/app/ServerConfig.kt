@@ -1,4 +1,4 @@
-package com.rubotlisa.app
+package com.botlisa.app
 
 import android.content.Context
 
@@ -9,7 +9,7 @@ import android.content.Context
  */
 object ServerConfig {
 
-    private const val PREFS_NAME = "ru_bot_lisa_prefs"
+    private const val PREFS_NAME = "bot_lisa_prefs"
     private const val KEY_BASE_URL = "base_url"
 
     // Default: the Android emulator's alias for the host machine's localhost,

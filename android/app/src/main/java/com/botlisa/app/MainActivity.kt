@@ -1,4 +1,4 @@
-package com.rubotlisa.app
+package com.botlisa.app
 
 import android.Manifest
 import android.app.Activity
@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
 import java.io.IOException
 
 /**
- * Single-screen caregiver-assist front end for ru-bot-lisa.
+ * Single-screen caregiver-assist front end for bot-lisa.
  *
  * One text box, one behavior, auto-detected on the backend:
  * - Type/dictate an English word or phrase -> get its baby-register Russian
@@ -142,7 +142,7 @@ fun LisaScreen() {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("RU Bot Lisa", style = MaterialTheme.typography.headlineSmall)
+            Text("Bot Lisa", style = MaterialTheme.typography.headlineSmall)
             TextButton(onClick = { showServerSettings = !showServerSettings }) {
                 Text(if (showServerSettings) "Hide server settings" else "Server settings")
             }

@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ru-bot-lisa-android"
+rootProject.name = "bot-lisa-android"
 include(":app")

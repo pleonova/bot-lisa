@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.rubotlisa.app"
+    namespace = "com.botlisa.app"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.rubotlisa.app"
+        applicationId = "com.botlisa.app"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
