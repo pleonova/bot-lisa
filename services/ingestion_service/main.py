@@ -16,22 +16,41 @@ to change.
 
 Run: uvicorn services.ingestion_service.main:app --port 8003 --reload
 Requires orchestration-service running on ORCHESTRATION_SERVICE_URL (default :8002).
+
+AUTH NOTE:
+This is the one service exposed outside the cluster (see infra/k8s/ingestion-service.yaml,
+type: LoadBalancer), so it's the entry point that needs to reject strangers. Auth is a
+simple shared-secret header check, not full user auth -- fine for a single-caregiver
+device talking to its own backend, not meant to scale to multiple end users.
 """
 from __future__ import annotations
 
+import hmac
 import logging
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
-from services.common.config import ORCHESTRATION_SERVICE_URL
+from services.common.config import INGESTION_API_KEY, ORCHESTRATION_SERVICE_URL
 from services.common.events import PerceptionEvent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ingestion_service")
 
 app = FastAPI(title="ingestion-service")
+
+
+def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
+    """Guards /event/* endpoints. No-op if INGESTION_API_KEY isn't set (local dev
+    default) -- so the README quickstart keeps working unchanged. Once
+    INGESTION_API_KEY is set (e.g. via the bot-lisa-secrets k8s Secret), callers
+    must send a matching X-API-Key header or get a 401.
+    """
+    if not INGESTION_API_KEY:
+        return
+    if not x_api_key or not hmac.compare_digest(x_api_key, INGESTION_API_KEY):
+        raise HTTPException(status_code=401, detail="missing or invalid X-API-Key")
 
 
 class VoiceEventRequest(BaseModel):
@@ -59,7 +78,7 @@ def _forward_to_orchestration(event: PerceptionEvent) -> dict:
         raise HTTPException(status_code=502, detail="orchestration-service unavailable") from e
 
 
-@app.post("/event/voice")
+@app.post("/event/voice", dependencies=[Depends(require_api_key)])
 def voice_event(req: VoiceEventRequest) -> dict:
     event = PerceptionEvent.new(
         event_type="voice",
@@ -70,7 +89,7 @@ def voice_event(req: VoiceEventRequest) -> dict:
     return {"event_id": event.event_id, "response": _forward_to_orchestration(event)}
 
 
-@app.post("/event/vision")
+@app.post("/event/vision", dependencies=[Depends(require_api_key)])
 def vision_event(req: VisionEventRequest) -> dict:
     # Vision pipeline (Gemma 4 image understanding) is future scope -- this
     # endpoint exists now so the perception-event shape is already unified

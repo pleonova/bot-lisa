@@ -10,6 +10,10 @@ INGESTION_SERVICE_URL = os.environ.get("INGESTION_SERVICE_URL", "http://localhos
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")  # if unset, orchestration runs in mock mode
 
+# If unset, ingestion-service accepts requests with no auth (local dev default).
+# If set, callers must send a matching X-API-Key header on /event/* endpoints.
+INGESTION_API_KEY = os.environ.get("INGESTION_API_KEY")
+
 # Hybrid retrieval weights -- tune once you have eval numbers, see eval/run_eval.py
 BM25_WEIGHT = float(os.environ.get("BM25_WEIGHT", "0.5"))
 EMBED_WEIGHT = float(os.environ.get("EMBED_WEIGHT", "0.5"))

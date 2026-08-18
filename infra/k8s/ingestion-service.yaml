@@ -24,6 +24,12 @@ spec:
           env:
             - name: ORCHESTRATION_SERVICE_URL
               value: "http://orchestration-service:8002"
+            - name: INGESTION_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: bot-lisa-secrets
+                  key: ingestion-api-key
+                  optional: true
           readinessProbe:
             httpGet: { path: /health, port: 8003 }
             initialDelaySeconds: 3
