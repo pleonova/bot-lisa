@@ -36,6 +36,7 @@ kind: Service
 metadata:
   name: ingestion-service
 spec:
+  type: LoadBalancer
   selector:
     app: ingestion-service
   ports:
