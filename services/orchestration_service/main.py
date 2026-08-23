@@ -7,24 +7,42 @@ through last, so it's also where end-to-end request latency is measured.
 
 Run: uvicorn services.orchestration_service.main:app --port 8002 --reload
 Requires retrieval-service running on RETRIEVAL_SERVICE_URL (default :8001).
+
+AUTH NOTE:
+This is exposed publicly too (see infra/k8s/orchestration-service.yaml, type:
+LoadBalancer) since the Android app's /assist calls hit it directly, bypassing
+ingestion-service. Same shared-secret X-API-Key pattern as ingestion-service,
+via a separate ORCHESTRATION_API_KEY.
 """
 from __future__ import annotations
 
+import hmac
 import logging
 import re
 import time
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
-from services.common.config import RETRIEVAL_SERVICE_URL
+from services.common.config import ORCHESTRATION_API_KEY, RETRIEVAL_SERVICE_URL
 from services.orchestration_service.llm_client import generate, translate
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("orchestration_service")
 
 app = FastAPI(title="orchestration-service")
+
+
+def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
+    """Guards /ask and /assist. No-op if ORCHESTRATION_API_KEY isn't set (local
+    dev default). Once set (e.g. via the bot-lisa-secrets k8s Secret), callers
+    must send a matching X-API-Key header or get a 401.
+    """
+    if not ORCHESTRATION_API_KEY:
+        return
+    if not x_api_key or not hmac.compare_digest(x_api_key, ORCHESTRATION_API_KEY):
+        raise HTTPException(status_code=401, detail="missing or invalid X-API-Key")
 
 
 class AskRequest(BaseModel):
@@ -39,7 +57,7 @@ class AskResponse(BaseModel):
     latency_ms: float
 
 
-@app.post("/ask", response_model=AskResponse)
+@app.post("/ask", response_model=AskResponse, dependencies=[Depends(require_api_key)])
 def ask(req: AskRequest) -> AskResponse:
     start = time.perf_counter()
 
@@ -105,7 +123,7 @@ class AssistResponse(BaseModel):
     latency_ms: float
 
 
-@app.post("/assist", response_model=AssistResponse)
+@app.post("/assist", response_model=AssistResponse, dependencies=[Depends(require_api_key)])
 def assist(req: AssistRequest) -> AssistResponse:
     """
     Caregiver-facing helper (distinct from /ask, which is the child-directed

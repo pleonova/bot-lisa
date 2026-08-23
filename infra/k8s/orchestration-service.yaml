@@ -31,6 +31,12 @@ spec:
                   name: bot-lisa-secrets
                   key: anthropic-api-key
                   optional: true
+            - name: ORCHESTRATION_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: bot-lisa-secrets
+                  key: orchestration-api-key
+                  optional: true
           readinessProbe:
             httpGet: { path: /health, port: 8002 }
             initialDelaySeconds: 3
@@ -43,6 +49,7 @@ kind: Service
 metadata:
   name: orchestration-service
 spec:
+  type: LoadBalancer
   selector:
     app: orchestration-service
   ports:

@@ -22,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
@@ -40,7 +41,10 @@ import java.io.IOException
  * Networking config lives in ApiClient.kt / ServerConfig.kt. Server URL
  * defaults to http://10.0.2.2:8002 (orchestration-service, where /assist
  * lives), editable in-app via "Server settings" -- no rebuild needed to
- * switch between emulator and a real device.
+ * switch between emulator, a real device on your LAN, or the deployed
+ * cluster. The API key field is only required once pointed at a backend
+ * that sets ORCHESTRATION_API_KEY (the deployed cluster does; local dev by
+ * default does not).
  */
 class MainActivity : ComponentActivity() {
 
@@ -68,11 +72,17 @@ fun LisaScreen() {
 
     val context = androidx.compose.ui.platform.LocalContext.current
     var serverUrl by remember { mutableStateOf(ServerConfig.getBaseUrl(context)) }
+    var apiKey by remember { mutableStateOf(ServerConfig.getApiKey(context)) }
     var showServerSettings by remember { mutableStateOf(false) }
 
     fun onServerUrlChange(newUrl: String) {
         serverUrl = newUrl
         ServerConfig.setBaseUrl(context, newUrl)
+    }
+
+    fun onApiKeyChange(newKey: String) {
+        apiKey = newKey
+        ServerConfig.setApiKey(context, newKey)
     }
 
     // Launches the system speech-to-text UI and fills the input field with
@@ -119,7 +129,7 @@ fun LisaScreen() {
         isLoading = true
         scope.launch {
             try {
-                result = ApiClient.sendAssist(baseUrl = serverUrl, text = input)
+                result = ApiClient.sendAssist(baseUrl = serverUrl, apiKey = apiKey, text = input)
             } catch (e: IOException) {
                 errorText = "Couldn't reach the server: ${e.message}"
             } catch (e: Exception) {
@@ -157,9 +167,18 @@ fun LisaScreen() {
                 value = serverUrl,
                 onValueChange = { onServerUrlChange(it) },
                 label = { Text("Server URL") },
-                supportingText = { Text("Emulator: http://10.0.2.2:8002 · Real device: http://<mac-lan-ip>:8002") },
+                supportingText = { Text("Emulator: http://10.0.2.2:8002 · Real device: http://<mac-lan-ip>:8002 · Deployed: http://<load-balancer-ip>:8002") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
+            )
+            OutlinedTextField(
+                value = apiKey,
+                onValueChange = { onApiKeyChange(it) },
+                label = { Text("API key (optional)") },
+                supportingText = { Text("Only required when the server enforces ORCHESTRATION_API_KEY, e.g. the deployed cluster.") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
             )
         }
 

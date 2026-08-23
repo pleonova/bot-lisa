@@ -14,6 +14,10 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")  # if unset, orchestrati
 # If set, callers must send a matching X-API-Key header on /event/* endpoints.
 INGESTION_API_KEY = os.environ.get("INGESTION_API_KEY")
 
+# Same pattern for orchestration-service, which is also exposed publicly (the
+# Android app's /assist calls hit it directly, not through ingestion-service).
+ORCHESTRATION_API_KEY = os.environ.get("ORCHESTRATION_API_KEY")
+
 # Hybrid retrieval weights -- tune once you have eval numbers, see eval/run_eval.py
 BM25_WEIGHT = float(os.environ.get("BM25_WEIGHT", "0.5"))
 EMBED_WEIGHT = float(os.environ.get("EMBED_WEIGHT", "0.5"))

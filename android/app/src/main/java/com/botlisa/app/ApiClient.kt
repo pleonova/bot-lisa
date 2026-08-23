@@ -33,9 +33,12 @@ data class AssistResult(
  * (curated phrase library first, LLM fallback if no good match); Russian in
  * -> related phrases to expand the caregiver's own vocabulary.
  *
- * The server base URL is NOT hardcoded -- it's passed in by the caller (see
- * ServerConfig.kt), which persists it in SharedPreferences. Default points at
- * orchestration-service directly (port 8002), since /assist lives there.
+ * The server base URL and API key are NOT hardcoded -- both are passed in by
+ * the caller (see ServerConfig.kt), which persists them in SharedPreferences.
+ * Default base URL points at orchestration-service directly (port 8002),
+ * since /assist lives there. The API key is sent as X-API-Key when non-blank
+ * -- local dev's orchestration-service doesn't check it, the deployed
+ * cluster does.
  */
 object ApiClient {
 
@@ -46,15 +49,18 @@ object ApiClient {
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
-    suspend fun sendAssist(baseUrl: String, text: String): AssistResult =
+    suspend fun sendAssist(baseUrl: String, apiKey: String, text: String): AssistResult =
         withContext(Dispatchers.IO) {
             val payload = JSONObject().apply { put("text", text) }
 
             val normalizedBaseUrl = baseUrl.trimEnd('/')
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url("$normalizedBaseUrl/assist")
                 .post(payload.toString().toRequestBody(jsonMediaType))
-                .build()
+            if (apiKey.isNotBlank()) {
+                requestBuilder.addHeader("X-API-Key", apiKey)
+            }
+            val request = requestBuilder.build()
 
             client.newCall(request).execute().use { response ->
                 val bodyString = response.body?.string().orEmpty()
