@@ -31,6 +31,19 @@ from services.orchestration_service.llm_client import generate, translate
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("orchestration_service")
 
+if not ORCHESTRATION_API_KEY:
+    # Not fatal -- local dev intentionally runs with no key set. But this
+    # service is also reachable from the public internet (LoadBalancer), so
+    # silently running unauthenticated there would be easy to miss. Make it
+    # loud instead: if you see this line in the deployed cluster's logs, the
+    # bot-lisa-secrets Secret is missing/misnamed and /ask + /assist are
+    # currently open to anyone.
+    logger.warning(
+        "ORCHESTRATION_API_KEY is not set -- /ask and /assist are running "
+        "WITHOUT authentication. Expected for local dev; if this is the "
+        "deployed cluster, fix the bot-lisa-secrets Secret immediately."
+    )
+
 app = FastAPI(title="orchestration-service")
 
 
