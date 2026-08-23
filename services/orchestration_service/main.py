@@ -22,8 +22,11 @@ import re
 import time
 
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from services.common.config import ORCHESTRATION_API_KEY, RETRIEVAL_SERVICE_URL
 from services.orchestration_service.llm_client import generate, translate
@@ -45,6 +48,21 @@ if not ORCHESTRATION_API_KEY:
     )
 
 app = FastAPI(title="orchestration-service")
+
+# Per-IP rate limit on /ask and /assist. Two reasons: this service is
+# reachable from the public internet (LoadBalancer), so it needs some limit
+# on plain request volume; and it also slows down anyone trying to brute-
+# force ORCHESTRATION_API_KEY by guessing, since each guess now costs them
+# wait time instead of being free.
+#
+# NOTE: get_remote_address keys off the TCP peer IP. Behind the DigitalOcean
+# LoadBalancer that's currently the real client IP (no reverse proxy in
+# front rewriting it), but if a proxy/ingress is ever added upstream of
+# this service, switch the key_func to read X-Forwarded-For instead, or
+# every caller will collapse onto one shared limit.
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
@@ -71,7 +89,8 @@ class AskResponse(BaseModel):
 
 
 @app.post("/ask", response_model=AskResponse, dependencies=[Depends(require_api_key)])
-def ask(req: AskRequest) -> AskResponse:
+@limiter.limit("30/minute")
+def ask(request: Request, req: AskRequest) -> AskResponse:
     start = time.perf_counter()
 
     try:
@@ -137,7 +156,8 @@ class AssistResponse(BaseModel):
 
 
 @app.post("/assist", response_model=AssistResponse, dependencies=[Depends(require_api_key)])
-def assist(req: AssistRequest) -> AssistResponse:
+@limiter.limit("30/minute")
+def assist(request: Request, req: AssistRequest) -> AssistResponse:
     """
     Caregiver-facing helper (distinct from /ask, which is the child-directed
     perception-event flow). One input box, auto-detected:

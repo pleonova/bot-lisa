@@ -7,3 +7,4 @@ scikit-learn>=1.4
 numpy>=1.26
 pytest>=8.0
 anthropic>=0.30  # only needed if ANTHROPIC_API_KEY is set (live LLM mode)
+slowapi>=0.1.9  # per-IP rate limiting on orchestration-service's public /ask + /assist
