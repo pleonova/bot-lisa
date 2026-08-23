@@ -115,3 +115,22 @@ ones from the library, via the new `POST /assist` endpoint on
 build the child-directed side back in — natural to pair with finishing the
 still-stubbed `POST /event/vision` endpoint (camera/book recognition), since
 both are pieces of the same "perception event" concept.
+
+## Known issues
+
+### `ORCHESTRATION_API_KEY` still travels over plain HTTP
+
+`/ask` and `/assist` are exposed via a DigitalOcean LoadBalancer (see
+`infra/k8s/orchestration-service.yaml`) and guarded by an `X-API-Key` header
+(see `require_api_key` in `services/orchestration_service/main.py`), but the
+Android app talks to it over plain `http://`, not `https://` — so the key
+itself travels in the clear and could be sniffed on an untrusted network.
+
+**Why it's not fixed yet:** a real TLS certificate (e.g. DigitalOcean's free
+Let's Encrypt integration on the LoadBalancer) needs a domain name pointed
+at the LoadBalancer's IP — Let's Encrypt can't issue a cert for a bare IP,
+and this project doesn't have a domain/DNS set up yet.
+
+**TODO:** decide on a domain + DNS setup, add a DigitalOcean-managed cert to
+the `orchestration-service` LoadBalancer, and switch the Android app's
+server URL to `https://`.
