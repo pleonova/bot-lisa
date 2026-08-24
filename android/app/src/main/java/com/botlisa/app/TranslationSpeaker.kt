@@ -14,17 +14,16 @@ import java.util.Locale
  * code needed for the one-earbud use case, that's just how Android audio
  * output already works.
  *
- * Tied to the Activity/Composable lifecycle (unlike OnDeviceTranslator,
- * which is a process-wide singleton) -- see MainActivity.kt's
- * DisposableEffect. A fresh instance on each rotation is normal and cheap;
- * TextToSpeech initialization takes well under what a user would notice.
+ * [locale] is a required constructor parameter, driven by the target
+ * language picked in Settings (LanguageConfig.kt) -- see MainActivity.kt,
+ * which recreates this whenever that setting changes.
  *
- * Locale is a constructor parameter, not yet wired to a setting -- today it
- * always speaks Russian, matching the app's current Russian-only scope. This
- * is the piece that'll need to change together with OnDeviceTranslator.kt
- * once target language becomes configurable (see project roadmap).
+ * Tied to the Activity/Composable lifecycle (unlike OnDeviceTranslator,
+ * which is a process-wide singleton): a fresh instance on rotation, or when
+ * the target language changes, is normal and cheap -- TextToSpeech
+ * initialization takes well under what a user would notice.
  */
-class TranslationSpeaker(context: Context, private val locale: Locale = Locale("ru", "RU")) {
+class TranslationSpeaker(context: Context, private val locale: Locale) {
 
     private var isReady = false
 
@@ -34,7 +33,7 @@ class TranslationSpeaker(context: Context, private val locale: Locale = Locale("
         }
         // No-op on failure -- isReady stays false, speak() below silently does
         // nothing rather than crashing. Good enough for now; worth surfacing
-        // to the user (e.g. "Russian voice not available on this device") if
+        // to the user (e.g. "no Hindi voice installed on this device") if
         // this turns out to matter in practice.
     }
 
@@ -49,7 +48,7 @@ class TranslationSpeaker(context: Context, private val locale: Locale = Locale("
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "bot_lisa_translation")
     }
 
-    /** Call when the owning screen goes away (see MainActivity.kt) to free the TTS engine. */
+    /** Call when the owning screen (or language setting) goes away to free the TTS engine. */
     fun shutdown() {
         tts.stop()
         tts.shutdown()

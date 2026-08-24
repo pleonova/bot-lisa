@@ -84,8 +84,14 @@ remembers an old address from a previous install, just retype it.*
   (curated or on-device, whichever won). Built for the "one earbud in,
   talking to the kid" use case — no extra tap needed, and it plays through
   whatever audio output is currently active (earbud/Bluetooth/speaker) since
-  that's just how Android routes audio. Currently hardcoded to a Russian
-  voice, same as the rest of the app today.
+  that's just how Android routes audio. Voice follows the target-language
+  setting (see below).
+- `LanguageConfig.kt` — the list of selectable target languages (Russian,
+  Hindi, Spanish, French, German today — add an entry to extend it) and the
+  SharedPreferences-backed setting for which one is active. Drives
+  `OnDeviceTranslator.kt` and `TranslationSpeaker.kt`. Does **not** drive
+  related-phrase/expand mode, which stays tied to the Russian curated
+  library regardless — see "Known limitations."
 
 *In other words: three files, three jobs. One draws the screen you see, one
 sends the actual network request to the backend, and one just remembers
@@ -118,8 +124,22 @@ measure is a single shared password rather than individual logins.*
   `services/orchestration_service/main.py`) — it's a heuristic, not perfect,
   and will misclassify some inputs as the phrase library grows.
 - The on-device translation fallback (`OnDeviceTranslator.kt`) requires wifi
-  the very first time it's used, to download the ~30MB EN<->RU model; after
-  that it works fully offline. It also only ever fires for English input
-  that has no curated match — Russian input (expand mode) is untouched.
+  the very first time it's used, to download the ~30MB model for each
+  target language; after that, that language works fully offline. It only
+  ever fires for English input in translate mode — Russian input (expand
+  mode) is untouched.
+- Target language (Settings → "Target language") only changes what English
+  translates into and which voice speaks it back. Related-phrase/expand
+  mode — say a phrase in the target language, get similar ones from the
+  curated library — stays Russian-only no matter what's selected there,
+  since the curated content is Russian-only and the backend's mode-detection
+  heuristic (`_has_cyrillic()`) is Cyrillic-specific. Generalizing that is a
+  separate, larger change (curate content for the new language, and make
+  the backend's script detection language-aware) tracked in the project
+  roadmap, not done here. The mic's dictation locale is unaffected by this
+  setting too, for the same reason — it still always listens for Russian.
+  Switching target language away from Russian also hides the "more related
+  phrases" bonus list under a translation result, since those phrases would
+  be Russian regardless of what you just translated into.
 - `usesCleartextTraffic="true"` is set in the manifest since the backend
   runs over plain HTTP locally — tighten this before shipping anywhere real.
