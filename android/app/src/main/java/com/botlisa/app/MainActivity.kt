@@ -83,6 +83,14 @@ fun LisaScreen() {
     var apiKey by remember { mutableStateOf(ServerConfig.getApiKey(context)) }
     var showServerSettings by rememberSaveable { mutableStateOf(false) }
 
+    // Speaks translation results aloud -- see TranslationSpeaker.kt. Recreated
+    // on rotation like any other `remember`; shut down via DisposableEffect so
+    // the TTS engine doesn't leak when this screen goes away.
+    val speaker = remember { TranslationSpeaker(context) }
+    DisposableEffect(Unit) {
+        onDispose { speaker.shutdown() }
+    }
+
     fun onServerUrlChange(newUrl: String) {
         serverUrl = newUrl
         ServerConfig.setBaseUrl(context, newUrl)
@@ -155,6 +163,12 @@ fun LisaScreen() {
                     } catch (e: Exception) {
                         errorText = "On-device translation failed (${e.message}) -- showing the placeholder instead. First use needs wifi to download the translation model."
                     }
+                }
+                // Read the translation back aloud -- the "one earbud in, talking to
+                // the kid" use case. Whatever won above (curated or on-device) gets
+                // spoken; nothing to speak in expand mode, there's no single result.
+                if (assist.mode == "translate" && assist.translation != null) {
+                    speaker.speak(assist.translation.ru)
                 }
                 result = assist
             } catch (e: IOException) {

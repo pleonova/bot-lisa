@@ -79,6 +79,13 @@ remembers an old address from a previous install, just retype it.*
   Russian, not the curated library's baby-register tone -- see the project
   roadmap for that tradeoff and the option to swap in a live LLM fallback
   later instead.
+- `TranslationSpeaker.kt` — speaks the translation aloud via Android's
+  built-in TextToSpeech the moment a translate-mode result comes back
+  (curated or on-device, whichever won). Built for the "one earbud in,
+  talking to the kid" use case — no extra tap needed, and it plays through
+  whatever audio output is currently active (earbud/Bluetooth/speaker) since
+  that's just how Android routes audio. Currently hardcoded to a Russian
+  voice, same as the rest of the app today.
 
 *In other words: three files, three jobs. One draws the screen you see, one
 sends the actual network request to the backend, and one just remembers
