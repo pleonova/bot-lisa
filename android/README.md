@@ -34,7 +34,8 @@ own.*
 2. Open the `android/` folder in Android Studio (Giraffe or newer) and let it sync.
 3. Run on an emulator — no config needed, it already points at
    `http://10.0.2.2:8002`, which is how the emulator reaches your machine's
-   `localhost:8002`.
+   `localhost:8002`. Voice input needs a *Google Play* system image on the
+   AVD (not just "Google APIs") — see "Known limitations" below.
 
 *In other words: first two commands start the backend on your own computer (no
 cloud needed for local testing). Android Studio is the program that builds
@@ -90,6 +91,14 @@ measure is a single shared password rather than individual logins.*
 - Mic input uses the system speech recognizer (requires Google app /
   network), locale fixed to `ru-RU` — dictating English will likely
   mis-transcribe; typing English works fine.
+- Voice doesn't work on most emulator AVDs — confirmed working fine on a
+  real phone, but the default/"Google APIs" system images most AVDs use
+  don't include Google's speech-recognition service at all, so the mic
+  button just fails with "No speech recognizer available on this device."
+  Use a "Google Play" system image and sign into a Google account inside
+  the emulator if you need voice testing without a physical phone;
+  otherwise treat the emulator as text-only and test voice on the real
+  device.
 - Curated-vs-LLM-fallback classification in translate mode is a simple
   word-overlap check against `gloss_en` (see `assist()` in
   `services/orchestration_service/main.py`) — it's a heuristic, not perfect,
