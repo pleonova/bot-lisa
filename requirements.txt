@@ -3,6 +3,7 @@ uvicorn>=0.29
 pydantic>=2.6
 httpx>=0.27
 rank_bm25>=0.2.2
+fastembed>=0.4  # open-source ONNX-based embeddings, see services/retrieval_service/embeddings.py
 scikit-learn>=1.4
 numpy>=1.26
 pytest>=8.0

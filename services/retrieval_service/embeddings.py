@@ -1,46 +1,60 @@
 """
 Dense embedding layer for hybrid retrieval.
 
-BARE-BONES NOTE:
-This uses a deterministic character-ngram hashing vector instead of a real
-sentence embedding model, so the whole stack runs offline with no model
-download and no API key. It is NOT semantically meaningful -- it's a stand-in
-that satisfies the same interface (text -> fixed-size vector, cosine similarity)
-so the hybrid scoring and reranker code around it doesn't need to change later.
+Real embeddings via fastembed (https://github.com/qdrant/fastembed,
+Apache-2.0), using the open sentence-transformers/paraphrase-multilingual-
+MiniLM-L12-v2 model -- handles English, Russian, Hindi, Spanish, French,
+German and ~45 other languages, which is what hybrid.py needs (comparing an
+English query against phrase text in whichever target language is
+configured). fastembed runs on ONNX Runtime instead of PyTorch, which
+matters on this project's small droplet: no multi-gigabyte PyTorch install,
+just the ONNX runtime plus a ~220MB model file, loaded once at process
+startup rather than per request.
 
-Swap-in path when you're ready:
-  - Anthropic/OpenAI/Voyage embeddings API (network call, real semantics), or
-  - a local sentence-transformers model once you have hardware, or
-  - the SBERT model you already fine-tuned at Discovery Education.
-Just replace `embed()` below; everything downstream (hybrid.py, reranker.py)
-only depends on it returning a fixed-length vector.
+Note: the original plan here was intfloat/multilingual-e5-small, but that
+model isn't in the list fastembed's installed version actually supports
+(confirmed by running TextEmbedding.list_supported_models() against the
+pinned fastembed>=0.4 -- it raises ValueError at import time otherwise).
+paraphrase-multilingual-MiniLM-L12-v2 is the closest available match: same
+384-dim output, similar size, broader language coverage than e5-small
+needed. Unlike e5, it's a symmetric sentence-transformers model, so it does
+not use "query: "/"passage: " prefixes -- raw text goes in directly.
+
+Chosen over a hosted embeddings API (OpenAI, Voyage) because open source is
+the preferred default for this project -- see the project roadmap's
+decisions log. Everything downstream (hybrid.py, reranker.py) only depends
+on embed() returning a fixed-length vector, same as the placeholder this
+replaced, so nothing else needed to change.
 """
 from __future__ import annotations
 
-import hashlib
 import math
 
-VECTOR_DIM = 128
+from fastembed import TextEmbedding
+
+VECTOR_DIM = 384  # paraphrase-multilingual-MiniLM-L12-v2's output dimension
+
+# Loaded once per process -- retrieval-service is a single long-running
+# FastAPI app, so this is a one-time ~220MB model load at startup, not
+# something that happens per request.
+_model = TextEmbedding(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
 
 
-def _char_ngrams(text: str, n: int = 3) -> list[str]:
-    text = text.lower().strip()
-    if len(text) < n:
-        return [text]
-    return [text[i : i + n] for i in range(len(text) - n + 1)]
+def embed(text: str, is_query: bool = False) -> list[float]:
+    """Real sentence embedding via paraphrase-multilingual-MiniLM-L12-v2.
 
-
-def embed(text: str) -> list[float]:
-    """Deterministic pseudo-embedding. Replace with a real model/API call."""
-    vec = [0.0] * VECTOR_DIM
-    for gram in _char_ngrams(text):
-        h = int(hashlib.md5(gram.encode("utf-8")).hexdigest(), 16)
-        idx = h % VECTOR_DIM
-        sign = 1.0 if (h // VECTOR_DIM) % 2 == 0 else -1.0
-        vec[idx] += sign
-    norm = math.sqrt(sum(v * v for v in vec)) or 1.0
-    return [v / norm for v in vec]
+    is_query is kept in the signature so callers (hybrid.py) don't need to
+    change if a future model swap needs the distinction again, but this
+    model is symmetric and doesn't treat queries and passages differently.
+    """
+    # fastembed's embed() yields a generator over a batch; we always pass
+    # exactly one string, so take the single result.
+    vector = next(_model.embed([text]))
+    return vector.tolist()
 
 
 def cosine_sim(a: list[float], b: list[float]) -> float:
-    return sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = math.sqrt(sum(x * x for x in a)) or 1.0
+    norm_b = math.sqrt(sum(y * y for y in b)) or 1.0
+    return dot / (norm_a * norm_b)

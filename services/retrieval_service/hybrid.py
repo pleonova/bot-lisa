@@ -9,7 +9,7 @@ hybrid-search pattern, worth naming explicitly if this comes up in interview.
 """
 from __future__ import annotations
 
-from services.common.config import BM25_WEIGHT, EMBED_WEIGHT
+from services.common.config import BM25_WEIGHT, EMBED_WEIGHT, MIN_EMBED_SIMILARITY
 from services.retrieval_service.bm25_index import BM25Index, _tokenize
 from services.retrieval_service.embeddings import cosine_sim, embed
 
@@ -40,19 +40,33 @@ class HybridRetriever:
     def search(self, query: str, top_k: int = 5) -> list[dict]:
         phrases = self.bm25_index.phrases
 
-        bm25_scores = self.bm25_index._bm25.get_scores(_tokenize(query))
-        query_vec = embed(query)
+        bm25_scores = list(self.bm25_index._bm25.get_scores(_tokenize(query)))
+        query_vec = embed(query, is_query=True)
         embed_scores = [cosine_sim(query_vec, pe) for pe in self._phrase_embeddings]
 
-        bm25_norm = _normalize(list(bm25_scores))
-        embed_norm = _normalize(embed_scores)
+        # Drop candidates with no real signal in either direction, before
+        # doing anything else: weak raw semantic similarity (cosine,
+        # bounded and query-independent) AND zero lexical overlap. This has
+        # to run on the RAW embed_scores, not the min-max-normalized version
+        # below -- min-max normalizing always stretches the best-of-a-bad-
+        # batch up to 1.0, which would silently defeat a threshold applied
+        # after normalizing. Keeps strong keyword matches even when this
+        # embedding model rates them unremarkable, and vice versa.
+        kept_indices = [
+            i
+            for i in range(len(phrases))
+            if embed_scores[i] >= MIN_EMBED_SIMILARITY or bm25_scores[i] > 0
+        ]
+
+        bm25_norm = _normalize([bm25_scores[i] for i in kept_indices])
+        embed_norm = _normalize([embed_scores[i] for i in kept_indices])
 
         results = []
-        for i, phrase in enumerate(phrases):
-            hybrid_score = BM25_WEIGHT * bm25_norm[i] + EMBED_WEIGHT * embed_norm[i]
+        for rank, i in enumerate(kept_indices):
+            hybrid_score = BM25_WEIGHT * bm25_norm[rank] + EMBED_WEIGHT * embed_norm[rank]
             results.append(
                 {
-                    **phrase,
+                    **phrases[i],
                     "bm25_score": bm25_scores[i],
                     "embed_score": embed_scores[i],
                     "hybrid_score": hybrid_score,

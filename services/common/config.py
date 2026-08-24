@@ -21,3 +21,10 @@ ORCHESTRATION_API_KEY = os.environ.get("ORCHESTRATION_API_KEY")
 # Hybrid retrieval weights -- tune once you have eval numbers, see eval/run_eval.py
 BM25_WEIGHT = float(os.environ.get("BM25_WEIGHT", "0.5"))
 EMBED_WEIGHT = float(os.environ.get("EMBED_WEIGHT", "0.5"))
+
+# Raw cosine-similarity floor (0..1) for a candidate to count as a real
+# semantic match -- see hybrid.py's search(). A candidate below this AND
+# with zero BM25 lexical overlap gets dropped instead of always filling out
+# top_k regardless of relevance. Starting value, not a tuned one; revisit
+# against eval/labeled_eval_set.json as the phrase library grows.
+MIN_EMBED_SIMILARITY = float(os.environ.get("MIN_EMBED_SIMILARITY", "0.35"))
