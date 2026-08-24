@@ -58,4 +58,11 @@ dependencies {
     // EncryptedSharedPreferences, used by ServerConfig to store the API key
     // (AES256-GCM, key held in the Android Keystore) instead of plaintext.
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    // On-device English->Russian fallback translation (OnDeviceTranslator.kt),
+    // used only when /assist reports no curated-library match. Runs fully
+    // on-device after a one-time model download -- no API key, no per-call
+    // cost. See OnDeviceTranslator.kt for why this is a fallback, not the
+    // primary translation path.
+    implementation("com.google.mlkit:translate:17.0.3")
 }

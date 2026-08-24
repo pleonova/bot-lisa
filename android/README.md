@@ -72,6 +72,13 @@ remembers an old address from a previous install, just retype it.*
   hardcoding it.
 - `ServerConfig.kt` — persists the server base URL in SharedPreferences,
   defaulting to the emulator alias `http://10.0.2.2:8002`.
+- `OnDeviceTranslator.kt` — on-device English->Russian translation via
+  Google's ML Kit, used only when `/assist` reports no curated-library
+  match (`source == "mock"`). Runs fully offline after a one-time model
+  download; no API key, no per-call cost. Produces standard/textbook
+  Russian, not the curated library's baby-register tone -- see the project
+  roadmap for that tradeoff and the option to swap in a live LLM fallback
+  later instead.
 
 *In other words: three files, three jobs. One draws the screen you see, one
 sends the actual network request to the backend, and one just remembers
@@ -103,5 +110,9 @@ measure is a single shared password rather than individual logins.*
   word-overlap check against `gloss_en` (see `assist()` in
   `services/orchestration_service/main.py`) — it's a heuristic, not perfect,
   and will misclassify some inputs as the phrase library grows.
+- The on-device translation fallback (`OnDeviceTranslator.kt`) requires wifi
+  the very first time it's used, to download the ~30MB EN<->RU model; after
+  that it works fully offline. It also only ever fires for English input
+  that has no curated match — Russian input (expand mode) is untouched.
 - `usesCleartextTraffic="true"` is set in the manifest since the backend
   runs over plain HTTP locally — tighten this before shipping anywhere real.

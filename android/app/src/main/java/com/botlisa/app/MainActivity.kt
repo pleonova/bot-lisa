@@ -137,7 +137,26 @@ fun LisaScreen() {
         isLoading = true
         scope.launch {
             try {
-                result = ApiClient.sendAssist(baseUrl = serverUrl, apiKey = apiKey, text = input)
+                var assist = ApiClient.sendAssist(baseUrl = serverUrl, apiKey = apiKey, text = input)
+                // Backend had no curated-library match and no live LLM configured
+                // (ANTHROPIC_API_KEY unset) -- its "translation" is a hardcoded
+                // placeholder, not a real one. Fall back to an on-device ML Kit
+                // translation instead of showing that placeholder to the user.
+                // NOTE: this produces standard/textbook Russian, not the warm,
+                // diminutive-heavy "baby register" of the curated library -- see
+                // OnDeviceTranslator.kt and the project roadmap for that tradeoff.
+                if (assist.mode == "translate" && assist.source == "mock") {
+                    try {
+                        val onDeviceRu = OnDeviceTranslator.translate(input)
+                        assist = assist.copy(
+                            source = "on_device",
+                            translation = Phrase(ru = onDeviceRu, glossEn = input),
+                        )
+                    } catch (e: Exception) {
+                        errorText = "On-device translation failed (${e.message}) -- showing the placeholder instead. First use needs wifi to download the translation model."
+                    }
+                }
+                result = assist
             } catch (e: IOException) {
                 errorText = "Couldn't reach the server: ${e.message}"
             } catch (e: Exception) {
