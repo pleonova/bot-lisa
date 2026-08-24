@@ -133,6 +133,13 @@ def _has_cyrillic(text: str) -> bool:
     return bool(_CYRILLIC_RE.search(text))
 
 
+def _round_score(x: float | None) -> float | None:
+    """Trim retrieval scores to 3 decimal places for the API response --
+    full float precision (e.g. 0.5995388792128106) is noise for a human
+    reading the response, not meaningfully more informative than 0.6."""
+    return round(x, 3) if x is not None else None
+
+
 def _content_words(text: str) -> set[str]:
     return {w for w in _WORD_RE.findall(text.lower()) if w not in _STOPWORDS}
 
@@ -204,10 +211,10 @@ def assist(request: Request, req: AssistRequest) -> AssistResponse:
 
     if mode == "expand":
         related = [
-            Phrase(ru=c["ru"], gloss_en=c["gloss_en"], embed_score=c.get("embed_score"), hybrid_score=c.get("hybrid_score"))
+            Phrase(ru=c["ru"], gloss_en=c["gloss_en"], embed_score=_round_score(c.get("embed_score")), hybrid_score=_round_score(c.get("hybrid_score")))
             for c in candidates
         ]
-        latency_ms = (time.perf_counter() - start) * 1000
+        latency_ms = round((time.perf_counter() - start) * 1000, 2)
         logger.info("assist mode=expand input=%r latency_ms=%.2f", text, latency_ms)
         return AssistResponse(mode=mode, input=text, related=related, latency_ms=latency_ms)
 
@@ -216,7 +223,7 @@ def assist(request: Request, req: AssistRequest) -> AssistResponse:
     is_curated_match = bool(top and _content_words(text) & _content_words(top["gloss_en"]))
 
     if is_curated_match:
-        translation = Phrase(ru=top["ru"], gloss_en=top["gloss_en"], embed_score=top.get("embed_score"), hybrid_score=top.get("hybrid_score"))
+        translation = Phrase(ru=top["ru"], gloss_en=top["gloss_en"], embed_score=_round_score(top.get("embed_score")), hybrid_score=_round_score(top.get("hybrid_score")))
         source = "curated"
     else:
         generation = translate(text, candidates)
@@ -224,10 +231,10 @@ def assist(request: Request, req: AssistRequest) -> AssistResponse:
         source = generation["mode"]
 
     related = [
-        Phrase(ru=c["ru"], gloss_en=c["gloss_en"], embed_score=c.get("embed_score"), hybrid_score=c.get("hybrid_score"))
+        Phrase(ru=c["ru"], gloss_en=c["gloss_en"], embed_score=_round_score(c.get("embed_score")), hybrid_score=_round_score(c.get("hybrid_score")))
         for c in candidates if c is not top
     ][:4]
-    latency_ms = (time.perf_counter() - start) * 1000
+    latency_ms = round((time.perf_counter() - start) * 1000, 2)
     logger.info(
         "assist mode=translate input=%r source=%s latency_ms=%.2f",
         text, source, latency_ms,
