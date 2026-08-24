@@ -57,8 +57,10 @@ default only applies to fresh installs.
 
 ## Known limitations
 
-- No auth, no retries, no offline handling — matches the backend's current
-  "bare-bones scaffold" status.
+- No retries, no offline handling — matches the backend's current
+  "bare-bones scaffold" status. There is a simple shared-secret API key (see
+  "Server settings" and `PHONE_DEPLOY.md`) guarding the deployed backend, but
+  it's one key for all users, not per-user auth.
 - Mic input uses the system speech recognizer (requires Google app /
   network), locale fixed to `ru-RU` — dictating English will likely
   mis-transcribe; typing English works fine.
