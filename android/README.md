@@ -17,6 +17,12 @@ This talks to `orchestration-service`'s `POST /assist` endpoint directly
 exists for the separate child-perception-event flow, just unused by this app
 right now).
 
+*In other words: this app is one screen with one text box. Type an English word
+and get a Russian translation, or type/say a Russian phrase and get related
+phrases to expand your vocabulary. It reaches the backend over the internet
+(or your local network) at a specific address — no built-in server of its
+own.*
+
 ## Run it
 
 1. Start the backend locally (from the repo root):
@@ -30,6 +36,12 @@ right now).
    `http://10.0.2.2:8002`, which is how the emulator reaches your machine's
    `localhost:8002`.
 
+*In other words: first two commands start the backend on your own computer (no
+cloud needed for local testing). Android Studio is the program that builds
+and runs the app. An "emulator" is a fake phone that runs on your computer —
+it has its own way of reaching "your computer's localhost," which is why
+the address looks unusual (`10.0.2.2` instead of `localhost`).*
+
 ### Running on a real device instead
 
 Tap "Server settings" in the app and change the URL to your dev machine's
@@ -41,6 +53,11 @@ sure the phone is on the same Wi-Fi network and can reach that port.
 may still point at the old default (`:8003`). Open "Server settings" and
 update it to `:8002` (or your real device's equivalent) manually — the new
 default only applies to fresh installs.
+
+*In other words: a real phone can't use the emulator's special `10.0.2.2`
+address — it needs your computer's actual network address instead, since
+they're two separate physical devices on the same Wi-Fi. If the app still
+remembers an old address from a previous install, just retype it.*
 
 ## What's here
 
@@ -55,7 +72,16 @@ default only applies to fresh installs.
 - `ServerConfig.kt` — persists the server base URL in SharedPreferences,
   defaulting to the emulator alias `http://10.0.2.2:8002`.
 
+*In other words: three files, three jobs. One draws the screen you see, one
+sends the actual network request to the backend, and one just remembers
+your saved settings (like the app's own tiny notepad) so you don't have to
+retype them every time you open the app.*
+
 ## Known limitations
+
+*In other words: this is a working scaffold, not a polished product — it
+doesn't retry failed requests, doesn't work offline, and its one security
+measure is a single shared password rather than individual logins.*
 
 - No retries, no offline handling — matches the backend's current
   "bare-bones scaffold" status. There is a simple shared-secret API key (see
