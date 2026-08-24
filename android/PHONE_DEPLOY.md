@@ -269,13 +269,32 @@ before you hit them again:
    finish sooner. Once `Status` shows `succeeded`, the registry is writable
    again and the same build/push/deploy sequence will go through.
 
+   **What garbage collection actually reclaims can be tiny.** The run that
+   fixed this here took ~13.5 minutes total and freed all of 84,434 bytes
+   (`Bytes Freed`) -- effectively nothing. That's a real signal, not a fluke:
+   it means the quota problem usually isn't "clutter from old pushes,"
+   there just wasn't much orphaned/untagged data sitting around to reclaim.
+   What was actually eating the quota was the *current*, still-tagged image
+   itself (at the time, ~400MB+ with the embedding model baked in) on a
+   registry whose total plan size is small (DigitalOcean's free/Starter
+   tier is 500MB) to begin with. Garbage collection only ever helps with
+   orphaned data from old pushes to the same tag -- it can't shrink the
+   image you're actively using.
+
    Avoid needing this reactively at all: run garbage collection every so
-   often as routine maintenance instead of waiting until a push fails, or
-   move to a bigger registry tier if you're pushing often -- especially
-   relevant now that baking the embedding model into the image (see above)
-   made every image meaningfully bigger than it used to be.
+   often as routine maintenance instead of waiting until a push fails --
+   but know it may not free much if the *current* image is simply too big
+   for the plan, in which case a bigger registry tier is the only real
+   fix, not more cleanup. This specific instance was caused by the
+   embedding model being briefly baked into the image -- since fixed by
+   moving the model to a persistent volume instead (see the PVC in
+   infra/k8s/retrieval-service.yaml), so the image is back to its normal
+   size and this is a much rarer concern now, not gone forever if a future
+   change grows the image again some other way.
 
    *In other words: DigitalOcean doesn't clean up old versions of your image
    for you, so a small registry plan fills up quietly, push after push,
    until one day it just refuses the next one. Cleaning it up yourself once
-   in a while, or paying for more room, keeps this from happening again.*
+   in a while helps with that kind of clutter -- but if the app itself has
+   just gotten too big for the plan, cleaning up won't fix that part, only
+   paying for more room (or shrinking the app) will.*
