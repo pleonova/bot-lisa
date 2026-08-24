@@ -12,6 +12,15 @@ metadata:
     app: retrieval-service
 spec:
   replicas: 1
+  # Recreate instead of the default RollingUpdate: a rolling update briefly
+  # needs both the old and new pod's memory reserved at once, and this
+  # node (s-1vcpu-2gb) doesn't have room for two copies of this service at
+  # its real memory footprint alongside orchestration-service and
+  # ingestion-service. Costs a few seconds of downtime per deploy instead --
+  # a fine tradeoff for a personal project, not worth it for something with
+  # real concurrent users.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: retrieval-service
@@ -30,19 +39,23 @@ spec:
             httpGet:
               path: /health
               port: 8001
-            initialDelaySeconds: 3
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 6
           livenessProbe:
             httpGet:
               path: /health
               port: 8001
-            initialDelaySeconds: 10
+            initialDelaySeconds: 40
+            periodSeconds: 10
+            failureThreshold: 6
           resources:
             requests:
               cpu: "100m"
-              memory: "128Mi"
+              memory: "384Mi"
             limits:
               cpu: "500m"
-              memory: "256Mi"
+              memory: "896Mi"
 ---
 apiVersion: v1
 kind: Service

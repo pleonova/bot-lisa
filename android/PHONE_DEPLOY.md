@@ -245,3 +245,37 @@ before you hit them again:
    password — that's stored on each phone separately after you type it in.
    Handing someone the file alone isn't enough; they need those two values
    from you as well.*
+
+8. **DigitalOcean's registry has a storage quota, and repeated pushes to
+   `:latest` quietly eat it.** Every `docker push` to the same tag orphans
+   the previous image's layers (the tag pointer just moves to the new
+   manifest; the old blobs stick around using quota until something
+   deletes them), and DOCR doesn't run garbage collection on its own --
+   nothing warns you as it fills up. Eventually a push just fails outright:
+   ```
+   error from registry: quota exceeded
+   ```
+   and at that point you're mid-deploy with no way to push a fix either.
+
+   Fix once it happens:
+   ```bash
+   doctl registry get                              # confirm it's actually quota, check usage
+   doctl registry garbage-collection start bot-lisa # reclaims space; puts the registry read-only
+   doctl registry garbage-collection list bot-lisa  # check progress
+   ```
+   DOCR has to wait for any recent write credentials to expire before it can
+   safely delete anything, up to 15 minutes depending on when your last
+   push attempt (including a failed one) started -- not a fixed wait, could
+   finish sooner. Once `Status` shows `succeeded`, the registry is writable
+   again and the same build/push/deploy sequence will go through.
+
+   Avoid needing this reactively at all: run garbage collection every so
+   often as routine maintenance instead of waiting until a push fails, or
+   move to a bigger registry tier if you're pushing often -- especially
+   relevant now that baking the embedding model into the image (see above)
+   made every image meaningfully bigger than it used to be.
+
+   *In other words: DigitalOcean doesn't clean up old versions of your image
+   for you, so a small registry plan fills up quietly, push after push,
+   until one day it just refuses the next one. Cleaning it up yourself once
+   in a while, or paying for more room, keeps this from happening again.*
