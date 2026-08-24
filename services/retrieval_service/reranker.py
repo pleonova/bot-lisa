@@ -58,6 +58,17 @@ class Reranker:
         self.model = LogisticRegression(max_iter=1000).fit(X_arr, y_arr)
 
     def rerank(self, candidates: list[dict], context: dict) -> list[dict]:
+        if not candidates:
+            # Nothing survived hybrid.py's MIN_EMBED_SIMILARITY threshold --
+            # a real, expected case once that threshold is strict enough to
+            # ever return zero results (it wasn't, before it was raised from
+            # 0.35 to 0.7). Nothing to rerank; returning early here avoids
+            # calling predict_proba on an empty array, which sklearn raises
+            # ValueError on ("Expected 2D array, got 1D array instead:
+            # array=[]") instead of just handling gracefully -- this crashed
+            # retrieval-service outright for any query with no matches
+            # above threshold until this fix.
+            return candidates
         if self.model is None:
             # untrained fallback: preserve hybrid order
             return candidates
