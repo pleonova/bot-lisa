@@ -25,6 +25,13 @@ EMBED_WEIGHT = float(os.environ.get("EMBED_WEIGHT", "0.5"))
 # Raw cosine-similarity floor (0..1) for a candidate to count as a real
 # semantic match -- see hybrid.py's search(). A candidate below this AND
 # with zero BM25 lexical overlap gets dropped instead of always filling out
-# top_k regardless of relevance. Starting value, not a tuned one; revisit
-# against eval/labeled_eval_set.json as the phrase library grows.
-MIN_EMBED_SIMILARITY = float(os.environ.get("MIN_EMBED_SIMILARITY", "0.35"))
+# top_k regardless of relevance. Raised from an initial 0.35 to 0.7 after
+# live testing on the deployed cluster: /assist with "hello" (a genuine gap
+# in the 15-phrase library, no BM25 overlap at all since it's English vs.
+# Russian) was returning 4 unrelated phrases as "related" -- at 0.35, that's
+# how loose a cosine floor this model needs to actually mean something.
+# Still a manually-picked value, not one tuned against real labeled data --
+# revisit against eval/labeled_eval_set.json as that set grows past 8
+# examples, and if too many legitimately-related queries start coming back
+# empty, that's the signal to lower it again.
+MIN_EMBED_SIMILARITY = float(os.environ.get("MIN_EMBED_SIMILARITY", "0.7"))

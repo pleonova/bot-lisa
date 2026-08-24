@@ -28,7 +28,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from services.common.config import ORCHESTRATION_API_KEY, RETRIEVAL_SERVICE_URL
+from services.common.config import MIN_EMBED_SIMILARITY, ORCHESTRATION_API_KEY, RETRIEVAL_SERVICE_URL
 from services.orchestration_service.llm_client import generate, translate
 
 logging.basicConfig(level=logging.INFO)
@@ -140,6 +140,13 @@ def _content_words(text: str) -> set[str]:
 class Phrase(BaseModel):
     ru: str
     gloss_en: str
+    # Debug aid, not used by the app UI today: the raw retrieval scores this
+    # candidate had, so a "why did I get this suggestion" question can be
+    # answered from the API response directly instead of guessing. None
+    # when not applicable (e.g. an LLM-generated translation, which never
+    # went through retrieval scoring at all).
+    embed_score: float | None = None
+    hybrid_score: float | None = None
 
 
 class AssistRequest(BaseModel):
@@ -153,6 +160,11 @@ class AssistResponse(BaseModel):
     translation: Phrase | None = None
     related: list[Phrase]
     latency_ms: float
+    # The MIN_EMBED_SIMILARITY value actually applied to this request's
+    # retrieval -- included so "was this the old threshold or the new one"
+    # is answerable from the response itself, not by cross-checking which
+    # image is deployed.
+    similarity_threshold: float = MIN_EMBED_SIMILARITY
 
 
 @app.post("/assist", response_model=AssistResponse, dependencies=[Depends(require_api_key)])
@@ -191,7 +203,10 @@ def assist(request: Request, req: AssistRequest) -> AssistResponse:
     mode = "expand" if _has_cyrillic(text) else "translate"
 
     if mode == "expand":
-        related = [Phrase(ru=c["ru"], gloss_en=c["gloss_en"]) for c in candidates]
+        related = [
+            Phrase(ru=c["ru"], gloss_en=c["gloss_en"], embed_score=c.get("embed_score"), hybrid_score=c.get("hybrid_score"))
+            for c in candidates
+        ]
         latency_ms = (time.perf_counter() - start) * 1000
         logger.info("assist mode=expand input=%r latency_ms=%.2f", text, latency_ms)
         return AssistResponse(mode=mode, input=text, related=related, latency_ms=latency_ms)
@@ -201,14 +216,17 @@ def assist(request: Request, req: AssistRequest) -> AssistResponse:
     is_curated_match = bool(top and _content_words(text) & _content_words(top["gloss_en"]))
 
     if is_curated_match:
-        translation = Phrase(ru=top["ru"], gloss_en=top["gloss_en"])
+        translation = Phrase(ru=top["ru"], gloss_en=top["gloss_en"], embed_score=top.get("embed_score"), hybrid_score=top.get("hybrid_score"))
         source = "curated"
     else:
         generation = translate(text, candidates)
         translation = Phrase(ru=generation["ru"], gloss_en=text)
         source = generation["mode"]
 
-    related = [Phrase(ru=c["ru"], gloss_en=c["gloss_en"]) for c in candidates if c is not top][:4]
+    related = [
+        Phrase(ru=c["ru"], gloss_en=c["gloss_en"], embed_score=c.get("embed_score"), hybrid_score=c.get("hybrid_score"))
+        for c in candidates if c is not top
+    ][:4]
     latency_ms = (time.perf_counter() - start) * 1000
     logger.info(
         "assist mode=translate input=%r source=%s latency_ms=%.2f",
