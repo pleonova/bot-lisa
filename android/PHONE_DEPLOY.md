@@ -71,8 +71,91 @@ remembered after that.*
 ## Updating the app later
 
 **If only the backend changed** (Python code, k8s manifests): no APK rebuild
-needed — rebuild/push the Docker image and redeploy as usual. The app just
-talks to whatever's running at the configured URL.
+needed — the app just talks to whatever's running at the configured URL, so
+the phone doesn't need to know anything happened. What you do need to do is
+get the new code running on the cluster:
+
+1. **Confirm you're pointed at the right cluster.**
+   ```bash
+   doctl kubernetes cluster kubeconfig save bot-lisa-cluster
+   kubectl get pods
+   ```
+   You should see `retrieval-service`, `orchestration-service`, and
+   `ingestion-service` pods already `Running`.
+
+   *In other words: this makes sure the commands below land on Bot Lisa's
+   cluster and not some other DigitalOcean project you might have.*
+
+2. **Log in to the registry.**
+   ```bash
+   doctl registry login
+   ```
+
+   *In other words: this proves to DigitalOcean's private image storage that
+   it's really you pushing to it.*
+
+3. **Build and push the image.** Build from the repo root (not `android/`)
+   so the whole `services/` tree is included, and explicitly target the
+   cluster's CPU architecture:
+   ```bash
+   cd ~/repos/bot-lisa
+   docker build --platform linux/amd64 -t registry.digitalocean.com/bot-lisa/bot-lisa:latest -f infra/Dockerfile .
+   docker push registry.digitalocean.com/bot-lisa/bot-lisa:latest
+   ```
+   The `--platform linux/amd64` flag matters: Docker on Apple Silicon builds
+   `arm64` by default, but the cluster's node runs `amd64`. Skip it and the
+   push still succeeds, but the pod fails to start with a cryptic "no match
+   for platform in manifest" error.
+
+   *In other words: this turns your code into the packaged, runnable form
+   Kubernetes understands, and uploads it. The `--platform` flag is there
+   because your Mac and the cloud server speak slightly different machine-code
+   dialects — you have to say which one to build for.*
+
+4. **If you only changed Python code, restart the deployments so they pick
+   up the new image:**
+   ```bash
+   kubectl rollout restart deployment/retrieval-service deployment/orchestration-service deployment/ingestion-service
+   kubectl rollout status deployment/retrieval-service
+   kubectl rollout status deployment/orchestration-service
+   ```
+   **If you also changed a k8s manifest** (`infra/k8s/*.yaml` — env vars, the
+   Service type, resource limits, etc.), `apply` it first — a restart alone
+   does not pick up manifest changes, only a new image on the same spec:
+   ```bash
+   kubectl apply -f infra/k8s/
+   ```
+   The `retrieval-service` pod downloads the ~220MB embedding model
+   (`fastembed`, see `services/retrieval_service/embeddings.py`) the moment
+   it starts, so the first rollout after that changed may take a minute or
+   two longer than usual to go `Ready`. That's expected, not a crash loop.
+
+   *In other words: pushing a new image doesn't automatically restart what's
+   already running — you have to tell it to. And "restart" and "apply" do
+   different jobs: restart re-pulls the image on the current setup, apply
+   changes the setup itself. If you changed the setup, restarting alone
+   quietly does nothing.*
+
+5. **Verify before touching the phone.**
+   ```bash
+   kubectl get svc orchestration-service   # external IP under EXTERNAL-IP
+   curl http://<that-ip>:8002/health
+   ```
+   If `ORCHESTRATION_API_KEY` is set on the cluster, include it on any
+   `/assist` test calls:
+   ```bash
+   curl -H "X-API-Key: $(kubectl get secret bot-lisa-secrets -o jsonpath='{.data.orchestration-api-key}' | base64 -d)" \
+     -X POST http://<that-ip>:8002/assist \
+     -H "Content-Type: application/json" -d '{"text": "hello"}'
+   ```
+
+   *In other words: check the server is actually up and answering correctly
+   from the command line, before assuming the phone app will work — it's
+   faster to debug here than by poking around in the app.*
+
+Once step 5 looks right, the already-installed app on your phone is talking
+to the updated backend automatically — no reinstall needed, same as any
+other backend-only change.
 
 **If the Android code changed** (`MainActivity.kt`, `ApiClient.kt`,
 `ServerConfig.kt`, or the manifest): rebuild the APK and reinstall —
