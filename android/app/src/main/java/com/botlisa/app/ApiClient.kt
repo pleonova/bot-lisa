@@ -10,10 +10,13 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
+// Serializable (not just a plain data class) so `result` in MainActivity can be held in
+// rememberSaveable and survive an Activity recreation (e.g. screen rotation) instead of
+// resetting to null -- see MainActivity.kt.
 data class Phrase(
     val ru: String,
     val glossEn: String,
-)
+) : java.io.Serializable
 
 data class AssistResult(
     val mode: String, // "translate" (English in) or "expand" (Russian in)
@@ -22,7 +25,7 @@ data class AssistResult(
     val translation: Phrase?,
     val related: List<Phrase>,
     val latencyMs: Double,
-)
+) : java.io.Serializable
 
 /**
  * Talks to services/orchestration_service's caregiver-facing POST /assist

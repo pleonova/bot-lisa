@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
@@ -65,15 +66,22 @@ class MainActivity : ComponentActivity() {
 fun LisaScreen() {
     val scope = rememberCoroutineScope()
 
-    var input by remember { mutableStateOf("") }
+    // rememberSaveable (not plain remember) for anything the user would be upset to lose on
+    // an Activity recreation -- most commonly a screen rotation. Plain `remember` state is
+    // wiped when the Activity is destroyed and recreated, which is what was happening here:
+    // rotating the phone reset the whole screen back to its empty starting state. isLoading
+    // is deliberately left as plain `remember`: if a request was in flight during rotation,
+    // its coroutine (scoped to this composition) is gone either way, so persisting `true`
+    // would leave the button stuck disabled forever with nothing left to ever set it false.
+    var input by rememberSaveable { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
-    var errorText by remember { mutableStateOf<String?>(null) }
-    var result by remember { mutableStateOf<AssistResult?>(null) }
+    var errorText by rememberSaveable { mutableStateOf<String?>(null) }
+    var result by rememberSaveable { mutableStateOf<AssistResult?>(null) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
     var serverUrl by remember { mutableStateOf(ServerConfig.getBaseUrl(context)) }
     var apiKey by remember { mutableStateOf(ServerConfig.getApiKey(context)) }
-    var showServerSettings by remember { mutableStateOf(false) }
+    var showServerSettings by rememberSaveable { mutableStateOf(false) }
 
     fun onServerUrlChange(newUrl: String) {
         serverUrl = newUrl
