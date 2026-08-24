@@ -1,9 +1,23 @@
-# Scaffold only -- not applied/tested here (no cluster in this environment).
-# Try it locally first with k3d or minikube:
-#   k3d cluster create bot-lisa
-#   docker build -t bot-lisa:local -f infra/Dockerfile .
-#   k3d image import bot-lisa:local -c bot-lisa
-#   kubectl apply -f infra/k8s/
+# Live and applied against the bot-lisa-cluster DOKS cluster (see
+# infra/terraform/main.tf) -- this is not a scaffold. Deploy changes with
+# `kubectl apply -f infra/k8s/retrieval-service.yaml`, see
+# android/PHONE_DEPLOY.md for the full build/push/deploy runbook.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: retrieval-service-model-cache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # DOKS's default dynamically-provisioned StorageClass, backed by a real
+  # DigitalOcean Block Storage volume -- billed separately from the
+  # registry/image storage this is meant to avoid growing, roughly
+  # $0.10/GB/month. 1Gi is generous headroom over the ~220MB model.
+  storageClassName: do-block-storage
+  resources:
+    requests:
+      storage: 1Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -35,6 +49,17 @@ spec:
           command: ["uvicorn", "services.retrieval_service.main:app", "--host", "0.0.0.0", "--port", "8001"]
           ports:
             - containerPort: 8001
+          # Persists the downloaded embedding model (see
+          # ENV FASTEMBED_CACHE_PATH in infra/Dockerfile -- must match this
+          # mountPath exactly) across restarts/deploys/reschedules, so it's
+          # only ever downloaded once per volume instead of on every fresh
+          # pod. Keeps the image itself from growing -- see the PVC above
+          # and the "Aha" in android/PHONE_DEPLOY.md about the registry
+          # quota this was hitting when the model was baked into the image
+          # instead.
+          volumeMounts:
+            - name: model-cache
+              mountPath: /opt/fastembed_cache
           readinessProbe:
             httpGet:
               path: /health
@@ -56,6 +81,10 @@ spec:
             limits:
               cpu: "500m"
               memory: "896Mi"
+      volumes:
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: retrieval-service-model-cache
 ---
 apiVersion: v1
 kind: Service

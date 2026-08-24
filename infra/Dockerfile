@@ -13,21 +13,17 @@ COPY services/ services/
 COPY phrase_library/ phrase_library/
 COPY eval/ eval/
 
-# Bake the embedding model into the image at build time instead of
-# downloading it from Hugging Face the first time a pod starts. Without
-# this, every fresh pod (a deploy, a crash restart, a node reschedule --
-# there's no persistent volume for the download cache) re-downloads ~180MB
-# over the network before it can serve a single request, which is slow and
-# was the direct cause of an OOMKilled crash loop the first time this
-# shipped (see infra/k8s/retrieval-service.yaml's resource limits, bumped
-# separately to also cover this). FASTEMBED_CACHE_PATH is set before the
-# warm-up call and stays set for the running container too, so both build
-# time and runtime resolve to the same cache directory.
-# NOTE: the model name here is duplicated from
-# services/retrieval_service/embeddings.py -- keep the two in sync if that
-# ever changes.
+# Where fastembed caches the downloaded embedding model. NOT baked into
+# the image (tried that first -- it worked, but every image push then
+# carried the ~220MB model too, which blew through the DigitalOcean
+# registry's storage quota after a handful of pushes). Instead
+# infra/k8s/retrieval-service.yaml mounts a small persistent volume at this
+# exact path, so the model downloads once ever (first pod to use a fresh
+# volume) and survives every deploy/restart/reschedule after that, without
+# the image itself growing at all. Local/docker-compose runs without that
+# volume mounted will just re-download into container-local storage each
+# time, same as before this existed -- fine for occasional local testing.
 ENV FASTEMBED_CACHE_PATH=/opt/fastembed_cache
-RUN python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')"
 
 # Overridden per-service by docker-compose `command:`
 CMD ["uvicorn", "services.retrieval_service.main:app", "--host", "0.0.0.0", "--port", "8001"]
