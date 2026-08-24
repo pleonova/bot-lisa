@@ -11,7 +11,7 @@ version meant to be expanded, not a mockup.
 |---|---|
 | Phrase library (15 seed phrases) | Real, but tiny — expand this first |
 | BM25 lexical retrieval | Real (`rank_bm25`) |
-| Dense embeddings | **Placeholder** — deterministic hash-based vector, not semantically meaningful. See `services/retrieval_service/embeddings.py` for the swap-in path (Anthropic/OpenAI/Voyage embeddings API, or your fine-tuned SBERT model) |
+| Dense embeddings | Real (`fastembed`, open-source, ONNX-based, running `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` locally) with a minimum-similarity threshold in `hybrid.py`. See `services/retrieval_service/embeddings.py` |
 | Hybrid BM25+embedding scoring | Real, working, tunable via `BM25_WEIGHT`/`EMBED_WEIGHT` env vars |
 | Eval harness (NDCG, MRR, precision@k) | Real, run it: `python -m eval.run_eval` |
 | LTR reranker | Real (logistic regression) — upgrade path to LightGBM noted in `reranker.py` |
@@ -83,7 +83,7 @@ android/                          # minimal Kotlin/Compose front end, see androi
 ## Suggested expansion order
 
 1. **Grow the phrase library** (15 → 75+ phrases per the original plan) with your collaborator.
-2. **Swap in real embeddings** in `embeddings.py` — this is the highest-value single change, since the hybrid/LTR/eval code around it doesn't need to change at all.
+2. ~~Swap in real embeddings in `embeddings.py`~~ — done, see the status table above. Next highest-value step here: grow `eval/labeled_eval_set.json` past 8 examples so the similarity threshold and reranker have more to be tuned against.
 3. **Grow the labeled eval set** past 8 examples — the LTR reranker and eval numbers both get more trustworthy with more data.
 4. **Wire up live LLM mode** — set `ANTHROPIC_API_KEY` and sanity-check `services/orchestration_service/llm_client.py`'s system prompt against real generations.
 5. **Add a Java (or Scala) retrieval hot-path service** — the retrieval service's `/search` endpoint is the natural candidate, since it's the latency-sensitive piece.
