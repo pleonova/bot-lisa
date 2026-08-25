@@ -1,15 +1,17 @@
-# Infant Russian Language Bot — Bare-Bones Scaffold
+# Assistant Language Bot (Version 1: Russian)
+
+## Why am I building this app
+
+Before I moved to the US, the first English word I learned in school was fox (don't ask me why). Now that I have a baby, I want to teach them Russian, but my vocabulary isn't big enough to do it on my own, so I'm building an app to help. I named it Lisa (лиса), which means fox in Russian. Also, my baby's nursery theme just so happens to be foxes.
+
+A little bit more about me: I grew up speaking Russian at home, but I never formally studied it, so somewhere along the way it turned into a comfortable hybrid I'd call Runglish. I understand conversational Russian just fine, I just don't always have the word I need on hand when I need it. Lisa is my way of closing that gap. When a word or phrase won't come to me, it translates from English to Russian. And based on either the Russian or English phrase, it recommends related phrases so I can keep expanding my vocabulary and hopefully my child's too.
+
+## The technical part
 
 A runnable skeleton covering all six build layers. Everything here works with
 **zero external dependencies** (no API keys, no cloud account, no Docker
 required to try the core logic) — each piece is a real, working minimal
 version meant to be expanded, not a mockup.
-
-## Why this app
-
-Before I moved to the US, the first English word I learned in school was fox (don't ask me why). Now that I have a baby, I want to teach them Russian, but my vocabulary isn't big enough to do it on my own, so I'm building an app to help. I named it Lisa (лиса), which means fox in Russian. Also, my baby's nursery theme just so happens to be foxes.
-
-A little bit more about me: I grew up speaking Russian at home, but I never formally studied it, so somewhere along the way it turned into a comfortable hybrid I'd call Runglish. I understand conversational Russian just fine, I just don't always have the word I need on hand when I need it. Lisa is my way of closing that gap. When a word or phrase won't come to me, it translates from English to Russian. And based on either the Russian or English phrase, it recommends related phrases so I can keep expanding my vocabulary and hopefully my child's too.
 
 ## What's real vs. a placeholder
 
