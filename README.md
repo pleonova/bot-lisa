@@ -5,6 +5,12 @@ A runnable skeleton covering all six build layers. Everything here works with
 required to try the core logic) — each piece is a real, working minimal
 version meant to be expanded, not a mockup.
 
+## Why this app
+
+Before I moved to the US, the first English word I learned in school was fox (don't ask me why). Now that I have a baby, I want to teach them Russian, but my vocabulary isn't big enough to do it on my own, so I'm building an app to help. I named it Lisa (лиса), which means fox in Russian. Also, my baby's nursery theme just so happens to be foxes.
+
+A little bit more about me: I grew up speaking Russian at home, but I never formally studied it, so somewhere along the way it turned into a comfortable hybrid I'd call Runglish. I understand conversational Russian just fine, I just don't always have the word I need on hand when I need it. Lisa is my way of closing that gap. When a word or phrase won't come to me, it translates from English to Russian. And based on either the Russian or English phrase, it recommends related phrases so I can keep expanding my vocabulary and hopefully my child's too.
+
 ## What's real vs. a placeholder
 
 | Piece | Status |
@@ -89,6 +95,10 @@ android/                          # minimal Kotlin/Compose front end, see androi
 5. **Add a Java (or Scala) retrieval hot-path service** — the retrieval service's `/search` endpoint is the natural candidate, since it's the latency-sensitive piece.
 6. **Swap the HTTP calls between services for a real queue** (Kafka or Redis Streams) using the `EventBus` interface in `events.py`.
 7. **Try the k8s manifests against k3d/minikube**, then fill in `terraform/main.tf` once you pick a cloud.
+
+For bigger, standalone feature bets beyond this scaffold-filling list — like
+the hands-free "Lisa Assistant" listening mode — see
+[ROADMAP.md](ROADMAP.md).
 
 ## Paused features
 
