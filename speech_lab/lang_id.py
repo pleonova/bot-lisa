@@ -72,7 +72,6 @@ def identify_language(chunk: np.ndarray) -> dict:
             "confidence": float,            # that language's probability, 0-1
             "en_prob": float,
             "ru_prob": float,
-            "top3_all_languages": [(name, prob), ...],  # sanity-check/debug aid
         }
 
     NOTE: this always picks one of the two candidates -- it does not have an
@@ -100,12 +99,9 @@ def identify_language(chunk: np.ndarray) -> dict:
     winner = "en" if en_prob >= ru_prob else "ru"
     confidence = en_prob if winner == "en" else ru_prob
 
-    top3 = sorted(all_scores.items(), key=lambda kv: kv[1], reverse=True)[:3]
-
     return {
         "language": winner,
         "confidence": float(confidence),
         "en_prob": float(en_prob),
         "ru_prob": float(ru_prob),
-        "top3_all_languages": top3,
     }

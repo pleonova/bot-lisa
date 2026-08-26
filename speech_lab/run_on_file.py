@@ -22,14 +22,15 @@ and "text" fields to turn the log into ground truth.
 """
 from __future__ import annotations
 
+import argparse
 import json
-import sys
 import time
 import wave
 from pathlib import Path
 
 import numpy as np
 
+from audio_utils import DEFAULT_SILENCE_THRESHOLD_DB, measure_dbfs
 from lang_id import SAMPLING_RATE, identify_language
 from transcribe import transcribe
 
@@ -62,17 +63,31 @@ def load_wav_as_float32(path: str) -> np.ndarray:
         print(f"  WARNING: {path} is {sr}Hz, not {SAMPLING_RATE}Hz -- results may be degraded "
               f"(this harness doesn't resample; see docstring).")
 
+    # dBFS is measured here, before normalization -- see audio_utils.py for
+    # why: normalizing first would stretch quiet room noise up to look
+    # "full volume" by the time the silence check ran.
+    dbfs = measure_dbfs(audio)
+
     # Match the reference example: normalize peak amplitude to 1.0.
     peak = np.max(np.abs(audio))
     if peak > 0:
         audio = audio / peak
 
-    return audio
+    return audio, dbfs
 
 
-def process_file(path: str) -> dict:
-    audio = load_wav_as_float32(path)
+def process_file(path: str, silence_threshold_db: float) -> dict:
+    audio, dbfs = load_wav_as_float32(path)
     duration_s = len(audio) / SAMPLING_RATE
+
+    if dbfs < silence_threshold_db:
+        return {
+            "file": path,
+            "duration_s": round(duration_s, 2),
+            "dbfs": round(dbfs, 1),
+            "skipped": True,
+            "reason": "silence",
+        }
 
     t0 = time.time()
     lid_result = identify_language(audio)
@@ -82,33 +97,37 @@ def process_file(path: str) -> dict:
     text = transcribe(audio, language=lid_result["language"])
     transcribe_time = time.time() - t0
 
-    record = {
+    return {
         "file": path,
         "duration_s": round(duration_s, 2),
+        "dbfs": round(dbfs, 1),
+        "skipped": False,
         "detected_language": lid_result["language"],
         "confidence": round(lid_result["confidence"], 3),
         "en_prob": round(lid_result["en_prob"], 3),
         "ru_prob": round(lid_result["ru_prob"], 3),
-        "top3_all_languages": [(name, round(p, 3)) for name, p in lid_result["top3_all_languages"]],
         "text": text,
         "lang_id_time_s": round(lid_time, 3),
         "transcribe_time_s": round(transcribe_time, 3),
     }
-    return record
 
 
-def main(paths: list[str]) -> None:
+def main(paths: list[str], silence_threshold_db: float) -> None:
     with LOG_PATH.open("a") as log_file:
         for path in paths:
             print(f"\n--- {path} ---")
-            record = process_file(path)
+            record = process_file(path, silence_threshold_db)
             print(f"  duration:     {record['duration_s']}s")
-            print(f"  detected:     {record['detected_language']}  "
-                  f"(en={record['en_prob']}, ru={record['ru_prob']})")
-            print(f"  top3 (all 107 langs): {record['top3_all_languages']}")
-            print(f"  transcript:   {record['text']!r}")
-            print(f"  timing:       lang_id={record['lang_id_time_s']}s, "
-                  f"transcribe={record['transcribe_time_s']}s")
+            print(f"  level:        {record['dbfs']} dBFS")
+
+            if record["skipped"]:
+                print(f"  (below {silence_threshold_db} dBFS threshold -- treating as silence, skipped)")
+            else:
+                print(f"  detected:     {record['detected_language']}  "
+                      f"(en={record['en_prob']}, ru={record['ru_prob']})")
+                print(f"  transcript:   {record['text']!r}")
+                print(f"  timing:       lang_id={record['lang_id_time_s']}s, "
+                      f"transcribe={record['transcribe_time_s']}s")
 
             log_file.write(json.dumps(record, ensure_ascii=False) + "\n")
 
@@ -116,7 +135,11 @@ def main(paths: list[str]) -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print(f"Usage: python {sys.argv[0]} clip1.wav [clip2.wav ...]")
-        sys.exit(1)
-    main(sys.argv[1:])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("wav_files", nargs="+", help="One or more .wav files to process")
+    parser.add_argument(
+        "--silence-threshold-db", type=float, default=DEFAULT_SILENCE_THRESHOLD_DB,
+        help=f"Clips quieter than this (dBFS) are skipped instead of processed (default: {DEFAULT_SILENCE_THRESHOLD_DB})",
+    )
+    args = parser.parse_args()
+    main(args.wav_files, args.silence_threshold_db)

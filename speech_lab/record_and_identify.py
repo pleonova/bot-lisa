@@ -24,33 +24,51 @@ from pathlib import Path
 import numpy as np
 import sounddevice as sd
 
+from audio_utils import DEFAULT_SILENCE_THRESHOLD_DB, measure_dbfs
 from lang_id import SAMPLING_RATE, identify_language
 from transcribe import transcribe
 
 LOG_PATH = Path(__file__).parent / "usage_log.jsonl"
 
 
-def record_clip(seconds: float) -> np.ndarray:
+def record_clip(seconds: float) -> tuple[np.ndarray, float]:
+    """Returns (audio, dbfs) -- dbfs is measured on the RAW clip, before any
+    normalization, so it reflects how loud what you actually said into the
+    mic was (see audio_utils.py for why that ordering matters)."""
     print(f"\nSpeak now ({seconds}s)...")
     audio = sd.rec(int(seconds * SAMPLING_RATE), samplerate=SAMPLING_RATE, channels=1, dtype="float32")
     sd.wait()
     audio = audio.flatten()
 
+    dbfs = measure_dbfs(audio)
+
     peak = np.max(np.abs(audio))
-    if peak < 1e-4:
-        print("  (heard silence -- check your mic input device/level)")
-    elif peak > 0:
+    if peak > 0:
         audio = audio / peak  # normalize, matches lang_id/transcribe's training-time convention
 
-    return audio
+    return audio, dbfs
 
 
-def main(seconds: float) -> None:
+def main(seconds: float, silence_threshold_db: float) -> None:
     print("Press Ctrl+C to stop.")
     with LOG_PATH.open("a") as log_file:
         while True:
             try:
-                audio = record_clip(seconds)
+                audio, dbfs = record_clip(seconds)
+                print(f"  level:      {dbfs:.1f} dBFS")
+
+                if dbfs < silence_threshold_db:
+                    print(f"  (below {silence_threshold_db} dBFS threshold -- treating as silence, skipping)")
+                    record = {
+                        "source": "mic",
+                        "duration_s": seconds,
+                        "dbfs": round(dbfs, 1),
+                        "skipped": True,
+                        "reason": "silence",
+                    }
+                    log_file.write(json.dumps(record, ensure_ascii=False) + "\n")
+                    log_file.flush()
+                    continue
 
                 t0 = time.time()
                 lid_result = identify_language(audio)
@@ -67,6 +85,8 @@ def main(seconds: float) -> None:
                 record = {
                     "source": "mic",
                     "duration_s": seconds,
+                    "dbfs": round(dbfs, 1),
+                    "skipped": False,
                     "detected_language": lid_result["language"],
                     "confidence": round(lid_result["confidence"], 3),
                     "en_prob": round(lid_result["en_prob"], 3),
@@ -85,5 +105,9 @@ def main(seconds: float) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seconds", type=float, default=3.0, help="Clip length in seconds (default: 3.0)")
+    parser.add_argument(
+        "--silence-threshold-db", type=float, default=DEFAULT_SILENCE_THRESHOLD_DB,
+        help=f"Clips quieter than this (dBFS) are skipped instead of processed (default: {DEFAULT_SILENCE_THRESHOLD_DB})",
+    )
     args = parser.parse_args()
-    main(args.seconds)
+    main(args.seconds, args.silence_threshold_db)
