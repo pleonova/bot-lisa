@@ -11,26 +11,39 @@ import android.speech.SpeechRecognizer
  * Hands-free "Lisa Assistant" listening loop -- the production version of
  * speech_lab/trigger_flow.py's state machine, built on Android's built-in
  * SpeechRecognizer instead of the external Whisper/SpeechBrain models the
- * Python prototype used. Same two states, same reasoning (see
- * TriggerPhraseDetector.kt / trigger_phrase.py's docstring for why a fixed
- * trigger phrase replaces statistical language ID):
+ * Python prototype used. See TriggerPhraseDetector.kt / trigger_phrase.py's
+ * docstring for why a fixed trigger phrase replaces statistical language
+ * ID.
  *
- *   DEFAULT      -- listen in [defaultLanguageCode] (Russian). If the
- *                   transcript matches the configured trigger phrase,
- *                   don't treat it as a normal utterance -- switch to
- *                   LISTENING_FOR_WORD instead.
+ * States:
+ *   DEFAULT      -- listen in [defaultLanguageCode] (Russian). Every
+ *                   transcript is checked against two independently
+ *                   configured trigger phrases (see TriggerPhraseConfig.kt)
+ *                   before being treated as an ordinary utterance:
+ *                     - matches the *translate* trigger -> switch to
+ *                       LISTENING_FOR_WORD instead of treating this as a
+ *                       normal utterance.
+ *                     - matches the *next-suggestion* trigger -> fire
+ *                       [onNextSuggestionRequested] (read the next
+ *                       suggested phrase aloud) and keep listening in
+ *                       DEFAULT -- this doesn't change state, it's a
+ *                       one-shot command.
+ *                     - matches neither -> hand the transcript to
+ *                       [onUtterance] as a normal default-language
+ *                       utterance (expand-mode territory).
  *   LISTENING_FOR_WORD -- listen in [translateLanguageCode] (English) for
  *                   the *next* utterance -- the word/phrase to translate --
- *                   then report it and switch back to DEFAULT.
+ *                   report it via [onUtterance], then switch back to
+ *                   DEFAULT.
  *
- * Every recognized utterance in either state is handed to the caller
- * ([onUtterance]) exactly as heard, in whichever language that state was
- * listening in -- the caller just feeds it into the existing /assist
- * pipeline (MainActivity's onSend()), which already auto-detects
- * translate-vs-expand mode from the text itself. This class's only job is
- * getting the STT locale right *before* transcription happens, which one-
- * shot dictation couldn't do (see the original bug this whole feature line
- * started from).
+ * Utterances handed to [onUtterance] are passed exactly as heard, in
+ * whichever language that state was listening in -- the caller just feeds
+ * them into the existing /assist pipeline (MainActivity's onSend()), which
+ * already auto-detects translate-vs-expand mode from the text itself. This
+ * class's job is only getting the STT locale right *before* transcription
+ * (the original bug this whole feature line started from) and recognizing
+ * the two fixed command phrases -- it doesn't know or care what "reading
+ * the next suggestion" or "translating a word" actually involves.
  *
  * Must be constructed, started, and stopped from the main thread --
  * SpeechRecognizer requires it. Re-arms itself (calls startListening again)
@@ -44,8 +57,10 @@ class SpeechAssistant(
     private val context: Context,
     private val defaultLanguageCode: String,
     private val translateLanguageCode: String,
-    private val getTriggerPhrase: () -> String,
+    private val getTranslateTriggerPhrase: () -> String,
+    private val getNextSuggestionTriggerPhrase: () -> String,
     private val onUtterance: (text: String, state: State) -> Unit,
+    private val onNextSuggestionRequested: () -> Unit,
     private val onStateChanged: (State) -> Unit,
     private val onError: (String) -> Unit,
 ) {
@@ -102,12 +117,19 @@ class SpeechAssistant(
         if (stoppedByUser) return
         when (state) {
             State.LISTENING_DEFAULT -> {
-                if (transcript.isNotBlank() && TriggerPhraseDetector.matches(transcript, getTriggerPhrase())) {
-                    state = State.LISTENING_FOR_WORD
-                    listenOnce(translateLanguageCode)
-                } else {
-                    if (transcript.isNotBlank()) onUtterance(transcript, State.LISTENING_DEFAULT)
-                    rearm()
+                when {
+                    transcript.isNotBlank() && TriggerPhraseDetector.matches(transcript, getTranslateTriggerPhrase()) -> {
+                        state = State.LISTENING_FOR_WORD
+                        listenOnce(translateLanguageCode)
+                    }
+                    transcript.isNotBlank() && TriggerPhraseDetector.matches(transcript, getNextSuggestionTriggerPhrase()) -> {
+                        onNextSuggestionRequested()
+                        rearm()
+                    }
+                    else -> {
+                        if (transcript.isNotBlank()) onUtterance(transcript, State.LISTENING_DEFAULT)
+                        rearm()
+                    }
                 }
             }
             State.LISTENING_FOR_WORD -> {

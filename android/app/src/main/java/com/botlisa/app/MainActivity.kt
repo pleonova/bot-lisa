@@ -48,13 +48,20 @@ import java.io.IOException
  * default does not).
  *
  * "Lisa Assistant" (below) is the hands-free mode: tap to start continuous
- * listening in Russian; say a Russian phrase and it's treated as a normal
- * expand-mode utterance; say the configured trigger phrase (Settings ->
- * "Trigger phrase"), pause, then say an English word, and *that* utterance
- * is treated as translate-mode. See SpeechAssistant.kt for the listening
- * state machine and TriggerPhraseDetector.kt for the fuzzy phrase match --
- * both are ports of the speech_lab/ Python prototype, using Android's
- * built-in SpeechRecognizer instead of an external model.
+ * listening in Russian. Two independently editable trigger phrases (Settings
+ * -> "Trigger phrase (translate)" / "Trigger phrase (next suggestion)")
+ * drive it:
+ *   - say the translate trigger ("как сказать" by default), pause, then an
+ *     English word -- that word is sent to /assist as translate-mode.
+ *   - say the next-suggestion trigger ("что ещё" by default) to have the
+ *     app read the next related/suggested phrase from the most recent
+ *     lookup aloud; say it again to hear the next one in that list.
+ *   - anything else defaults to a normal Russian utterance, sent to
+ *     /assist as expand-mode, same as typing it in.
+ * See SpeechAssistant.kt for the listening state machine and
+ * TriggerPhraseDetector.kt for the fuzzy phrase match -- both are ports of
+ * the speech_lab/ Python prototype, using Android's built-in
+ * SpeechRecognizer instead of an external model.
  */
 class MainActivity : ComponentActivity() {
 
@@ -87,6 +94,12 @@ fun LisaScreen() {
     var errorText by rememberSaveable { mutableStateOf<String?>(null) }
     var result by rememberSaveable { mutableStateOf<AssistResult?>(null) }
 
+    // Which related/suggested phrase the next-suggestion trigger should
+    // speak. Reset to 0 every time a fresh /assist result comes back, so
+    // cycling always starts from the top of the newest suggestion list;
+    // wraps around (see speakNextSuggestion()) once it runs past the end.
+    var suggestionIndex by rememberSaveable { mutableStateOf(0) }
+
     val context = androidx.compose.ui.platform.LocalContext.current
     var serverUrl by remember { mutableStateOf(ServerConfig.getBaseUrl(context)) }
     var apiKey by remember { mutableStateOf(ServerConfig.getApiKey(context)) }
@@ -98,16 +111,23 @@ fun LisaScreen() {
     var targetLanguage by remember { mutableStateOf(LanguageConfig.getTargetLanguage(context)) }
     var languageMenuExpanded by remember { mutableStateOf(false) }
 
-    // The Lisa Assistant trigger phrase -- editable here, persisted via
+    // Lisa Assistant's two trigger phrases -- editable here, persisted via
     // TriggerPhraseConfig.kt (same SharedPreferences pattern as the target
     // language and server settings above). Only Russian has a listening
-    // mode wired up today, so this edits that one entry.
-    var triggerPhrase by remember {
-        mutableStateOf(TriggerPhraseConfig.getTriggerPhrase(context, SupportedLanguages.RUSSIAN.code))
+    // mode wired up today, so this edits those two entries.
+    var translateTriggerPhrase by remember {
+        mutableStateOf(TriggerPhraseConfig.getTranslateTriggerPhrase(context, SupportedLanguages.RUSSIAN.code))
     }
-    fun onTriggerPhraseChange(newPhrase: String) {
-        triggerPhrase = newPhrase
-        TriggerPhraseConfig.setTriggerPhrase(context, SupportedLanguages.RUSSIAN.code, newPhrase)
+    fun onTranslateTriggerPhraseChange(newPhrase: String) {
+        translateTriggerPhrase = newPhrase
+        TriggerPhraseConfig.setTranslateTriggerPhrase(context, SupportedLanguages.RUSSIAN.code, newPhrase)
+    }
+    var nextSuggestionTriggerPhrase by remember {
+        mutableStateOf(TriggerPhraseConfig.getNextSuggestionTriggerPhrase(context, SupportedLanguages.RUSSIAN.code))
+    }
+    fun onNextSuggestionTriggerPhraseChange(newPhrase: String) {
+        nextSuggestionTriggerPhrase = newPhrase
+        TriggerPhraseConfig.setNextSuggestionTriggerPhrase(context, SupportedLanguages.RUSSIAN.code, newPhrase)
     }
 
     // Speaks translation results aloud -- see TranslationSpeaker.kt. Rebuilt
@@ -118,6 +138,20 @@ fun LisaScreen() {
     DisposableEffect(targetLanguage) {
         val current = TranslationSpeaker(context, targetLanguage.ttsLocale)
         speaker = current
+        onDispose { current.shutdown() }
+    }
+
+    // A second, Russian-locale-fixed speaker for reading related/suggested
+    // phrases aloud (the next-suggestion trigger, below). Related phrases
+    // always come from the Russian curated library regardless of the
+    // target-language setting above -- same reason related-phrase lookup
+    // itself stays Russian-only, see LanguageConfig.kt -- so this can't
+    // reuse `speaker`, which follows the target language and would
+    // mispronounce Russian text through e.g. a Hindi voice.
+    var russianSpeaker by remember { mutableStateOf<TranslationSpeaker?>(null) }
+    DisposableEffect(Unit) {
+        val current = TranslationSpeaker(context, SupportedLanguages.RUSSIAN.ttsLocale)
+        russianSpeaker = current
         onDispose { current.shutdown() }
     }
 
@@ -208,6 +242,9 @@ fun LisaScreen() {
                     assist.translation?.let { speaker?.speak(it.ru) }
                 }
                 result = assist
+                // A fresh lookup means a fresh suggestion list -- next-suggestion
+                // cycling (see speakNextSuggestion()) should start from the top.
+                suggestionIndex = 0
             } catch (e: IOException) {
                 errorText = "Couldn't reach the server: ${e.message}"
             } catch (e: Exception) {
@@ -218,19 +255,38 @@ fun LisaScreen() {
         }
     }
 
-    // Always-current handle onto onSend()'s behavior for Lisa Assistant's
-    // callbacks below. SpeechAssistant is constructed once (via `remember`)
-    // and holds onto whatever lambda it's given at that first composition;
-    // routing through rememberUpdatedState means that lambda always
-    // forwards to the *latest* onSend()/input, even though onSend() itself
-    // is a fresh closure every recomposition. (input, serverUrl, etc. are
-    // all backed by stable `remember`ed state objects too, so this is
-    // belt-and-suspenders -- but it's the correct pattern for a long-lived
-    // object holding a composable's callback, so we use it here.)
+    // Speaks the next related/suggested phrase from the most recent
+    // /assist result aloud, cycling through the list and wrapping back to
+    // the start once it runs out. Triggered by the next-suggestion voice
+    // command (see SpeechAssistant.kt) -- doesn't touch `input`/onSend() at
+    // all, since this reads existing suggestions rather than making a new
+    // request.
+    fun speakNextSuggestion() {
+        val related = result?.related.orEmpty()
+        if (related.isEmpty()) {
+            russianSpeaker?.speak("Пока нет предложений.")
+            return
+        }
+        val phrase = related[suggestionIndex % related.size]
+        russianSpeaker?.speak(phrase.ru)
+        suggestionIndex++
+    }
+
+    // Always-current handles onto onSend()/speakNextSuggestion() for Lisa
+    // Assistant's callbacks below. SpeechAssistant is constructed once (via
+    // `remember`) and holds onto whatever lambdas it's given at that first
+    // composition; routing through rememberUpdatedState means those lambdas
+    // always forward to the *latest* onSend()/speakNextSuggestion(), even
+    // though both are fresh closures every recomposition. (input, result,
+    // etc. are all backed by stable `remember`ed state objects too, so this
+    // is belt-and-suspenders -- but it's the correct pattern for a
+    // long-lived object holding a composable's callbacks, so we use it
+    // here.)
     val handleAssistantUtterance = rememberUpdatedState<(String) -> Unit> { text ->
         input = text
         onSend()
     }
+    val handleNextSuggestionRequest = rememberUpdatedState { speakNextSuggestion() }
 
     var assistantState by remember { mutableStateOf(SpeechAssistant.State.IDLE) }
     var assistantError by remember { mutableStateOf<String?>(null) }
@@ -240,8 +296,14 @@ fun LisaScreen() {
             context = context,
             defaultLanguageCode = SupportedLanguages.RUSSIAN.code,
             translateLanguageCode = "en-US",
-            getTriggerPhrase = { TriggerPhraseConfig.getTriggerPhrase(context, SupportedLanguages.RUSSIAN.code) },
+            getTranslateTriggerPhrase = {
+                TriggerPhraseConfig.getTranslateTriggerPhrase(context, SupportedLanguages.RUSSIAN.code)
+            },
+            getNextSuggestionTriggerPhrase = {
+                TriggerPhraseConfig.getNextSuggestionTriggerPhrase(context, SupportedLanguages.RUSSIAN.code)
+            },
             onUtterance = { text, _ -> handleAssistantUtterance.value(text) },
+            onNextSuggestionRequested = { handleNextSuggestionRequest.value() },
             onStateChanged = { assistantState = it },
             onError = { assistantError = it },
         )
@@ -327,8 +389,9 @@ fun LisaScreen() {
                     }
                 }
                 Text(
-                    "Hands-free mode: speak Russian normally, or say \"$triggerPhrase\", pause, " +
-                        "then an English word to translate it. Edit the trigger phrase in Settings.",
+                    "Hands-free mode: speak Russian normally. Say \"$translateTriggerPhrase\", pause, " +
+                        "then an English word to translate it. Say \"$nextSuggestionTriggerPhrase\" to hear " +
+                        "the next suggested phrase. Edit both in Settings.",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 assistantError?.let {
@@ -370,10 +433,18 @@ fun LisaScreen() {
                 }
             }
             OutlinedTextField(
-                value = triggerPhrase,
-                onValueChange = { onTriggerPhraseChange(it) },
-                label = { Text("Trigger phrase (Russian)") },
+                value = translateTriggerPhrase,
+                onValueChange = { onTranslateTriggerPhraseChange(it) },
+                label = { Text("Trigger phrase (translate)") },
                 supportingText = { Text("Say this, pause, then an English word, to have Lisa Assistant translate it instead of treating it as Russian.") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = nextSuggestionTriggerPhrase,
+                onValueChange = { onNextSuggestionTriggerPhraseChange(it) },
+                label = { Text("Trigger phrase (next suggestion)") },
+                supportingText = { Text("Say this to have Lisa Assistant read the next suggested phrase aloud. Say it again for the next one in the list.") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
