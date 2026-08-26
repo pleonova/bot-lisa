@@ -42,3 +42,9 @@ android/*.iml
 android/app/*.iml
 android/captures/
 
+# speech_lab (local test artifacts -- usage log grows on every run; the
+# "pretrained_models" dir is just symlinks into ~/.cache/huggingface on
+# whichever machine downloaded the model, not portable across machines)
+speech_lab/usage_log.jsonl
+speech_lab/pretrained_models/
+
