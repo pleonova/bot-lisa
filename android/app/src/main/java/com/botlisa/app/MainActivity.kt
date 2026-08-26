@@ -46,6 +46,15 @@ import java.io.IOException
  * cluster. The API key field is only required once pointed at a backend
  * that sets ORCHESTRATION_API_KEY (the deployed cluster does; local dev by
  * default does not).
+ *
+ * "Lisa Assistant" (below) is the hands-free mode: tap to start continuous
+ * listening in Russian; say a Russian phrase and it's treated as a normal
+ * expand-mode utterance; say the configured trigger phrase (Settings ->
+ * "Trigger phrase"), pause, then say an English word, and *that* utterance
+ * is treated as translate-mode. See SpeechAssistant.kt for the listening
+ * state machine and TriggerPhraseDetector.kt for the fuzzy phrase match --
+ * both are ports of the speech_lab/ Python prototype, using Android's
+ * built-in SpeechRecognizer instead of an external model.
  */
 class MainActivity : ComponentActivity() {
 
@@ -89,6 +98,18 @@ fun LisaScreen() {
     var targetLanguage by remember { mutableStateOf(LanguageConfig.getTargetLanguage(context)) }
     var languageMenuExpanded by remember { mutableStateOf(false) }
 
+    // The Lisa Assistant trigger phrase -- editable here, persisted via
+    // TriggerPhraseConfig.kt (same SharedPreferences pattern as the target
+    // language and server settings above). Only Russian has a listening
+    // mode wired up today, so this edits that one entry.
+    var triggerPhrase by remember {
+        mutableStateOf(TriggerPhraseConfig.getTriggerPhrase(context, SupportedLanguages.RUSSIAN.code))
+    }
+    fun onTriggerPhraseChange(newPhrase: String) {
+        triggerPhrase = newPhrase
+        TriggerPhraseConfig.setTriggerPhrase(context, SupportedLanguages.RUSSIAN.code, newPhrase)
+    }
+
     // Speaks translation results aloud -- see TranslationSpeaker.kt. Rebuilt
     // whenever the target language changes (or on rotation, like any other
     // `remember`); the previous instance is shut down first so the TTS
@@ -114,10 +135,9 @@ fun LisaScreen() {
     // whatever it heard. Locale is intentionally left as Russian regardless
     // of the target-language setting above: dictation here mainly serves
     // related-phrase/expand mode, which stays Russian-only (see
-    // LanguageConfig.kt). Voice input that actually follows the target
-    // language needs per-utterance language detection -- a bigger piece
-    // tracked as the project roadmap's "Speech Assistant" phase, not done
-    // here.
+    // LanguageConfig.kt). This one-shot picker is independent of Lisa
+    // Assistant's continuous listening below -- both end up calling the
+    // same onSend() pipeline, just triggered differently.
     val speechLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { activityResult ->
@@ -198,6 +218,65 @@ fun LisaScreen() {
         }
     }
 
+    // Always-current handle onto onSend()'s behavior for Lisa Assistant's
+    // callbacks below. SpeechAssistant is constructed once (via `remember`)
+    // and holds onto whatever lambda it's given at that first composition;
+    // routing through rememberUpdatedState means that lambda always
+    // forwards to the *latest* onSend()/input, even though onSend() itself
+    // is a fresh closure every recomposition. (input, serverUrl, etc. are
+    // all backed by stable `remember`ed state objects too, so this is
+    // belt-and-suspenders -- but it's the correct pattern for a long-lived
+    // object holding a composable's callback, so we use it here.)
+    val handleAssistantUtterance = rememberUpdatedState<(String) -> Unit> { text ->
+        input = text
+        onSend()
+    }
+
+    var assistantState by remember { mutableStateOf(SpeechAssistant.State.IDLE) }
+    var assistantError by remember { mutableStateOf<String?>(null) }
+
+    val assistant = remember {
+        SpeechAssistant(
+            context = context,
+            defaultLanguageCode = SupportedLanguages.RUSSIAN.code,
+            translateLanguageCode = "en-US",
+            getTriggerPhrase = { TriggerPhraseConfig.getTriggerPhrase(context, SupportedLanguages.RUSSIAN.code) },
+            onUtterance = { text, _ -> handleAssistantUtterance.value(text) },
+            onStateChanged = { assistantState = it },
+            onError = { assistantError = it },
+        )
+    }
+    DisposableEffect(Unit) {
+        onDispose { assistant.stop() }
+    }
+
+    val assistantMicPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            assistantError = null
+            assistant.start()
+        } else {
+            assistantError = "Microphone permission is required for Lisa Assistant."
+        }
+    }
+
+    fun onToggleAssistant() {
+        if (assistantState != SpeechAssistant.State.IDLE) {
+            assistant.stop()
+            return
+        }
+        val granted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            assistantError = null
+            assistant.start()
+        } else {
+            assistantMicPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -220,6 +299,43 @@ fun LisaScreen() {
                 "or a Russian phrase to see related ones from the curated library.",
             style = MaterialTheme.typography.bodyMedium,
         )
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column {
+                        Text("Lisa Assistant", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            when (assistantState) {
+                                SpeechAssistant.State.IDLE -> "Off"
+                                SpeechAssistant.State.LISTENING_DEFAULT -> "Listening (Russian)…"
+                                SpeechAssistant.State.LISTENING_FOR_WORD -> "Heard the trigger -- say the English word…"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Button(onClick = { onToggleAssistant() }) {
+                        Text(if (assistantState == SpeechAssistant.State.IDLE) "Start" else "Stop")
+                    }
+                }
+                Text(
+                    "Hands-free mode: speak Russian normally, or say \"$triggerPhrase\", pause, " +
+                        "then an English word to translate it. Edit the trigger phrase in Settings.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                assistantError?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
 
         if (showServerSettings) {
             ExposedDropdownMenuBox(
@@ -253,6 +369,14 @@ fun LisaScreen() {
                     }
                 }
             }
+            OutlinedTextField(
+                value = triggerPhrase,
+                onValueChange = { onTriggerPhraseChange(it) },
+                label = { Text("Trigger phrase (Russian)") },
+                supportingText = { Text("Say this, pause, then an English word, to have Lisa Assistant translate it instead of treating it as Russian.") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
             OutlinedTextField(
                 value = serverUrl,
                 onValueChange = { onServerUrlChange(it) },
