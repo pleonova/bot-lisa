@@ -8,6 +8,8 @@ A little bit more about me: I grew up speaking Russian at home, but I never form
 
 ## The technical part
 
+Under the hood: it routes English text to translate-mode and Russian text to expand-mode.
+
 A runnable skeleton covering all six build layers. Everything here works with
 **zero external dependencies** (no API keys, no cloud account, no Docker
 required to try the core logic) — each piece is a real, working minimal
