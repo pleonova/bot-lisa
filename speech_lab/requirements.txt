@@ -1,0 +1,5 @@
+torch
+speechbrain
+transformers
+sounddevice
+numpy
