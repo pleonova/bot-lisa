@@ -10,6 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -17,13 +18,17 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
@@ -75,6 +80,29 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
+
+/**
+ * Coarse UI phase driving the header subtitle (and, from a later step, the
+ * central mic/speaker button's colour). SPEAKING_TRANSLATION /
+ * READING_RECOMMENDATION are not reachable yet -- they arrive once
+ * TranslationSpeaker reports playback state -- but are listed here so the
+ * consumers don't need reshaping when that lands.
+ */
+enum class UiPhase { IDLE, LISTENING_RU, LISTENING_EN, SPEAKING_TRANSLATION, READING_RECOMMENDATION }
+
+private fun uiPhaseOf(assistantState: SpeechAssistant.State): UiPhase = when (assistantState) {
+    SpeechAssistant.State.IDLE -> UiPhase.IDLE
+    SpeechAssistant.State.LISTENING_DEFAULT -> UiPhase.LISTENING_RU
+    SpeechAssistant.State.LISTENING_FOR_WORD -> UiPhase.LISTENING_EN
+}
+
+private fun UiPhase.subtitle(): String = when (this) {
+    UiPhase.IDLE -> "Tap for hands-free mode"
+    UiPhase.LISTENING_RU -> "Listening (for Russian) …"
+    UiPhase.LISTENING_EN -> "Heard the voice command, now say the English word(s)…"
+    UiPhase.SPEAKING_TRANSLATION -> "Heard the English, now listen to the translation"
+    UiPhase.READING_RECOMMENDATION -> "Heard the voice command, now listen to the recommendation"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -291,6 +319,10 @@ fun LisaScreen() {
     var assistantState by remember { mutableStateOf(SpeechAssistant.State.IDLE) }
     var assistantError by remember { mutableStateOf<String?>(null) }
 
+    // Header subtitle + (later) central-button colour. derivedStateOf so more
+    // inputs (speaking state, result mode) can fold in without changing callers.
+    val uiPhase by remember { derivedStateOf { uiPhaseOf(assistantState) } }
+
     val assistant = remember {
         SpeechAssistant(
             context = context,
@@ -346,25 +378,42 @@ fun LisaScreen() {
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.lisa_fox),
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                )
+                IconButton(onClick = { showServerSettings = !showServerSettings }) {
+                    Icon(
+                        Icons.Filled.Settings,
+                        contentDescription = if (showServerSettings) "Hide settings" else "Settings",
+                    )
+                }
+            }
             Text(
                 "Assistant Lisa",
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center,
             )
-            TextButton(onClick = { showServerSettings = !showServerSettings }) {
-                Text(if (showServerSettings) "Hide settings" else "Settings")
-            }
+            Text(
+                uiPhase.subtitle(),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
         }
-        Text(
-            "Type an English word to translate it into ${targetLanguage.displayName}, " +
-                "or a Russian phrase to see related ones from the curated library.",
-            style = MaterialTheme.typography.bodyMedium,
-        )
 
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(
