@@ -30,11 +30,13 @@ top of the same plumbing.*
 
 ## Wireframe walkthrough (frame by frame)
 
-1. **Idle / entry.** Header: fox logo top‑left, "Assistant Lisa" title in
-   purple, gear icon top‑right. Centered subtitle "Tap for hands‑free mode".
-   Large **grey** circular mic button, inactive. Rounded search field with a
-   magnifier icon and placeholder "Enter English or Russian Text". Collapsed
-   row: `>` "Hands‑free mode instructions".
+1. **Idle / entry (text mode).** Header: fox logo top‑left, "Assistant Lisa"
+   title in purple, gear icon top‑right. Centered subtitle "Tap for
+   hands‑free mode". Large **grey** circular mic button, inactive. Rounded
+   search field with a magnifier icon and placeholder "Enter English or
+   Russian Text". Collapsed row: `>` "Hands‑free mode instructions". *Per the
+   later feedback:* the teal / orange command items also show here, as
+   tappable **buttons** (§3.6).
 2. **Instructions expanded.** Same screen, chevron rotated to `v`, a grey
    panel showing the hands‑free instructions paragraph and an italic "To edit
    voice commands, go to settings."
@@ -82,7 +84,7 @@ top of the same plumbing.*
 | Large central mic button — grey → purple → teal, pulsing while listening | Mic is a tiny trailing icon on the input; on/off is a `Start`/`Stop` text button | New `AssistantButton` composable: big circle, color per phase, infinite‑transition pulse |
 | Transcript "pill" under the mic ("Пора чистить зубки. Что ещё?") + italic English gloss | Each recognised utterance is already written into the visible input field (`input = text` in `handleAssistantUtterance` / the one‑shot mic) and echoed in the result card as `"${r.input}"`. Missing: it is not positioned under the mic, no partial/streaming updates (partial results disabled), no English gloss, and the command phrases (`как сказать` / `что ещё?`) never land there (consumed as triggers first) | **Keep it one shared field** — the same rounded search box is both the type‑to‑search input and the voice‑transcript display. Move that field directly under the mic, add an `onTranscript` callback so it also shows partials + command phrases, and render the gloss as a caption line beneath it. No separate pill component. |
 | Collapsible "Hands-free mode instructions" with chevron | Instructions always visible as body text in the card | Collapsible section (`AnimatedVisibility`); **new copy** (see §7) with command phrases **bold** |
-| "Quick reminders:" card while listening — teal speech‑bubble "Как сказать? / How to say?" + orange speech‑bubble "Что ещё? / What else?" | Spoken triggers are documented only in the instructions blob | **Non‑interactive** reminder card: two labelled speech‑bubble icons that just remind the caregiver what to *say*. No tap behaviour, no new `SpeechAssistant` method. |
+| Teal "Как сказать?" + orange "Что ещё?" — buttons in text mode, "Quick reminders:" card in hands‑free | Spoken triggers documented only in the instructions blob; no typed equivalents | `CommandChips` (§3.6): **buttons** when `assistantState == IDLE` (teal → `onSend()` translate, orange → `speakNextSuggestion()`), **non‑interactive reminders** in hands‑free. Visible on the text‑mode home screen and the hands‑free empty state; hidden once a command is used, back on new input. Both label lines come from the Settings trigger‑phrase fields for `targetLanguage` (`TriggerPhraseConfig`) — bold phrase + an on‑device `targetLanguage`→English translation for the caption (source language is not hard‑coded Russian) — and update live. |
 | Result: purple speaker icon + big Russian word + English caption | Text‑only "Translation:" block with source/latency line | Restyle; add speaker icon that pulses while TTS speaks |
 | Recommendations: list of phrase pills each with a speaker icon; the one being read is orange + pulsing | Bulleted `• phrase / gloss` list, no per‑item audio | Pill list with trailing speaker `IconButton`; track "currently speaking" index |
 | Search‑style input: rounded, magnifier icon, "Enter English or Russian Text" | `OutlinedTextField` with label + mic trailing icon + separate "Look up" button | Restyle as a rounded search field; submit on IME action; drop the separate button and the one‑shot mic icon |
@@ -176,20 +178,67 @@ Still one scrolling `Column`, tighter spacing to match the mock.
    at
    [L391‑L396](app/src/main/java/com/botlisa/app/MainActivity.kt#L391-L396).
    New `var showInstructions by rememberSaveable { mutableStateOf(false) }`.
-6. **Quick reminders card** — a **non‑interactive** `Card` (tinted
-   surface‑variant), shown only when `assistantState != IDLE`. Small
-   centered "Quick reminders:" header flanked by spark/sparkle accents, then
-   a `Row` of two items split by a thin vertical `Divider`:
-   - Teal (`#2CB3AE`) speech‑bubble icon (`Icons.AutoMirrored.Filled.Chat`
-     or similar), bold **"Как сказать?"**, italic caption *How to say?*
-   - Orange (`#FE9F4D`) speech‑bubble icon, bold **"Что ещё?"**, italic
-     caption *What else?*
+6. **Command chips** — the two items (teal = translate trigger, orange =
+   next‑suggestion trigger). Same content in both modes, different behaviour:
 
-   These are read‑only mnemonics for the spoken triggers — no `onClick`, no
-   `enterTranslateMode()`, nothing wired into `SpeechAssistant`. If the
-   caregiver has customised a trigger phrase in Settings, show the custom
-   phrase here instead of the literal default (build the label from
-   `translateTriggerPhrase` / `nextSuggestionTriggerPhrase`).
+   - **Text mode** (`assistantState == IDLE`) — interactive **buttons** on
+     the home screen:
+     - Teal → run the translate path on the current field contents (same as
+       `onSend()` resolving to translate mode — the typed equivalent of
+       saying the phrase then a word). Empty field → focus it, no request.
+     - Orange → `speakNextSuggestion()`
+       ([L264‑L273](app/src/main/java/com/botlisa/app/MainActivity.kt#L264-L273))
+       — read/advance the next related phrase from the last result.
+   - **Hands‑free mode** (`assistantState != IDLE`) — the **same two items
+     as non‑interactive reminders** (`enabled = false`, no `onClick`):
+     mnemonics for what to *say*. Rendered as the tinted "Quick reminders:"
+     `Card` from the mock (centered header with spark accents, two items
+     split by a vertical `Divider`, teal `#2CB3AE` / orange `#FE9F4D`
+     speech‑bubble icons — `Icons.AutoMirrored.Filled.Chat`).
+
+   **Visibility — appear, then dismiss on use, then come back on new input:**
+   - Shown by default in **both** the text‑mode home screen **and** the
+     hands‑free empty/listening state (before any transcript) — mock frame 1
+     gains the buttons, frame 3 keeps the reminders.
+   - `var commandsDismissed by remember { mutableStateOf(false) }`;
+     `visible = !commandsDismissed`.
+   - Set `commandsDismissed = true` when a command is **used**:
+     - text mode: either chip tapped;
+     - hands‑free: the translate trigger is recognised (`assistantState`
+       transitions to `LISTENING_FOR_WORD` — that transition *is* the teal
+       phrase being heard, no new callback needed) **or**
+       `handleNextSuggestionRequest` fires (orange phrase heard).
+   - Reset `commandsDismissed = false` on **new input**: `input` changes to a
+     fresh non‑blank value by typing, or a new default‑mode utterance / new
+     `onTranscript` text arrives. Net effect the caregiver asked for: press
+     or say a command → chips disappear → they reappear once a new word is
+     written or new text is spoken.
+
+   **Labels — both lines come from Settings and follow the target language,
+   nothing hard‑coded:**
+   - Bold line: the stored `translateTriggerPhrase` /
+     `nextSuggestionTriggerPhrase` for **`targetLanguage.code`** (the fields
+     the caregiver edits in §3.8, persisted by
+     [`TriggerPhraseConfig.kt`](app/src/main/java/com/botlisa/app/TriggerPhraseConfig.kt),
+     which is already keyed by language). `MainActivity` today passes
+     `SupportedLanguages.RUSSIAN.code` to these getters/setters
+     ([L118‑L131](app/src/main/java/com/botlisa/app/MainActivity.kt#L118-L131))
+     — switch that to `targetLanguage.code` so the phrase shown (and edited)
+     is the one for the selected language. Keep them as `remember`ed state
+     hoisted in `LisaScreen`, re‑read when `targetLanguage` changes, so the
+     chips re‑render live. Display‑format: capitalise first letter + append
+     "?"; keep the raw string for matching.
+   - Italic caption: an **on‑device translation of that same phrase from
+     `targetLanguage` → English** (see §4), re‑translated whenever the
+     caregiver edits the phrase or switches language. While the translation
+     is pending (first‑use model download) or if it fails, fall back to a
+     generic "how to say" / "what else".
+
+   > Note: Lisa Assistant's continuous‑listening STT locale and the
+   > related‑phrase/expand mode are still Russian‑only in the backend (see
+   > the README "Known limitations") — generalising *those* is the separate
+   > larger change. This item only makes the **chip's displayed phrase +
+   > caption** follow `targetLanguage`, which needs no backend work.
 7. **Result card** — rework
    [L501‑L546](app/src/main/java/com/botlisa/app/MainActivity.kt#L501-L546):
    - translate mode: speaker `IconButton` (pulses while TTS active) +
@@ -204,8 +253,13 @@ Still one scrolling `Column`, tighter spacing to match the mock.
 8. **Settings panel** — unchanged content (target language, two trigger
    fields, server URL, API key at
    [L403‑L468](app/src/main/java/com/botlisa/app/MainActivity.kt#L403-L468));
-   just now revealed by the gear icon. Optionally move into its own `Dialog`
-   in the polish step (see §8).
+   just now revealed by the gear icon. The two **"Trigger phrase"** fields
+   here are the single source of truth for the voice commands: they drive
+   the quick‑reminders card (§3.6), the bold phrases in the instructions
+   copy (§7), and the actual match logic in `SpeechAssistant`. No behaviour
+   change to these fields — only their downstream display gets richer.
+   Optionally move the whole panel into its own `Dialog` in the polish step
+   (see §8).
 
 ### New state in `LisaScreen`
 
@@ -214,6 +268,8 @@ Still one scrolling `Column`, tighter spacing to match the mock.
 // voice transcript — no separate transcript state.
 var showInstructions by rememberSaveable { mutableStateOf(false) }
 var transcriptGloss by remember { mutableStateOf<String?>(null) } // italic line under the field; null until available
+var commandsDismissed by remember { mutableStateOf(false) }        // §3.6: hide chips after a command is used, until new input
+var cmdCaptions by remember { mutableStateOf<Pair<String?, String?>>(null to null) } // §3.6: targetLanguage→EN of the two trigger phrases
 var speakingIndex by remember { mutableStateOf<Int?>(null) }
 var isSpeaking by remember { mutableStateOf(false) }
 // uiPhase: derived from assistantState + isSpeaking + result?.mode
@@ -238,11 +294,28 @@ var isSpeaking by remember { mutableStateOf(false) }
     consumed as triggers before `handleAssistantUtterance` runs. Partial
     results are what make it feel "live"; the final‑only transcript already
     flows to `input` today.
-  - *No `enterTranslateMode()`* — the quick‑reminders card (§3.6) is
-    read‑only, so there is no tap path that needs to force the translate
-    state from the UI. The only trigger into `LISTENING_FOR_WORD` stays the
-    spoken phrase match at
-    [L121‑L124](app/src/main/java/com/botlisa/app/SpeechAssistant.kt#L121-L124).
+  - *No `enterTranslateMode()`* — the command chips (§3.6) are only
+    interactive in text mode, where "teal" just runs the normal `onSend()`
+    translate path; they never need to push `SpeechAssistant` into
+    `LISTENING_FOR_WORD` from the UI. The spoken phrase match at
+    [L121‑L124](app/src/main/java/com/botlisa/app/SpeechAssistant.kt#L121-L124)
+    stays the only way in.
+  - *No new callback for chip dismissal* — §3.6 hides the chips on
+    `assistantState == LISTENING_FOR_WORD` (teal phrase heard) and inside
+    the existing `onNextSuggestionRequested` handler (orange phrase heard).
+    Both signals already exist.
+- **[`OnDeviceTranslator.kt`](app/src/main/java/com/botlisa/app/OnDeviceTranslator.kt)**
+  - The command‑chip captions (§3.6) and the transcript gloss (§3.4) need
+    **`targetLanguage` → English**, but this object currently only does
+    English → `targetLanguage`. Add a reverse path — ML Kit `Translation`
+    supports arbitrary language pairs, so it is a `Translator` client with
+    `sourceLanguage = targetLanguage.mlKitCode, targetLanguage = ENGLISH`
+    (keyed/cached per source language; each pair has its own one‑time
+    ~30 MB model download, wifi on first use, offline after). Do **not**
+    hard‑code Russian as the source — when `targetLanguage` is Russian the
+    pair is RU→EN, when it is Spanish it is ES→EN, etc. Cache translated
+    strings per (source lang, input); the two trigger phrases change rarely
+    so this stays a couple of entries per language.
 - **[`TranslationSpeaker.kt`](app/src/main/java/com/botlisa/app/TranslationSpeaker.kt)**
   - Set an `UtteranceProgressListener` on `tts` and add
     `onStart` / `onDone` / `onError` callbacks (or a
@@ -260,10 +333,12 @@ var isSpeaking by remember { mutableStateOf(false) }
 - `ui/Theme.kt` — `BotLisaTheme`, color schemes, typography tweak (purple
   title).
 - `ui/AssistantButton.kt` — pulsing circular mic / speaker button.
-- `ui/QuickReminders.kt`, `ui/RecommendationList.kt` — optional extraction
-  to keep `MainActivity.kt` readable (it is ~550 lines now). No
+- `ui/CommandChips.kt`, `ui/RecommendationList.kt` — optional extraction to
+  keep `MainActivity.kt` readable (it is ~550 lines now). No
   `TranscriptPill.kt` — the shared search field (§3.4) covers it.
-  `QuickReminders.kt` is a pure display composable, no callbacks.
+  `CommandChips.kt` takes the two phrases, their `targetLanguage`→EN
+  captions, a `mode` (`BUTTON` / `REMINDER`), a `visible` flag, and two
+  `onClick`s (ignored in `REMINDER` mode).
 - `res/drawable-nodpi/lisa_fox.png`, `res/mipmap-anydpi-v26/ic_launcher*.xml`,
   `res/values/ic_launcher_background.xml`.
 - Edits: `res/values/themes.xml`, `res/values/strings.xml`,
@@ -285,8 +360,11 @@ Each step leaves the app buildable.
    `onTranscript` callback so partials + command phrases flow into `input`
    too (English gloss line deferred).
 5. **Collapsible instructions** — new copy, bold commands.
-6. **Quick reminders card** — static teal / orange speech‑bubble reminders,
-   shown while listening. No wiring.
+6. **Command chips** — `CommandChips.kt`: buttons in text mode
+   (teal → `onSend()` translate, orange → `speakNextSuggestion()`),
+   reminder card in hands‑free; `commandsDismissed` visibility lifecycle;
+   `targetLanguage`→EN captions via the new `OnDeviceTranslator` reverse
+   path (source language is `targetLanguage`, not hard‑coded Russian).
 7. **Result / recommendations rework** — speaker icons,
    `UtteranceProgressListener`, currently‑speaking highlight + pulse.
 8. **Polish** — spacing to match the mock, dark‑mode pass, optional
@@ -344,9 +422,11 @@ Text(instructions, style = MaterialTheme.typography.bodySmall)
   also `app_name` (home‑screen label)? *Default: rename both; package stays
   `com.botlisa.app`.*
 - **English gloss under the shared field** ("Time to brush your teeth. What
-  else?") — showing it live needs on‑the‑fly RU→EN translation of the
-  transcript (ML Kit can, model download on first use). *Default: ship the
-  field with raw transcript now, add the gloss caption line as a follow‑up.*
+  else?") — showing it live needs on‑the‑fly `targetLanguage`→English
+  translation of the transcript (ML Kit can, per‑pair model download on
+  first use; source is `targetLanguage`, not hard‑coded Russian). *Default:
+  ship the field with raw transcript now, add the gloss caption line as a
+  follow‑up.*
 - **One field for typed + spoken text** — *Decided: yes, one shared rounded
   field under the mic (§3.4).* Remaining sub‑question: should an incoming
   partial transcript overwrite text the caregiver is mid‑way through typing?
@@ -358,6 +438,19 @@ Text(instructions, style = MaterialTheme.typography.bodySmall)
   mic (the big button is the mic now).*
 - **Settings** — inline expanding section (current) vs. a dedicated dialog /
   screen. *Default: inline for now, dialog in the polish step.*
+- **Command chips (§3.6)** — *Decided:* buttons in text mode / reminders in
+  hands‑free; visible on the text‑mode home screen and the hands‑free empty
+  state; dismissed on use, restored on new input; **both** label lines
+  (bold phrase + italic caption) track the Settings trigger phrases **for
+  `targetLanguage`**, the caption via on‑device `targetLanguage`→English
+  (never hard‑coded Russian). Open sub‑questions:
+  - *Model download* — the caption needs ML Kit's `targetLanguage`→English
+    model (~30 MB per language, wifi once). *Default: show the generic
+    "how to say" / "what else" fallback until it downloads; never block the
+    UI on it.*
+  - *"New input" that restores the chips* — *Default: any new non‑blank
+    `input` from typing, or any new default‑mode utterance. A bare partial
+    transcript does not count until it finalises.*
 - **Dark theme** — the wireframe is light‑only. *Default: define both
   schemes but tune only light.*
 - **Beep** — add a real audible cue vs. reword the instructions. *Default:
