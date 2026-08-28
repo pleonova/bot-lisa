@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Off-white from the wireframe legend; used for the window background
+         and the adaptive launcher-icon background. -->
+    <color name="app_background">#F7F7FA</color>
+    <color name="ic_launcher_background">#F7F7FA</color>
+</resources>

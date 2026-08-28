@@ -68,7 +68,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
+            BotLisaTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     LisaScreen()
                 }
@@ -351,7 +351,11 @@ fun LisaScreen() {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Bot Lisa", style = MaterialTheme.typography.headlineSmall)
+            Text(
+                "Assistant Lisa",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
             TextButton(onClick = { showServerSettings = !showServerSettings }) {
                 Text(if (showServerSettings) "Hide settings" else "Settings")
             }
