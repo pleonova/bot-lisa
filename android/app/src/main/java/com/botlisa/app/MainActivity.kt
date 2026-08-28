@@ -415,32 +415,20 @@ fun LisaScreen() {
             )
         }
 
+        AssistantButton(
+            phase = uiPhase,
+            onClick = { onToggleAssistant() },
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .padding(vertical = 8.dp),
+        )
+
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column {
-                        Text("Lisa Assistant", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            when (assistantState) {
-                                SpeechAssistant.State.IDLE -> "Off"
-                                SpeechAssistant.State.LISTENING_DEFAULT -> "Listening (Russian)…"
-                                SpeechAssistant.State.LISTENING_FOR_WORD -> "Heard the trigger -- say the English word…"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Button(onClick = { onToggleAssistant() }) {
-                        Text(if (assistantState == SpeechAssistant.State.IDLE) "Start" else "Stop")
-                    }
-                }
+                Text("Lisa Assistant", style = MaterialTheme.typography.titleMedium)
                 Text(
                     "Hands-free mode: speak Russian normally. Say \"$translateTriggerPhrase\", pause, " +
                         "then an English word to translate it. Say \"$nextSuggestionTriggerPhrase\" to hear " +
