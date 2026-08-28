@@ -16,10 +16,6 @@ top of the same plumbing.*
 |---|---|
 | ![Wireframe of the redesigned Assistant Lisa flow](design/wireframe.png) | ![Assistant Lisa fox logo](design/fox-logo.png) |
 
-> **Add the two source images to this folder** (they are attachments, not yet
-> committed): save them as `android/design/wireframe.png` and
-> `android/design/fox-logo.png` so the links above resolve. The fox also
-> becomes an in‑app asset and the launcher icon — see §2.
 
 ## Palette (from the wireframe legend)
 
@@ -67,6 +63,12 @@ top of the same plumbing.*
    English, now listen to the translation". **Purple** speaker icon (active).
    Pill shows the Russian word ("зубки") with the English caption ("teeth").
 
+> **Deliberate deviation from the wireframe:** the wireframe draws the
+> "transcript snippet" pill and the type‑to‑search box as two separate
+> elements. We collapse them into **one** rounded field under the mic that is
+> both the text input and the live‑transcript display (it already behaves
+> this way in code — voice results are written into `input`). See §3.4.
+
 ---
 
 ## 1. Gap analysis — wireframe vs. current UI
@@ -76,7 +78,7 @@ top of the same plumbing.*
 | "Assistant Lisa" title, purple, fox logo left, gear right | "Bot Lisa" text + "Settings" `TextButton` | New header row; rename visible title; add logo; gear icon toggles settings |
 | Dynamic subtitle (`Tap for hands-free mode` / `Listening (for Russian)…` / `…now say the English word(s)…` / `…now listen to the translation` / `…listen to the recommendation`) | Small state line inside the "Lisa Assistant" card (`Off` / `Listening (Russian)…` / …) | Promote to a centered subtitle driven by a richer UI‑phase state |
 | Large central mic button — grey → purple → teal, pulsing while listening | Mic is a tiny trailing icon on the input; on/off is a `Start`/`Stop` text button | New `AssistantButton` composable: big circle, color per phase, infinite‑transition pulse |
-| Transcript pill ("Пора чистить зубки. Что ещё?") + italic English gloss | No live transcript shown at all | New pill; needs an `onTranscript` callback added to `SpeechAssistant` |
+| Transcript "pill" under the mic ("Пора чистить зубки. Что ещё?") + italic English gloss | Each recognised utterance is already written into the visible input field (`input = text` in `handleAssistantUtterance` / the one‑shot mic) and echoed in the result card as `"${r.input}"`. Missing: it is not positioned under the mic, no partial/streaming updates (partial results disabled), no English gloss, and the command phrases (`как сказать` / `что ещё?`) never land there (consumed as triggers first) | **Keep it one shared field** — the same rounded search box is both the type‑to‑search input and the voice‑transcript display. Move that field directly under the mic, add an `onTranscript` callback so it also shows partials + command phrases, and render the gloss as a caption line beneath it. No separate pill component. |
 | Collapsible "Hands-free mode instructions" with chevron | Instructions always visible as body text in the card | Collapsible section (`AnimatedVisibility`); **new copy** (see §7) with command phrases **bold** |
 | Teal "Как сказать? / How to say?" + orange "Что ещё? / What else?" buttons, shown while listening | No tap equivalents for the spoken triggers | Two pill buttons; teal → enter translate mode, orange → `speakNextSuggestion()` |
 | Result: purple speaker icon + big Russian word + English caption | Text‑only "Translation:" block with source/latency line | Restyle; add speaker icon that pulses while TTS speaks |
@@ -136,9 +138,30 @@ Still one scrolling `Column`, tighter spacing to match the mock.
    `onToggleAssistant()`
    ([L326‑L340](app/src/main/java/com/botlisa/app/MainActivity.kt#L326-L340))
    is reused as‑is.
-4. **Transcript pill** — `Surface(shape = pill)` showing `lastTranscript`
-   (new state), with an optional second italic line for the English gloss.
-   Hidden when empty.
+4. **Shared input / transcript field** — one rounded search field, directly
+   under the mic button, that serves **both** roles:
+   - *Type‑to‑search:* `leadingIcon = Icons.Filled.Search`, placeholder
+     "Enter English or Russian Text",
+     `KeyboardOptions(imeAction = ImeAction.Search)`,
+     `keyboardActions = KeyboardActions(onSearch = { onSend() })`. Drops the
+     old mic trailing icon and the separate "Look up" `Button` at
+     [L470‑L491](app/src/main/java/com/botlisa/app/MainActivity.kt#L470-L491).
+   - *Voice transcript:* the recognised text is written into the **same**
+     `input` state — this already happens in `handleAssistantUtterance`
+     ([L285‑L288](app/src/main/java/com/botlisa/app/MainActivity.kt#L285-L288));
+     the new `onTranscript` callback (§4) additionally routes partial
+     results and the command phrases (`как сказать` / `что ещё?`) into it so
+     it updates live while listening. After `onSend()` the text stays in the
+     field (as today) until the next utterance or a manual edit.
+   - *English gloss:* optional italic caption line **beneath** the field
+     (not inside it), shown only when a gloss is available. Deferred — see
+     §8.
+   - Style it as a pill (`shape = CircleShape`/large corner) so it reads as
+     the wireframe's "transcript snippet" while listening and as a search box
+     when idle. Keep `LinearProgressIndicator` under it for the loading
+     state.
+   No separate pill composable and no `lastTranscript` state — `input` is the
+   single source of truth for both typed and spoken text.
 5. **Collapsible instructions** — clickable Row (chevron + "Hands‑free mode
    instructions") + `AnimatedVisibility` panel containing the **new copy**
    in §7, with the command phrases rendered **bold**. Replaces the always‑on
@@ -153,15 +176,7 @@ Still one scrolling `Column`, tighter spacing to match the mock.
      [`SpeechAssistant.kt` L121‑L124](app/src/main/java/com/botlisa/app/SpeechAssistant.kt#L121-L124)).
    - Orange **"Что ещё?"** / caption *What else?* → `speakNextSuggestion()`
      ([L264‑L273](app/src/main/java/com/botlisa/app/MainActivity.kt#L264-L273)).
-7. **Search input** — `OutlinedTextField` (or `BasicTextField` in a pill
-   `Surface`) with `leadingIcon = Icons.Filled.Search`, placeholder
-   "Enter English or Russian Text",
-   `KeyboardOptions(imeAction = ImeAction.Search)`,
-   `keyboardActions = KeyboardActions(onSearch = { onSend() })`. Drops the
-   mic trailing icon and the separate "Look up" `Button` at
-   [L470‑L491](app/src/main/java/com/botlisa/app/MainActivity.kt#L470-L491).
-   Keep `LinearProgressIndicator` for the loading state.
-8. **Result card** — rework
+7. **Result card** — rework
    [L501‑L546](app/src/main/java/com/botlisa/app/MainActivity.kt#L501-L546):
    - translate mode: speaker `IconButton` (pulses while TTS active) +
      `Text(translation.ru, headlineSmall)` +
@@ -172,7 +187,7 @@ Still one scrolling `Column`, tighter spacing to match the mock.
      whose index `== speakingIndex` gets an orange container + pulse.
      Speaker tap calls a new `speakRelated(i)` that sets `speakingIndex = i`
      and speaks; `speakNextSuggestion()` also updates `speakingIndex`.
-9. **Settings panel** — unchanged content (target language, two trigger
+8. **Settings panel** — unchanged content (target language, two trigger
    fields, server URL, API key at
    [L403‑L468](app/src/main/java/com/botlisa/app/MainActivity.kt#L403-L468));
    just now revealed by the gear icon. Optionally move into its own `Dialog`
@@ -181,8 +196,10 @@ Still one scrolling `Column`, tighter spacing to match the mock.
 ### New state in `LisaScreen`
 
 ```kotlin
-var lastTranscript by rememberSaveable { mutableStateOf("") }
+// `input` (existing) is the single source of truth for BOTH typed text and
+// voice transcript — no separate transcript state.
 var showInstructions by rememberSaveable { mutableStateOf(false) }
+var transcriptGloss by remember { mutableStateOf<String?>(null) } // italic line under the field; null until available
 var speakingIndex by remember { mutableStateOf<Int?>(null) }
 var isSpeaking by remember { mutableStateOf(false) }
 // uiPhase: derived from assistantState + isSpeaking + result?.mode
@@ -201,8 +218,12 @@ var isSpeaking by remember { mutableStateOf(false) }
     `onResults`
     ([L145‑L151](app/src/main/java/com/botlisa/app/SpeechAssistant.kt#L145-L151))
     — and optionally from `onPartialResults` after enabling
-    `EXTRA_PARTIAL_RESULTS` — so the transcript pill updates live, including
-    for the command phrases.
+    `EXTRA_PARTIAL_RESULTS`. The callback writes into the shared `input`
+    field (§3.4), which is what makes the command phrases (`как сказать` /
+    `что ещё?`) visible — today they never reach `input` because they are
+    consumed as triggers before `handleAssistantUtterance` runs. Partial
+    results are what make it feel "live"; the final‑only transcript already
+    flows to `input` today.
   - Add `fun enterTranslateMode()` that runs the same transition as the
     translate‑trigger branch (`state = LISTENING_FOR_WORD`,
     `listenOnce(translateLanguageCode)`), for the teal button.
@@ -223,9 +244,9 @@ var isSpeaking by remember { mutableStateOf(false) }
 - `ui/Theme.kt` — `BotLisaTheme`, color schemes, typography tweak (purple
   title).
 - `ui/AssistantButton.kt` — pulsing circular mic / speaker button.
-- `ui/TranscriptPill.kt`, `ui/VoiceCommandButtons.kt`,
-  `ui/RecommendationList.kt` — optional extraction to keep `MainActivity.kt`
-  readable (it is ~550 lines now).
+- `ui/VoiceCommandButtons.kt`, `ui/RecommendationList.kt` — optional
+  extraction to keep `MainActivity.kt` readable (it is ~550 lines now). No
+  `TranscriptPill.kt` — the shared search field (§3.4) covers it.
 - `res/drawable-nodpi/lisa_fox.png`, `res/mipmap-anydpi-v26/ic_launcher*.xml`,
   `res/values/ic_launcher_background.xml`.
 - Edits: `res/values/themes.xml`, `res/values/strings.xml`,
@@ -242,16 +263,16 @@ Each step leaves the app buildable.
 2. **Header + gear + dynamic subtitle** — new top row, `uiPhase` enum,
    settings behind the gear.
 3. **AssistantButton** — big pulsing button, retire `Start`/`Stop`.
-4. **Transcript pill** — `onTranscript` callback + state + pill (English
-   gloss line deferred).
+4. **Shared input / transcript field** — restyle as the rounded search box
+   under the mic, IME submit, drop "Look up" + old mic icon; add the
+   `onTranscript` callback so partials + command phrases flow into `input`
+   too (English gloss line deferred).
 5. **Collapsible instructions** — new copy, bold commands.
 6. **Voice command buttons** — teal / orange, `enterTranslateMode()` +
    `speakNextSuggestion()`.
-7. **Search‑style input** — restyle, IME submit, drop "Look up" + old mic
-   icon.
-8. **Result / recommendations rework** — speaker icons,
+7. **Result / recommendations rework** — speaker icons,
    `UtteranceProgressListener`, currently‑speaking highlight + pulse.
-9. **Polish** — spacing to match the mock, dark‑mode pass, optional
+8. **Polish** — spacing to match the mock, dark‑mode pass, optional
    settings‑as‑dialog.
 
 Steps 1–7 are largely independent; 8 is the biggest single chunk.
@@ -304,14 +325,19 @@ Text(instructions, style = MaterialTheme.typography.bodySmall)
 - **App label** — rename the on‑screen title to "Assistant Lisa" only, or
   also `app_name` (home‑screen label)? *Default: rename both; package stays
   `com.botlisa.app`.*
-- **English gloss under the transcript pill** ("Time to brush your teeth.
-  What else?") — showing it live needs on‑the‑fly RU→EN translation of the
+- **English gloss under the shared field** ("Time to brush your teeth. What
+  else?") — showing it live needs on‑the‑fly RU→EN translation of the
   transcript (ML Kit can, model download on first use). *Default: ship the
-  pill with raw transcript now, add the gloss line as a follow‑up.*
-- **Typed input + one‑shot dictation** — the wireframe drops the "Look up"
-  button and the input's mic icon. *Default: keep typing as a fallback that
-  submits on the keyboard's Search action; remove the standalone one‑shot
-  `speechLauncher` mic (the big button is the mic now).*
+  field with raw transcript now, add the gloss caption line as a follow‑up.*
+- **One field for typed + spoken text** — *Decided: yes, one shared rounded
+  field under the mic (§3.4).* Remaining sub‑question: should an incoming
+  partial transcript overwrite text the caregiver is mid‑way through typing?
+  *Default: only overwrite while `assistantState != IDLE`; ignore
+  `onTranscript` when the field has focus for typing.*
+- **One‑shot dictation** — the wireframe drops the "Look up" button and the
+  input's mic icon. *Default: keep typing as a fallback that submits on the
+  keyboard's Search action; remove the standalone one‑shot `speechLauncher`
+  mic (the big button is the mic now).*
 - **Settings** — inline expanding section (current) vs. a dedicated dialog /
   screen. *Default: inline for now, dialog in the polish step.*
 - **Dark theme** — the wireframe is light‑only. *Default: define both
