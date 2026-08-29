@@ -61,6 +61,13 @@ class SpeechAssistant(
     private val getNextSuggestionTriggerPhrase: () -> String,
     private val onUtterance: (text: String, state: State) -> Unit,
     private val onNextSuggestionRequested: () -> Unit,
+    /**
+     * Every transcript this recogniser produces -- partials while the
+     * caregiver is still speaking, and finals -- including the command
+     * phrases that [onUtterance] never sees. Purely for showing what's being
+     * heard in the UI; does not affect the state machine.
+     */
+    private val onTranscript: (String) -> Unit = {},
     private val onStateChanged: (State) -> Unit,
     private val onError: (String) -> Unit,
 ) {
@@ -101,7 +108,9 @@ class SpeechAssistant(
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageCode)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+            // Partials feed onTranscript (live "what's being heard" UI). The
+            // state machine still only acts on the final result.
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         }
         runCatching { recognizer?.startListening(intent) }
             .onFailure { onError("Couldn't start listening: ${it.message}") }
@@ -147,7 +156,16 @@ class SpeechAssistant(
                 .getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 ?.firstOrNull()
                 .orEmpty()
+            if (transcript.isNotBlank()) onTranscript(transcript)
             handleTranscript(transcript)
+        }
+
+        override fun onPartialResults(partialResults: Bundle?) {
+            val partial = partialResults
+                ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                ?.firstOrNull()
+                .orEmpty()
+            if (partial.isNotBlank()) onTranscript(partial)
         }
 
         override fun onError(error: Int) {
@@ -170,7 +188,6 @@ class SpeechAssistant(
         override fun onRmsChanged(rmsdB: Float) = Unit
         override fun onBufferReceived(buffer: ByteArray?) = Unit
         override fun onEndOfSpeech() = Unit
-        override fun onPartialResults(partialResults: Bundle?) = Unit
         override fun onEvent(eventType: Int, params: Bundle?) = Unit
     }
 }

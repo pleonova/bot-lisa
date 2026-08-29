@@ -1,11 +1,8 @@
 package com.botlisa.app
 
 import android.Manifest
-import android.app.Activity
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -13,11 +10,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -193,47 +191,6 @@ fun LisaScreen() {
         ServerConfig.setApiKey(context, newKey)
     }
 
-    // Launches the system speech-to-text UI and fills the input field with
-    // whatever it heard. Locale is intentionally left as Russian regardless
-    // of the target-language setting above: dictation here mainly serves
-    // related-phrase/expand mode, which stays Russian-only (see
-    // LanguageConfig.kt). This one-shot picker is independent of Lisa
-    // Assistant's continuous listening below -- both end up calling the
-    // same onSend() pipeline, just triggered differently.
-    val speechLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { activityResult ->
-        if (activityResult.resultCode == Activity.RESULT_OK) {
-            val spoken = activityResult.data
-                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                ?.firstOrNull()
-            if (!spoken.isNullOrBlank()) {
-                input = spoken
-            }
-        }
-    }
-
-    fun launchSpeechRecognizer() {
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, SupportedLanguages.RUSSIAN.code)
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Say a Russian phrase, or type English to translate…")
-        }
-        runCatching { speechLauncher.launch(intent) }
-            .onFailure { errorText = "No speech recognizer available on this device." }
-    }
-
-    val micPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted -> if (granted) launchSpeechRecognizer() }
-
-    fun onMicClick() {
-        val granted = ContextCompat.checkSelfPermission(
-            context, Manifest.permission.RECORD_AUDIO
-        ) == PackageManager.PERMISSION_GRANTED
-        if (granted) launchSpeechRecognizer() else micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-    }
-
     fun onSend() {
         if (input.isBlank()) return
         errorText = null
@@ -323,6 +280,14 @@ fun LisaScreen() {
     // inputs (speaking state, result mode) can fold in without changing callers.
     val uiPhase by remember { derivedStateOf { uiPhaseOf(assistantState) } }
 
+    // Live transcript from Lisa Assistant -> the shared input/search field.
+    // Only while hands-free is running, so it never clobbers something the
+    // caregiver is typing. Covers partials and the command phrases too
+    // (those never reach onUtterance).
+    val handleTranscript = rememberUpdatedState<(String) -> Unit> { text ->
+        if (assistantState != SpeechAssistant.State.IDLE && text.isNotBlank()) input = text
+    }
+
     val assistant = remember {
         SpeechAssistant(
             context = context,
@@ -336,6 +301,7 @@ fun LisaScreen() {
             },
             onUtterance = { text, _ -> handleAssistantUtterance.value(text) },
             onNextSuggestionRequested = { handleNextSuggestionRequest.value() },
+            onTranscript = { handleTranscript.value(it) },
             onStateChanged = { assistantState = it },
             onError = { assistantError = it },
         )
@@ -508,28 +474,21 @@ fun LisaScreen() {
             )
         }
 
+        // Shared field: the caregiver types here, AND Lisa Assistant's live
+        // transcript lands here while hands-free is running (see
+        // handleTranscript). Submits on the keyboard's Search action -- no
+        // separate "Look up" button.
         OutlinedTextField(
             value = input,
             onValueChange = { input = it },
-            label = { Text("English word/phrase, or Russian phrase") },
+            placeholder = { Text("Enter English or Russian Text") },
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            singleLine = true,
+            shape = RoundedCornerShape(28.dp),
             modifier = Modifier.fillMaxWidth(),
-            trailingIcon = {
-                IconButton(onClick = { onMicClick() }) {
-                    Icon(Icons.Filled.Mic, contentDescription = "Dictate")
-                }
-            },
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { onSend() }),
         )
-
-        Button(
-            onClick = { onSend() },
-            enabled = input.isNotBlank() && !isLoading,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Icon(Icons.Filled.Send, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text(if (isLoading) "Looking up…" else "Look up")
-        }
 
         if (isLoading) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
