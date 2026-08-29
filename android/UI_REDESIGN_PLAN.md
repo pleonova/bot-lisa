@@ -225,10 +225,12 @@ Still one scrolling `Column`, tighter spacing to match the mock.
      punctuation included — see §7 / defaults now carry "?").
 6. **Command chips** — two reminder items, identical in every mode: a bare
    accent icon (no disc, no ring) + the coloured phrase in bold + the italic
-   English caption below. **Tapping one speaks its phrase aloud** in the
-   target‑language voice (`onSpeakTranslate` / `onSpeakNext` →
-   `speakTriggerPhrase`, which drops a trailing "?"). They don't trigger a
-   lookup — a mnemonic you can also hear.
+   English caption below. **Press‑and‑hold** one (`combinedClickable`,
+   `onLongClick`) to hear its phrase spoken in the target‑language voice
+   (`onSpeakTranslate` / `onSpeakNext` → `speakTriggerPhrase`, which drops a
+   trailing "?"); a plain tap does nothing — these are reminders, not lookup
+   buttons. (The instruction‑panel steps, §3.5, keep plain‑tap to speak —
+   you deliberately opened that panel.)
    - Icons: teal speech‑bubble (`Icons.AutoMirrored.Filled.Chat`) for
      "Как сказать?", orange lightbulb (`Icons.Filled.Lightbulb`) for
      "Что ещё?".
@@ -474,12 +476,12 @@ bold. Defaults now carry the "?" (`TriggerPhraseConfig`).
 >
 > ⚙ To edit voice commands, go to _settings_.
 
-> **"Wait for the beep"** — the copy promises an audible cue when the app
-> switches to listening for the English word. There is no beep today; add a
-> short `ToneGenerator` blip (or a `TextToSpeech` earcon) in the
-> translate‑trigger branch of `SpeechAssistant`
-> ([L121‑L124](app/src/main/java/com/botlisa/app/SpeechAssistant.kt#L121-L124)),
-> just before it re‑arms into `LISTENING_FOR_WORD`, or soften the wording.
+> **"Wait for the beep" — done.** When the translate trigger is recognised,
+> `SpeechAssistant.beepThenListenForWord()` plays a short
+> `ToneGenerator.TONE_PROP_BEEP` (150 ms, `STREAM_MUSIC` so it follows the
+> earbud), then opens the English mic ~250 ms later (via `mainHandler`) so
+> the beep isn't transcribed. The `ToneGenerator` is lazy‑created and
+> released in `stop()`.
 
 ---
 
@@ -527,8 +529,8 @@ bold. Defaults now carry the "?" (`TriggerPhraseConfig`).
   follow system), read above `BotLisaTheme` in `setContent`; `LisaScreen`
   takes `isDark` / `onToggleDark` and shows a `Switch` in the settings
   panel.
-- **Beep** — add a real audible cue vs. reword the instructions. *Default:
-  add a short tone in step 6.*
+- **Beep** — *Done:* a real `ToneGenerator` beep fires when the translate
+  trigger is heard (`SpeechAssistant.beepThenListenForWord`).
 
 ---
 

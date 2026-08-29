@@ -1,7 +1,8 @@
 package com.botlisa.app
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -64,7 +65,7 @@ fun CommandChips(
                 icon = Icons.AutoMirrored.Filled.Chat,
                 phrase = translatePhrase,
                 caption = translateCaption,
-                onClick = onSpeakTranslate,
+                onSpeak = onSpeakTranslate,
                 modifier = if (showNextCommand) Modifier.weight(1f) else Modifier,
             )
             if (showNextCommand) {
@@ -73,7 +74,7 @@ fun CommandChips(
                     icon = Icons.Filled.Lightbulb,
                     phrase = nextPhrase,
                     caption = nextCaption,
-                    onClick = onSpeakNext,
+                    onSpeak = onSpeakNext,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -81,19 +82,26 @@ fun CommandChips(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CommandItem(
     color: Color,
     icon: ImageVector,
     phrase: String,
     caption: String,
-    onClick: () -> Unit,
+    onSpeak: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
+        // Press-and-hold to hear the phrase; a plain tap does nothing (these
+        // are reminders, not lookup buttons).
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = {},
+                onLongClick = onSpeak,
+                onLongClickLabel = "Hear it spoken",
+            )
             .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),

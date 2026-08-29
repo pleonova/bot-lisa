@@ -2,7 +2,11 @@ package com.botlisa.app
 
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -87,6 +91,25 @@ class SpeechAssistant(
 
     private var recognizer: SpeechRecognizer? = null
     private var stoppedByUser = true
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var tone: ToneGenerator? = null
+
+    /**
+     * Short beep telling the caregiver "switched to English -- say the word
+     * now", played when the translate trigger is recognised. The mic for the
+     * English word opens a beat later so the beep isn't transcribed.
+     */
+    private fun beepThenListenForWord() {
+        runCatching {
+            val t = tone ?: ToneGenerator(AudioManager.STREAM_MUSIC, 80).also { tone = it }
+            t.startTone(ToneGenerator.TONE_PROP_BEEP, 150)
+        }
+        mainHandler.postDelayed({
+            if (!stoppedByUser && state == State.LISTENING_FOR_WORD) {
+                listenOnce(translateLanguageCode)
+            }
+        }, 250)
+    }
 
     var state: State = State.IDLE
         private set(value) {
@@ -110,9 +133,12 @@ class SpeechAssistant(
 
     fun stop() {
         stoppedByUser = true
+        mainHandler.removeCallbacksAndMessages(null)
         recognizer?.stopListening()
         recognizer?.destroy()
         recognizer = null
+        tone?.release()
+        tone = null
         state = State.IDLE
     }
 
@@ -141,7 +167,7 @@ class SpeechAssistant(
                 when {
                     transcript.isNotBlank() && TriggerPhraseDetector.matches(transcript, getTranslateTriggerPhrase()) -> {
                         state = State.LISTENING_FOR_WORD
-                        listenOnce(translateLanguageCode)
+                        beepThenListenForWord()
                     }
                     transcript.isNotBlank() && TriggerPhraseDetector.matches(transcript, getNextSuggestionTriggerPhrase()) -> {
                         onNextSuggestionRequested()
