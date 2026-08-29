@@ -51,6 +51,7 @@ object TriggerPhraseConfig {
     val DEFAULT_TRANSLATE_TRIGGER_PHRASES = mapOf(
         SupportedLanguages.RUSSIAN.code to "как сказать?",
         SupportedLanguages.HINDI.code to "कैसे कहें?",
+        SupportedLanguages.MARATHI.code to "कसं म्हणायचं?",
         SupportedLanguages.SPANISH.code to "¿cómo se dice?",
         SupportedLanguages.FRENCH.code to "comment dit-on ?",
         SupportedLanguages.GERMAN.code to "wie sagt man?",
@@ -58,6 +59,7 @@ object TriggerPhraseConfig {
     val DEFAULT_NEXT_SUGGESTION_TRIGGER_PHRASES = mapOf(
         SupportedLanguages.RUSSIAN.code to "что ещё?",
         SupportedLanguages.HINDI.code to "और क्या?",
+        SupportedLanguages.MARATHI.code to "आणखी काय?",
         SupportedLanguages.SPANISH.code to "¿qué más?",
         SupportedLanguages.FRENCH.code to "quoi d'autre ?",
         SupportedLanguages.GERMAN.code to "was noch?",

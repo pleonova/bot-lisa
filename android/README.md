@@ -87,7 +87,8 @@ remembers an old address from a previous install, just retype it.*
   that's just how Android routes audio. Voice follows the target-language
   setting (see below).
 - `LanguageConfig.kt` — the list of selectable target languages (Russian,
-  Hindi, Spanish, French, German today — add an entry to extend it) and the
+  Hindi, Marathi, Spanish, French, German today — add an entry to extend it)
+  and the
   SharedPreferences-backed setting for which one is active. Drives
   `OnDeviceTranslator.kt` and `TranslationSpeaker.kt`. Does **not** drive
   related-phrase/expand mode, which stays tied to the Russian curated

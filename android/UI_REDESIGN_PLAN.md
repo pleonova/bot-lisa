@@ -277,9 +277,9 @@ Still one scrolling `Column`, tighter spacing to match the mock.
    > **Auto trigger defaults per language.**
    > `TriggerPhraseConfig.DEFAULT_*_TRIGGER_PHRASES` carries a hand‑authored
    > translation of "how to say?" / "what else?" for every entry in
-   > `SupportedLanguages.ALL` (es `¿cómo se dice?` / `¿qué más?`, fr, de,
-   > hi, ru). `getPhrase` falls back to the **English phrase itself** for any
-   > code with no entry, so a new language always has a working default.
+   > `SupportedLanguages.ALL` — ru, hi, mr (Marathi), es, fr, de.
+   > `getPhrase` falls back to the **English phrase itself** for any code
+   > with no entry, so a new language always has a working default.
    >
    > **Next‑suggestion ("Что ещё?") is Russian‑only** — the curated library
    > and `_has_cyrillic` expand detection are Russian. So for any non‑Russian

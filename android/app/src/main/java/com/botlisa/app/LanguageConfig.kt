@@ -36,6 +36,7 @@ data class TargetLanguage(
 object SupportedLanguages {
     val RUSSIAN = TargetLanguage("ru-RU", "Russian", TranslateLanguage.RUSSIAN, Locale("ru", "RU"))
     val HINDI = TargetLanguage("hi-IN", "Hindi", TranslateLanguage.HINDI, Locale("hi", "IN"))
+    val MARATHI = TargetLanguage("mr-IN", "Marathi", TranslateLanguage.MARATHI, Locale("mr", "IN"))
     val SPANISH = TargetLanguage("es-ES", "Spanish", TranslateLanguage.SPANISH, Locale("es", "ES"))
     val FRENCH = TargetLanguage("fr-FR", "French", TranslateLanguage.FRENCH, Locale("fr", "FR"))
     val GERMAN = TargetLanguage("de-DE", "German", TranslateLanguage.GERMAN, Locale("de", "DE"))
@@ -43,7 +44,7 @@ object SupportedLanguages {
     // Add a language here to make it selectable in Settings -- everything
     // downstream (on-device translation, the spoken voice) reads from this
     // list; nothing else needs to change for translation to support it.
-    val ALL = listOf(RUSSIAN, HINDI, SPANISH, FRENCH, GERMAN)
+    val ALL = listOf(RUSSIAN, HINDI, MARATHI, SPANISH, FRENCH, GERMAN)
 
     fun byCode(code: String): TargetLanguage = ALL.firstOrNull { it.code == code } ?: RUSSIAN
 }
