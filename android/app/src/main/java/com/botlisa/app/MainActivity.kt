@@ -8,8 +8,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -22,6 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -132,18 +135,15 @@ fun LisaScreen() {
     var suggestionIndex by rememberSaveable { mutableStateOf(0) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var serverUrl by remember { mutableStateOf(ServerConfig.getBaseUrl(context)) }
     var apiKey by remember { mutableStateOf(ServerConfig.getApiKey(context)) }
     var showServerSettings by rememberSaveable { mutableStateOf(false) }
     var showInstructions by rememberSaveable { mutableStateOf(false) }
 
-    // Command chips (§3.6): hidden once a command is used (tapped in text
-    // mode, or heard as a spoken trigger), shown again on the next new input
-    // -- the caregiver typing, or a fresh utterance being sent.
+    // Command-chip reminders (§3.6): hidden in hands-free once a command is
+    // used (spoken trigger), back on the next new input.
     var commandsDismissed by remember { mutableStateOf(false) }
-    // Cyrillic anywhere in the field -> treat as target-language text (the
-    // same heuristic the backend uses to pick expand vs. translate).
-    val inputHasCyrillic = input.any { it in 'Ѐ'..'ӿ' }
 
     // Target language for translation + spoken output -- NOT the
     // related-phrases/expand mode, which stays Russian-only regardless. See
@@ -208,6 +208,9 @@ fun LisaScreen() {
     fun onSend() {
         if (input.isBlank()) return
         errorText = null
+        // Drop the previous card straight away so a new lookup (typed or
+        // spoken) doesn't sit under a stale result until the response lands.
+        result = null
         isLoading = true
         scope.launch {
             try {
@@ -298,10 +301,13 @@ fun LisaScreen() {
     // inputs (speaking state, result mode) can fold in without changing callers.
     val uiPhase by remember { derivedStateOf { uiPhaseOf(assistantState) } }
 
-    // Spoken translate trigger ("как сказать") -> the assistant switches to
-    // LISTENING_FOR_WORD; that transition is our signal to hide the chips.
+    // The chips are hidden only while mid translate-command
+    // (LISTENING_FOR_WORD, reached by the spoken "как сказать"). Every other
+    // state -- IDLE, or LISTENING_DEFAULT -- clears the flag, so starting or
+    // restarting hands-free always brings the reminders back even if a stale
+    // word is sitting in the field from a previous session.
     LaunchedEffect(assistantState) {
-        if (assistantState == SpeechAssistant.State.LISTENING_FOR_WORD) commandsDismissed = true
+        commandsDismissed = assistantState == SpeechAssistant.State.LISTENING_FOR_WORD
     }
 
     // Live transcript from Lisa Assistant -> the shared input/search field.
@@ -363,6 +369,25 @@ fun LisaScreen() {
         }
     }
 
+    // Tapping the fox logo returns the screen to its opening state -- stops
+    // hands-free, clears the field/result/errors and any expanded panels.
+    // Persistent settings (server, language, trigger phrases) are left alone.
+    fun resetToStart() {
+        assistant.stop()
+        // Drop focus so the field isn't left selected -- a focused field
+        // hides the "start typing" helper under the buttons.
+        focusManager.clearFocus()
+        input = ""
+        result = null
+        errorText = null
+        assistantError = null
+        suggestionIndex = 0
+        commandsDismissed = false
+        showInstructions = false
+        showServerSettings = false
+        languageMenuExpanded = false
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -382,8 +407,11 @@ fun LisaScreen() {
             ) {
                 Image(
                     painter = painterResource(R.drawable.lisa_fox),
-                    contentDescription = null,
-                    modifier = Modifier.size(48.dp),
+                    contentDescription = "Start over",
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .clickable { resetToStart() },
                 )
                 IconButton(onClick = { showServerSettings = !showServerSettings }) {
                     Icon(
@@ -524,36 +552,17 @@ fun LisaScreen() {
         )
 
         CommandChips(
-            mode = if (assistantState == SpeechAssistant.State.IDLE) {
-                CommandChipsMode.BUTTONS
-            } else {
-                CommandChipsMode.REMINDERS
-            },
-            visible = !commandsDismissed,
-            // Enable the button whose script matches what's typed -- Latin ->
-            // translate, Cyrillic -> suggestions (same split the backend uses
-            // to pick a mode). Empty field -> neither, plus a hint.
-            translateEnabled = input.isNotBlank() && !inputHasCyrillic,
-            nextEnabled = input.isNotBlank() && inputHasCyrillic,
-            hint = if (input.isBlank()) "Start typing to use these buttons" else null,
+            // Hands-free: shown until a command is used (commandsDismissed).
+            // Text mode (IDLE): shown only while the field is empty -- once
+            // you type, the keyboard's Search key does the same job.
+            visible = !commandsDismissed &&
+                (assistantState != SpeechAssistant.State.IDLE || input.isBlank()),
             translatePhrase = translateTriggerPhrase,
             // TODO(step 6b): translate these captions targetLanguage -> English
             // via OnDeviceTranslator; static fallbacks for now.
             translateCaption = "how to say",
             nextPhrase = nextSuggestionTriggerPhrase,
             nextCaption = "what else",
-            // Both text-mode buttons run a lookup on the field text -- the
-            // backend picks translate vs. related-phrases from the script
-            // itself. (The spoken "что ещё?" trigger still just speaks the
-            // next already-fetched suggestion via speakNextSuggestion().)
-            onTranslate = {
-                onSend()
-                commandsDismissed = true
-            },
-            onNext = {
-                onSend()
-                commandsDismissed = true
-            },
         )
 
         errorText?.let {
@@ -566,6 +575,13 @@ fun LisaScreen() {
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    // The related-phrases list always comes from the Russian
+                    // curated library. In expand mode it's the whole point; in
+                    // translate mode it's only relevant when the target
+                    // language actually is Russian.
+                    val relatedRelevant =
+                        r.mode == "expand" || targetLanguage.code == SupportedLanguages.RUSSIAN.code
+
                     if (r.mode == "translate" && r.translation != null) {
                         Text("Translation:", style = MaterialTheme.typography.labelLarge)
                         Text(r.translation.ru, style = MaterialTheme.typography.headlineSmall)
@@ -573,38 +589,44 @@ fun LisaScreen() {
                             "\"${r.input}\" · source: ${r.source} · ${r.latencyMs.toInt()} ms",
                             style = MaterialTheme.typography.bodySmall,
                         )
-                    } else {
+                        if (relatedRelevant && r.related.isNotEmpty()) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "More related phrases (Russian curated library):",
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                            RelatedPhraseList(r.related)
+                        }
+                    } else if (r.related.isNotEmpty()) {
                         Text("Related phrases:", style = MaterialTheme.typography.labelLarge)
                         Text(
                             "for \"${r.input}\" · ${r.latencyMs.toInt()} ms",
                             style = MaterialTheme.typography.bodySmall,
                         )
-                    }
-
-                    // The related-phrases list always comes from the Russian
-                    // curated library. In expand mode that's the whole point, so
-                    // always show it; in translate mode it's only relevant when
-                    // the target language actually is Russian.
-                    val showRelated = r.related.isNotEmpty() &&
-                        (r.mode == "expand" || targetLanguage.code == SupportedLanguages.RUSSIAN.code)
-                    if (showRelated) {
-                        Spacer(Modifier.height(4.dp))
-                        if (r.mode == "translate") {
-                            Text("More related phrases (Russian curated library):", style = MaterialTheme.typography.labelMedium)
-                        }
-                        r.related.forEach { phrase ->
-                            Column {
-                                Text("• ${phrase.ru}", style = MaterialTheme.typography.bodyMedium)
-                                Text(
-                                    "   ${phrase.glossEn}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
+                        RelatedPhraseList(r.related)
+                    } else {
+                        Text(
+                            "No related phrases for \"${r.input}\".",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun RelatedPhraseList(phrases: List<Phrase>) {
+    phrases.forEach { phrase ->
+        Column {
+            Text("• ${phrase.ru}", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "   ${phrase.glossEn}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
