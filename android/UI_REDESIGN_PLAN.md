@@ -126,21 +126,21 @@ the Compose BOM.
 
 Still one scrolling `Column`, tighter spacing to match the mock.
 
-1. **Header** — top `Row` with the fox `Image` at the left and a gear
-   `IconButton(Icons.Filled.Settings)` at the right (toggles
-   `showServerSettings`); then `Text("Assistant Lisa", color = primary,
-   textAlign = Center)` **centered on its own line** beneath that row (bold,
-   ~headlineMedium), as in the mock. Removes the "Bot Lisa" / "Hide
-   settings" row at
-   [L349‑L358](app/src/main/java/com/botlisa/app/MainActivity.kt#L349-L358).
+1. **Header** — top `Row` with the fox `Image` left and a gear
+   `IconButton` right (toggles `showServerSettings`); then bold purple
+   `Text("Assistant Lisa")` centered (`headlineLarge`); then a static
+   **tagline** row centered — `Text("Your foreign language companion")` +
+   a small `AutoAwesome` sparkle tinted primary.
    **Tapping the fox** calls `resetToStart()` — stops hands‑free, clears
-   field focus (`focusManager.clearFocus()`, so the "start typing" helper
-   isn't suppressed), and clears the field, result, errors, and any open
-   panels (persistent settings — server, language, trigger phrases — are
-   left alone).
-2. **Subtitle** — centered `Text`, value from the new `uiPhase` (below).
-   Replaces the descriptive paragraph at
-   [L359‑L363](app/src/main/java/com/botlisa/app/MainActivity.kt#L359-L363).
+   field focus (`focusManager.clearFocus()`), the field, result, errors, and
+   any open panels (persistent settings left alone).
+2. **Phase hint** — the per‑phase message (`uiPhase.subtitle()`, kept
+   **short**: "Tap for hands‑free mode", "Listening…", "Now say the English
+   word", "Playing the translation…", "Playing the suggestion…") is a plain
+   centered `Text` (`bodyLarge`, `onSurfaceVariant`) **directly below the
+   mic** — so the mic stays centered. (An earlier handwritten‑font + curved
+   arrow version, beside the mic, was scrapped — the mic went off‑centre and
+   long text was hard to read.)
 3. **`AssistantButton(uiPhase, onClick = ::onToggleAssistant)`** — new
    composable in `ui/AssistantButton.kt`. Circle ~84 dp; `Mic` icon in
    listening phases, `VolumeUp` icon in speaking phases; fill color
@@ -204,19 +204,27 @@ Still one scrolling `Column`, tighter spacing to match the mock.
    notification. `handleAssistantUtterance` is back to `input = text;
    onSend()`. If a "fix a misheard word" affordance is wanted later it should
    be non-blocking (e.g. an undo/edit on the *result*, not a pre-send hold).
-5. **Collapsible instructions** — a filled lavender pill `Surface`
-   (`clickable`) with a leading sparkle icon (`Icons.Filled.AutoAwesome`),
-   the label "Hands‑free mode instructions", and a trailing chevron
-   (`Icons.Filled.ExpandMore`, rotate 180° when open) + an
-   `AnimatedVisibility` panel below it containing the **new copy** in §7,
-   with the command phrases rendered **bold**. Replaces the always‑on text
-   at
-   [L391‑L396](app/src/main/java/com/botlisa/app/MainActivity.kt#L391-L396).
-   New `var showInstructions by rememberSaveable { mutableStateOf(false) }`.
+5. **Collapsible instructions** — `InstructionsPanel`, a bordered rounded
+   **card** (`Surface` + `outlineVariant` border), default **collapsed**
+   (`var showInstructions … = false`):
+   - **Header** (lavender, `primary @ 10%`, clickable): `AutoAwesome` icon +
+     **"How hands-free mode works"** + `ExpandMore` chevron (rotates 180°).
+   - **Body** (`AnimatedVisibility`): three numbered `Step`s, each an accent
+     icon + bold "N. heading" + a body line, split by `HorizontalDivider`s:
+     1. `Mic` / primary — **Tap the mic** — "Then speak Russian normally."
+     2. `Chat` / tertiary — **To translate a word** — "Say «translate
+        trigger» _(bold, tertiary)_, pause and wait for the beep, then say
+        the English word."
+     3. `Lightbulb` / secondary — **To hear the next suggestion** — "Say
+        «next‑suggestion trigger» _(bold, secondary)_"
+   - **Footer** (after a divider): `Settings` icon + "To edit voice
+     commands, go to _settings_."
+   - The trigger phrases are printed **verbatim from Settings** (their
+     punctuation included — see §7 / defaults now carry "?").
 6. **Command chips** — two **read‑only reminders**, identical in every mode:
-   a circular icon disc (faint tinted fill, no outline ring) + the coloured
-   phrase in bold + the italic English caption below. Not tappable — they're
-   a mnemonic for the two spoken commands, nothing more.
+   a bare accent icon (no disc, no ring) + the coloured phrase in bold + the
+   italic English caption below. Not tappable — a mnemonic for the two
+   spoken commands.
    - Icons: teal speech‑bubble (`Icons.AutoMirrored.Filled.Chat`) for
      "Как сказать?", orange lightbulb (`Icons.Filled.Lightbulb`) for
      "Что ещё?".
@@ -372,25 +380,20 @@ var isSpeaking by remember { mutableStateOf(false) }
 
 ---
 
-## 5. New files
+## 5. New files (all flat in `com.botlisa.app`, not a `ui/` subpackage)
 
-- `ui/Theme.kt` — `BotLisaTheme`, color schemes, typography tweak (purple
-  title).
-- `ui/AssistantButton.kt` — pulsing circular mic / speaker button.
-- `ui/CommandChips.kt`, `ui/RecommendationList.kt` — optional extraction to
-  keep `MainActivity.kt` readable (it is ~550 lines now). No
-  `TranscriptPill.kt` — the shared search field (§3.4) covers it.
-  `CommandChips.kt` takes the two phrases, their `targetLanguage`→EN
-  captions, a `mode` (`BUTTON` / `REMINDER`), a `visible` flag, and two
-  `onClick`s (ignored in `REMINDER` mode).
-- `Pulse.kt` — `Modifier.pulse(active)` for the result-card speaker icons.
-- `InstructionsPanel.kt` — the collapsible hands-free instructions strip.
-- `ThemeConfig.kt` — persisted dark-mode override (`Boolean?`, null = system)
-  for the Settings toggle.
+- `Theme.kt` — `BotLisaTheme`, full light + dark color schemes.
+- `AssistantButton.kt` — pulsing circular mic / speaker button.
+- `CommandChips.kt` — the two read‑only command reminders.
+- `Pulse.kt` — `Modifier.pulse(active)` for the result‑card speaker icons.
+- `InstructionsPanel.kt` — the collapsible "How hands‑free mode works" card.
+- `ThemeConfig.kt` — persisted dark‑mode override (`Boolean?`, null = system).
 - `res/drawable-nodpi/lisa_fox.png`, `res/mipmap-anydpi-v26/ic_launcher*.xml`,
   `res/values/colors.xml`.
 - Edits: `res/values/themes.xml`, `res/values/strings.xml`,
-  `AndroidManifest.xml`.
+  `AndroidManifest.xml`, `TriggerPhraseConfig.kt` (Russian defaults now
+  `"как сказать?"` / `"что ещё?"` — cosmetic, the detector strips
+  punctuation).
 
 > Actual layout note: these live flat in `com.botlisa.app`, not a `ui/`
 > subpackage, matching the existing files.
@@ -403,8 +406,10 @@ Each step leaves the app buildable.
 
 1. **Theme + fox + rename** — `Theme.kt`, colors wired in `setContent`,
    launcher icon, "Assistant Lisa" title. Immediately visible, low risk.
-2. **Header + gear + dynamic subtitle** — new top row, `uiPhase` enum,
-   settings behind the gear.
+2. **Header + gear + phase hint** — new top row, `uiPhase` enum, settings
+   behind the gear. Title `headlineLarge` + static tagline row; the
+   per‑phase message is a short plain centered `Text` **below the mic**
+   (§3.1–3.2).
 3. **AssistantButton** — big pulsing button, retire `Start`/`Stop`.
 4. **Shared input / transcript field** — restyle as the rounded search box
    under the mic, IME submit, drop "Look up" + old mic icon; add the
@@ -412,13 +417,16 @@ Each step leaves the app buildable.
    too, gated by `assistantState != IDLE` **and** the focus guard (§3.4).
    English gloss line + muted styling deferred (Step 8). (A grace period
    before auto-send was tried in 7b and reverted — §3.4.)
-5. **Collapsible instructions** — new copy, bold commands.
-6. **Command chips** — `CommandChips.kt`: two read‑only icon‑disc reminders,
-   identical in every mode, not tappable. Hands‑free → `commandsDismissed`
-   lifecycle; text mode → shown only while the field is blank. No buttons,
-   hint, or script logic. Still pending: `targetLanguage`→EN captions via the
-   new `OnDeviceTranslator` reverse path (source language is `targetLanguage`,
-   not hard‑coded Russian).
+5. **Collapsible instructions** — `InstructionsPanel` card: lavender header
+   ("How hands-free mode works"), 3 numbered `Step`s with accent icons +
+   dividers, `Settings`-icon footer; phrases verbatim from Settings in
+   accent colours (§3.5 / §7). Default collapsed.
+6. **Command chips** — `CommandChips.kt`: two read‑only reminders, identical
+   in every mode, not tappable — **bare accent icon** (no disc) + coloured
+   phrase + italic caption. Hands‑free → `commandsDismissed` lifecycle;
+   text mode → shown only while the field is blank. Still pending:
+   `targetLanguage`→EN captions via the new `OnDeviceTranslator` reverse
+   path.
 7. **Result / recommendations rework** *(done)* — speaker icons
    (`UtteranceProgressListener` → `Modifier.pulse`), currently‑speaking
    highlight + pulse, per‑phrase tap‑to‑hear. (A grace period before
@@ -437,38 +445,19 @@ Steps 1–7 are largely independent; 8 is the biggest single chunk.
 
 ---
 
-## 7. Hands‑free instruction copy (replaces the old text)
+## 7. Hands‑free instruction copy
 
-Shown in the collapsible "Hands‑free mode instructions" panel (frame 2) and
-nowhere else. The **command phrases are bold** in the app. When the user has
-customised a trigger phrase in Settings, the bold text is that custom phrase,
-not the literal default — build it from `translateTriggerPhrase` /
-`nextSuggestionTriggerPhrase`.
+Lives in `InstructionsPanel` (§3.5) as three numbered `Step`s + a footer.
+The two trigger phrases are printed **verbatim from Settings** — their own
+capitalisation and punctuation — in their accent colour (teal / orange),
+bold. Defaults now carry the "?" (`TriggerPhraseConfig`).
 
-> **Hands‑free mode:**
-> - Tap the mic, then speak Russian normally
-> - To translate a word: say **как сказать**, pause and wait for the beep, then say the English word
-> - To hear the next suggestion: say **что ещё?**
+> **How hands‑free mode works**
+> 1. **Tap the mic** — Then speak Russian normally.
+> 2. **To translate a word** — Say **как сказать?**, pause and wait for the beep, then say the English word.
+> 3. **To hear the next suggestion** — Say **что ещё?**
 >
-> To edit voice commands, go to settings.
-
-### Compose rendering
-
-```kotlin
-val instructions = buildAnnotatedString {
-    append("Hands-free mode:\n")
-    append("• Tap the mic, then speak Russian normally\n")
-    append("• To translate a word: say ")
-    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(translateTriggerPhrase) }
-    append(", pause and wait for the beep, then say the English word\n")
-    append("• To hear the next suggestion: say ")
-    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(nextSuggestionTriggerPhrase) }
-    appendLine()
-    appendLine()
-    append("To edit voice commands, go to settings.")
-}
-Text(instructions, style = MaterialTheme.typography.bodySmall)
-```
+> ⚙ To edit voice commands, go to _settings_.
 
 > **"Wait for the beep"** — the copy promises an audible cue when the app
 > switches to listening for the English word. There is no beep today; add a

@@ -7,10 +7,10 @@ import android.content.Context
  * (see SpeechAssistant.kt). Two independent, separately-editable phrases,
  * both checked against every default-language (Russian) utterance:
  *
- *   - **Translate trigger** (default "как сказать") -- say this, pause,
+ *   - **Translate trigger** (default "как сказать?") -- say this, pause,
  *     then an English word, and that next utterance is translated instead
  *     of treated as Russian. See SpeechAssistant.State.LISTENING_FOR_WORD.
- *   - **Next-suggestion trigger** (default "что ещё") -- say this to have
+ *   - **Next-suggestion trigger** (default "что ещё?") -- say this to have
  *     the app read the next related/suggested phrase from the most recent
  *     lookup aloud. Saying it again reads the *next* one in that list,
  *     cycling back to the start once it runs out. Doesn't change listening
@@ -37,11 +37,14 @@ object TriggerPhraseConfig {
     // One entry per default-listening-language code. Add an entry to both
     // maps here when a second default-language listening mode exists --
     // not needed yet, only Russian is wired into Lisa Assistant today.
+    // The "?" is cosmetic -- TriggerPhraseDetector.normalize() strips
+    // punctuation before matching -- but it keeps the phrase shown in
+    // Settings / the instructions / the reminder chips consistent.
     val DEFAULT_TRANSLATE_TRIGGER_PHRASES = mapOf(
-        SupportedLanguages.RUSSIAN.code to "как сказать",
+        SupportedLanguages.RUSSIAN.code to "как сказать?",
     )
     val DEFAULT_NEXT_SUGGESTION_TRIGGER_PHRASES = mapOf(
-        SupportedLanguages.RUSSIAN.code to "что ещё",
+        SupportedLanguages.RUSSIAN.code to "что ещё?",
     )
 
     fun getTranslateTriggerPhrase(context: Context, languageCode: String): String =

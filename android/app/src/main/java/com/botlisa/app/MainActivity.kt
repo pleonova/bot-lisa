@@ -19,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -114,12 +115,13 @@ private fun uiPhaseOf(assistantState: SpeechAssistant.State): UiPhase = when (as
     SpeechAssistant.State.LISTENING_FOR_WORD -> UiPhase.LISTENING_EN
 }
 
+// Kept short -- these render in the handwritten hint beside the mic.
 private fun UiPhase.subtitle(): String = when (this) {
     UiPhase.IDLE -> "Tap for hands-free mode"
-    UiPhase.LISTENING_RU -> "Listening (for Russian) …"
-    UiPhase.LISTENING_EN -> "Heard the voice command, now say the English word(s)…"
-    UiPhase.SPEAKING_TRANSLATION -> "Heard the English, now listen to the translation"
-    UiPhase.READING_RECOMMENDATION -> "Heard the voice command, now listen to the recommendation"
+    UiPhase.LISTENING_RU -> "Listening…"
+    UiPhase.LISTENING_EN -> "Now say the English word"
+    UiPhase.SPEAKING_TRANSLATION -> "Playing the translation…"
+    UiPhase.READING_RECOMMENDATION -> "Playing the suggestion…"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -476,17 +478,27 @@ fun LisaScreen(
             }
             Text(
                 "Assistant Lisa",
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
                 textAlign = TextAlign.Center,
             )
-            Text(
-                uiPhase.subtitle(),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    "Your foreign language companion",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Icon(
+                    Icons.Filled.AutoAwesome,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
 
         AssistantButton(
@@ -495,6 +507,13 @@ fun LisaScreen(
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
                 .padding(vertical = 8.dp),
+        )
+        Text(
+            uiPhase.subtitle(),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
         )
 
         assistantError?.let {
