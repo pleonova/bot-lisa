@@ -9,6 +9,32 @@ its Load Balancer IP is known.
 getting that file onto your phone, and telling the app where your server
 lives on the internet.*
 
+## Deploy over USB (quickest)
+
+Phone plugged in via USB, **USB debugging** enabled (Settings → Developer
+options) and the "Allow USB debugging" prompt approved on the phone. Needs
+the JDK from [One-time tool setup](#one-time-tool-setup-mac) and `adb`
+(bundled with Android Studio, or `brew install android-platform-tools`).
+
+```bash
+# build the debug APK
+cd android
+./gradlew assembleDebug
+
+# list connected devices (ignore the emulator if Android Studio is running one)
+adb devices
+
+# install, replacing <device-id> with the id from `adb devices`
+adb -s <device-id> install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+APK lands at `android/app/build/outputs/apk/debug/app-debug.apk`. First build
+takes a few minutes; later builds are incremental and fast. `install -r`
+reinstalls over the existing app, keeping saved server settings.
+
+*In other words: with a cable you skip the upload-and-download dance — one
+command builds the app, one lists your phone, one pushes it straight on.*
+
 ## One-time tool setup (Mac)
 
 ```bash
@@ -22,36 +48,21 @@ java -version                    # should print openjdk 17.x
 *In other words: the tool that builds Android apps (Gradle) needs a program
 called Java installed to run at all — this installs it.*
 
-## Build the APK
+## Alternative: no cable (Drive / email)
 
-```bash
-cd android
-./gradlew assembleDebug
-```
+Build the APK (`cd android && ./gradlew assembleDebug`), then upload
+`app/build/outputs/apk/debug/app-debug.apk` to Google Drive (or Dropbox,
+email, etc.). Open that app on the phone, tap the file to download it, then
+open it. On the first install Android prompts to allow installs from that
+source (e.g. "Allow from Drive") — approve it, then **Install** → **Open**.
 
-Output lands at `android/app/build/outputs/apk/debug/app-debug.apk`. First
-build takes a few minutes; later builds are fast (incremental).
-
-*In other words: an APK is just the installable app file — like a `.exe` on
-Windows. This command compiles all the code into that one file.*
-
-## Get it onto the phone
-
-No USB/cable needed. Upload `app-debug.apk` to Google Drive (or Dropbox,
-email, etc.) from your Mac, then open the same app on the phone and tap the
-file to download + open it.
-
-On the phone's first install attempt, Android will prompt to allow installs
-from that source (e.g. "Allow from Drive") — approve it, then **Install**,
-then **Open**.
-
-*In other words: since this app isn't on the Play Store, you're moving the file
-to your phone yourself (like AirDropping a document) and telling Android
-"yes, I trust this file, install it anyway."*
+*In other words: no cable handy? Move the file to the phone yourself (like
+AirDropping a document) and tell Android "yes, install it anyway" — this app
+isn't on the Play Store.*
 
 ## Configure it
 
-In the app, tap **Server settings** and enter:
+In the app, tap the **gear** (top right) to open settings, then enter:
 
 - **Server URL** — `http://<orchestration-service external IP>:8002`
   (`kubectl get service orchestration-service` to look it up)
@@ -157,15 +168,11 @@ Once step 5 looks right, the already-installed app on your phone is talking
 to the updated backend automatically — no reinstall needed, same as any
 other backend-only change.
 
-**If the Android code changed** (`MainActivity.kt`, `ApiClient.kt`,
-`ServerConfig.kt`, or the manifest): rebuild the APK and reinstall —
-```bash
-cd android
-./gradlew assembleDebug
-```
-then repeat the "get it onto the phone" step above. Reinstalling over an
-existing install keeps saved server settings (same `SharedPreferences`),
-so you won't need to re-enter the URL/key unless you uninstalled first.
+**If the Android code changed** (any file under `android/`): rebuild and
+reinstall — re-run the [Deploy over USB](#deploy-over-usb-quickest) commands
+(or the no-cable alternative). `install -r` keeps saved server settings
+(same `SharedPreferences`), so you won't re-enter the URL/key unless you
+uninstalled first.
 
 *In other words: changing the server doesn't require touching the phone at
 all. Changing the app itself means building a new APK and reinstalling it —
