@@ -383,10 +383,17 @@ var isSpeaking by remember { mutableStateOf(false) }
   `CommandChips.kt` takes the two phrases, their `targetLanguage`→EN
   captions, a `mode` (`BUTTON` / `REMINDER`), a `visible` flag, and two
   `onClick`s (ignored in `REMINDER` mode).
+- `Pulse.kt` — `Modifier.pulse(active)` for the result-card speaker icons.
+- `InstructionsPanel.kt` — the collapsible hands-free instructions strip.
+- `ThemeConfig.kt` — persisted dark-mode override (`Boolean?`, null = system)
+  for the Settings toggle.
 - `res/drawable-nodpi/lisa_fox.png`, `res/mipmap-anydpi-v26/ic_launcher*.xml`,
-  `res/values/ic_launcher_background.xml`.
+  `res/values/colors.xml`.
 - Edits: `res/values/themes.xml`, `res/values/strings.xml`,
   `AndroidManifest.xml`.
+
+> Actual layout note: these live flat in `com.botlisa.app`, not a `ui/`
+> subpackage, matching the existing files.
 
 ---
 
@@ -511,7 +518,39 @@ Text(instructions, style = MaterialTheme.typography.bodySmall)
   - *"New input" that restores the chips* — *Default: any new non‑blank
     `input` from typing, or any new default‑mode utterance. A bare partial
     transcript does not count until it finalises.*
-- **Dark theme** — the wireframe is light‑only. *Default: define both
-  schemes but tune only light.*
+- **Dark theme** — *Done:* both schemes tuned (`Theme.kt`), plus a
+  **Settings "Dark mode" toggle** — `ThemeConfig` stores `Boolean?` (null =
+  follow system), read above `BotLisaTheme` in `setContent`; `LisaScreen`
+  takes `isDark` / `onToggleDark` and shows a `Switch` in the settings
+  panel.
 - **Beep** — add a real audible cue vs. reword the instructions. *Default:
   add a short tone in step 6.*
+
+---
+
+## 9. Future features (deferred)
+
+- **Voice-source distinction / speaker separation.** Today the mic is muted
+  outright while the app's own TextToSpeech plays (`isMuted` in
+  `SpeechAssistant`), because the recogniser would otherwise transcribe the
+  assistant's spoken suggestion and re-send it as a query. A better version:
+  when **multiple voices are heard**, tell them apart and act only on the
+  caregiver's.
+  - *Near-term step (no ML):* keep the mic live during playback and use
+    **content + timing correlation** — fuzzy-match each transcript against
+    the phrase currently being spoken (we already know its text) within the
+    playback window + a short tail; drop matches as echo, accept everything
+    else. Preserves barge-in (the caregiver can talk over the assistant).
+    Could reuse `TriggerPhraseDetector`'s fuzzy match.
+  - *Full version:* raw `AudioRecord` → WebRTC/Speex **acoustic echo
+    cancellation** fed the TTS as the reference signal → an **offline**
+    recogniser (Vosk / whisper.cpp — the system `SpeechRecognizer` can't be
+    fed audio). Optionally a speaker-embedding model (cf. `speech_lab/`'s
+    SpeechBrain) to enrol the caregiver's voice and the TTS voice and route
+    per speaker. This is the "smart-speaker barge-in" architecture and a
+    real project; it also enables ignoring a *second human* in the room.
+  - *Cheap mitigation that already helps:* route TTS to an earbud so the
+    open mic never hears it (matches the app's one-earbud use case) — the
+    echo problem largely disappears and the blunt mute becomes a fallback.
+  - Not viable: there is no Android API that tags recognised audio as "the
+    phone's own voice."

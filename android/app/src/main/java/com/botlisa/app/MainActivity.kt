@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -77,9 +78,21 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            BotLisaTheme {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            // null override = follow the system setting; the Settings toggle
+            // flips it to an explicit true/false (persisted in ThemeConfig).
+            var darkOverride by remember { mutableStateOf(ThemeConfig.getDarkOverride(context)) }
+            val useDark = darkOverride ?: isSystemInDarkTheme()
+            BotLisaTheme(useDarkTheme = useDark) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    LisaScreen()
+                    LisaScreen(
+                        isDark = useDark,
+                        onToggleDark = {
+                            val next = !useDark
+                            darkOverride = next
+                            ThemeConfig.setDarkOverride(context, next)
+                        },
+                    )
                 }
             }
         }
@@ -111,7 +124,10 @@ private fun UiPhase.subtitle(): String = when (this) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LisaScreen() {
+fun LisaScreen(
+    isDark: Boolean = false,
+    onToggleDark: () -> Unit = {},
+) {
     val scope = rememberCoroutineScope()
 
     // rememberSaveable (not plain remember) for anything the user would be upset to lose on
@@ -521,6 +537,21 @@ fun LisaScreen() {
                         )
                     }
                 }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Dark mode", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Overrides the system setting.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = isDark, onCheckedChange = { onToggleDark() })
             }
             OutlinedTextField(
                 value = translateTriggerPhrase,
