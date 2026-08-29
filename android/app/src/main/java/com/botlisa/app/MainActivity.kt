@@ -349,11 +349,19 @@ fun LisaScreen(
     // is belt-and-suspenders -- but it's the correct pattern for a
     // long-lived object holding a composable's callbacks, so we use it
     // here.)
-    val handleAssistantUtterance = rememberUpdatedState<(String) -> Unit> { text ->
-        input = text
-        commandsDismissed = false // fresh utterance being sent -> chips come back
-        onSend()
-    }
+    val handleAssistantUtterance =
+        rememberUpdatedState<(String, SpeechAssistant.State) -> Unit> { text, state ->
+            // The English word after the translate trigger always runs a
+            // lookup. A plain default-mode utterance only does for Russian --
+            // "expand" mode has nothing to return for other languages, and
+            // auto-translating a foreign phrase (+ speaking it) just feeds the
+            // mic its own output in a loop.
+            if (state == SpeechAssistant.State.LISTENING_FOR_WORD || relatedPhrasesSupported) {
+                input = text
+                commandsDismissed = false // fresh utterance -> chips come back
+                onSend()
+            }
+        }
     val handleNextSuggestionRequest = rememberUpdatedState {
         speakNextSuggestion()
         commandsDismissed = true // spoken "что ещё?" -> hide the chips
@@ -396,7 +404,7 @@ fun LisaScreen(
             getNextSuggestionTriggerPhrase = {
                 TriggerPhraseConfig.getNextSuggestionTriggerPhrase(context, targetLanguage.code)
             },
-            onUtterance = { text, _ -> handleAssistantUtterance.value(text) },
+            onUtterance = { text, state -> handleAssistantUtterance.value(text, state) },
             onNextSuggestionRequested = { handleNextSuggestionRequest.value() },
             onTranscript = { handleTranscript.value(it) },
             isMuted = { translationSpeaking || relatedSpeaking },

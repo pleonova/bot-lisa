@@ -265,16 +265,27 @@ Still one scrolling `Column`, tighter spacing to match the mock.
    > «lang»"), the hands‑free STT locale
    > (`SpeechAssistant.getDefaultLanguageCode = { targetLanguage.code }`),
    > and the trigger phrases (`remember(targetLanguage)` +
-   > `TriggerPhraseConfig` keyed by `targetLanguage.code`; Hindi translate
-   > default `कैसे कहें?`).
+   > `TriggerPhraseConfig` keyed by `targetLanguage.code`).
+   >
+   > **Auto trigger defaults per language.**
+   > `TriggerPhraseConfig.DEFAULT_*_TRIGGER_PHRASES` carries a hand‑authored
+   > translation of "how to say?" / "what else?" for every entry in
+   > `SupportedLanguages.ALL` (es `¿cómo se dice?` / `¿qué más?`, fr, de,
+   > hi, ru). `getPhrase` falls back to the **English phrase itself** for any
+   > code with no entry, so a new language always has a working default.
    >
    > **Next‑suggestion ("Что ещё?") is Russian‑only** — the curated library
    > and `_has_cyrillic` expand detection are Russian. So for any non‑Russian
    > target (`relatedPhrasesSupported = targetLanguage.code == RUSSIAN.code`
-   > is false) the orange command chip, its instruction step, *and* its
-   > Settings trigger field are all **hidden**. `phraseSpeaker` stays
-   > Russian‑locale. Un‑gate all of it once the backend serves suggestions
-   > per language.
+   > is false): the orange command chip, its instruction step, and its
+   > Settings trigger field are **hidden**; `phraseSpeaker` stays
+   > Russian‑locale; and a **plain (non‑trigger) hands‑free utterance does
+   > *not* fire a lookup** — `handleAssistantUtterance` only runs `onSend()`
+   > for `LISTENING_FOR_WORD` (the English word after the translate trigger)
+   > or when Russian. Without that gate, a foreign utterance → forced
+   > translate‑mode → auto‑spoken result → mic hears its own TTS → loop
+   > (the "Spanish loops the results" bug). Un‑gate all of it once the
+   > backend serves suggestions per language.
 7. **Result card** — rework
    [L501‑L546](app/src/main/java/com/botlisa/app/MainActivity.kt#L501-L546):
    - *Done already:* `onSend()` clears `result` at the start, so the old

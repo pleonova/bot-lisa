@@ -36,37 +36,41 @@ object TriggerPhraseConfig {
     private const val TRANSLATE_KEY_PREFIX = "trigger_phrase_"
     private const val NEXT_SUGGESTION_KEY_PREFIX = "next_suggestion_trigger_phrase_"
 
-    // One entry per selectable target-language code. Add an entry to both
-    // maps when Lisa Assistant should listen in another language by default;
-    // the getters fall back to "" for any code without an entry.
+    // Every target language gets a default translate / next-suggestion
+    // trigger meaning the same as the Russian originals ("how to say?" /
+    // "what else?"). A language without a hand-authored entry falls back to
+    // the English phrase itself (see getPhrase), so adding a new language to
+    // SupportedLanguages.ALL always yields *some* working default.
+    //
     // The "?" is cosmetic -- TriggerPhraseDetector.normalize() strips
-    // punctuation before matching -- but it keeps the phrase shown in
-    // Settings / the instructions / the reminder chips consistent. Which
-    // entry is used follows the selected target language.
-    //
-    // The *translate* trigger works for any target language; add an entry
-    // per language you want a sensible default for (others fall back to "",
-    // i.e. no trigger until the caregiver sets one in Settings).
-    //
-    // The *next-suggestion* trigger only makes sense where related-phrase
-    // suggestions exist -- Russian only today -- so it deliberately has just
-    // the one entry.
+    // punctuation before matching -- but keeps the phrase shown in Settings /
+    // instructions / reminder chips consistent.
+    const val TRANSLATE_TRIGGER_EN = "how to say?"
+    const val NEXT_SUGGESTION_TRIGGER_EN = "what else?"
+
     val DEFAULT_TRANSLATE_TRIGGER_PHRASES = mapOf(
         SupportedLanguages.RUSSIAN.code to "как сказать?",
         SupportedLanguages.HINDI.code to "कैसे कहें?",
+        SupportedLanguages.SPANISH.code to "¿cómo se dice?",
+        SupportedLanguages.FRENCH.code to "comment dit-on ?",
+        SupportedLanguages.GERMAN.code to "wie sagt man?",
     )
     val DEFAULT_NEXT_SUGGESTION_TRIGGER_PHRASES = mapOf(
         SupportedLanguages.RUSSIAN.code to "что ещё?",
+        SupportedLanguages.HINDI.code to "और क्या?",
+        SupportedLanguages.SPANISH.code to "¿qué más?",
+        SupportedLanguages.FRENCH.code to "quoi d'autre ?",
+        SupportedLanguages.GERMAN.code to "was noch?",
     )
 
     fun getTranslateTriggerPhrase(context: Context, languageCode: String): String =
-        getPhrase(context, TRANSLATE_KEY_PREFIX, DEFAULT_TRANSLATE_TRIGGER_PHRASES, languageCode)
+        getPhrase(context, TRANSLATE_KEY_PREFIX, DEFAULT_TRANSLATE_TRIGGER_PHRASES, TRANSLATE_TRIGGER_EN, languageCode)
 
     fun setTranslateTriggerPhrase(context: Context, languageCode: String, phrase: String) =
         setPhrase(context, TRANSLATE_KEY_PREFIX, languageCode, phrase)
 
     fun getNextSuggestionTriggerPhrase(context: Context, languageCode: String): String =
-        getPhrase(context, NEXT_SUGGESTION_KEY_PREFIX, DEFAULT_NEXT_SUGGESTION_TRIGGER_PHRASES, languageCode)
+        getPhrase(context, NEXT_SUGGESTION_KEY_PREFIX, DEFAULT_NEXT_SUGGESTION_TRIGGER_PHRASES, NEXT_SUGGESTION_TRIGGER_EN, languageCode)
 
     fun setNextSuggestionTriggerPhrase(context: Context, languageCode: String, phrase: String) =
         setPhrase(context, NEXT_SUGGESTION_KEY_PREFIX, languageCode, phrase)
@@ -75,10 +79,11 @@ object TriggerPhraseConfig {
         context: Context,
         keyPrefix: String,
         defaults: Map<String, String>,
+        englishFallback: String,
         languageCode: String,
     ): String {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val default = defaults[languageCode] ?: ""
+        val default = defaults[languageCode] ?: englishFallback
         return prefs.getString(keyPrefix + languageCode, default) ?: default
     }
 

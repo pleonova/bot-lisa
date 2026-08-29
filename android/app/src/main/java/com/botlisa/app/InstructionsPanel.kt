@@ -101,7 +101,13 @@ fun InstructionsPanel(
                         icon = Icons.Filled.Mic,
                         iconColor = MaterialTheme.colorScheme.primary,
                         heading = "Tap the mic",
-                        body = AnnotatedString("Then speak $spokenLanguage normally."),
+                        body = AnnotatedString(
+                            if (showNextSuggestionStep) {
+                                "Then speak $spokenLanguage normally."
+                            } else {
+                                "Then say a command below."
+                            },
+                        ),
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Step(
