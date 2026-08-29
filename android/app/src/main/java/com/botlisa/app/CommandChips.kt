@@ -1,11 +1,14 @@
 package com.botlisa.app
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Lightbulb
@@ -15,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontStyle
@@ -28,10 +32,9 @@ import androidx.compose.ui.unit.dp
  * + the coloured phrase + its English caption, just a mnemonic for what to
  * say.
  *
- * MainActivity decides when they're [visible]:
- * - hands-free: shown until a command is used, back on the next new input;
- * - text mode: shown only while the field is empty -- once you type, the
- *   keyboard's Search key does the same job, so they'd be redundant.
+ * MainActivity decides when they're [visible]. Tapping an item speaks its
+ * phrase aloud in the target-language voice ([onSpeakTranslate] /
+ * [onSpeakNext]).
  */
 @Composable
 fun CommandChips(
@@ -40,6 +43,8 @@ fun CommandChips(
     translateCaption: String,
     nextPhrase: String,
     nextCaption: String,
+    onSpeakTranslate: () -> Unit,
+    onSpeakNext: () -> Unit,
     modifier: Modifier = Modifier,
     // The next-suggestion command only works for Russian; hidden otherwise
     // (see relatedPhrasesSupported in MainActivity).
@@ -59,6 +64,7 @@ fun CommandChips(
                 icon = Icons.AutoMirrored.Filled.Chat,
                 phrase = translatePhrase,
                 caption = translateCaption,
+                onClick = onSpeakTranslate,
                 modifier = if (showNextCommand) Modifier.weight(1f) else Modifier,
             )
             if (showNextCommand) {
@@ -67,6 +73,7 @@ fun CommandChips(
                     icon = Icons.Filled.Lightbulb,
                     phrase = nextPhrase,
                     caption = nextCaption,
+                    onClick = onSpeakNext,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -80,10 +87,14 @@ private fun CommandItem(
     icon: ImageVector,
     phrase: String,
     caption: String,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier,
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {

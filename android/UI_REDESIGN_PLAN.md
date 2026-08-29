@@ -210,8 +210,10 @@ Still one scrolling `Column`, tighter spacing to match the mock.
    - **Header** (lavender, `primary @ 10%`, clickable): `AutoAwesome` icon +
      **"How hands-free mode works"** + `ExpandMore` chevron (rotates 180°).
    - **Body** (`AnimatedVisibility`): three numbered `Step`s, each an accent
-     icon + bold "N. heading" + a body line, split by `HorizontalDivider`s:
-     1. `Mic` / primary — **Tap the mic** — "Then speak Russian normally."
+     icon + bold "N. heading" + a body line, split by `HorizontalDivider`s.
+     **Steps 2 & 3 are tappable** — tap to hear that trigger phrase spoken
+     (`Step(onClick = …)` → same `speakTriggerPhrase` as the chips):
+     1. `Mic` / primary — **Tap the mic** — "Then speak «lang» normally."
      2. `Chat` / tertiary — **To translate a word** — "Say «translate
         trigger» _(bold, tertiary)_, pause and wait for the beep, then say
         the English word."
@@ -221,15 +223,18 @@ Still one scrolling `Column`, tighter spacing to match the mock.
      commands, go to _settings_."
    - The trigger phrases are printed **verbatim from Settings** (their
      punctuation included — see §7 / defaults now carry "?").
-6. **Command chips** — two **read‑only reminders**, identical in every mode:
-   a bare accent icon (no disc, no ring) + the coloured phrase in bold + the
-   italic English caption below. Not tappable — a mnemonic for the two
-   spoken commands.
+6. **Command chips** — two reminder items, identical in every mode: a bare
+   accent icon (no disc, no ring) + the coloured phrase in bold + the italic
+   English caption below. **Tapping one speaks its phrase aloud** in the
+   target‑language voice (`onSpeakTranslate` / `onSpeakNext` →
+   `speakTriggerPhrase`, which drops a trailing "?"). They don't trigger a
+   lookup — a mnemonic you can also hear.
    - Icons: teal speech‑bubble (`Icons.AutoMirrored.Filled.Chat`) for
      "Как сказать?", orange lightbulb (`Icons.Filled.Lightbulb`) for
      "Что ещё?".
-   - No hint text, no buttons, no script‑aware enablement. In text mode a
-     lookup is done with the keyboard's **Search** key; in hands‑free with
+   - No hint text, no lookup buttons, no script‑aware enablement. In text
+     mode a lookup is done with the keyboard's **Search** key; in hands‑free
+     with
      the spoken triggers.
 
    **Visibility** — `CommandChips(visible = …)` from MainActivity:

@@ -332,6 +332,13 @@ fun LisaScreen(
         }
     }
 
+    // Reads a trigger phrase aloud in the target-language voice -- tapping
+    // a command chip or an instruction step. Drop a trailing "?" so TTS
+    // doesn't over-emphasise it.
+    fun speakTriggerPhrase(phrase: String) {
+        speaker?.speak(phrase.trimEnd('?', ' '))
+    }
+
     // Always-current handles onto onSend()/speakNextSuggestion() for Lisa
     // Assistant's callbacks below. SpeechAssistant is constructed once (via
     // `remember`) and holds onto whatever lambdas it's given at that first
@@ -655,6 +662,8 @@ fun LisaScreen(
             spokenLanguage = targetLanguage.displayName,
             translateTriggerPhrase = translateTriggerPhrase,
             nextSuggestionTriggerPhrase = nextSuggestionTriggerPhrase,
+            onSpeakTranslate = { speakTriggerPhrase(translateTriggerPhrase) },
+            onSpeakNext = { speakTriggerPhrase(nextSuggestionTriggerPhrase) },
             showNextSuggestionStep = relatedPhrasesSupported,
         )
 
@@ -670,6 +679,8 @@ fun LisaScreen(
             translateCaption = "how to say",
             nextPhrase = nextSuggestionTriggerPhrase,
             nextCaption = "what else",
+            onSpeakTranslate = { speakTriggerPhrase(translateTriggerPhrase) },
+            onSpeakNext = { speakTriggerPhrase(nextSuggestionTriggerPhrase) },
             showNextCommand = relatedPhrasesSupported,
         )
 

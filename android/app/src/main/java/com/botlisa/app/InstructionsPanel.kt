@@ -50,6 +50,8 @@ fun InstructionsPanel(
     spokenLanguage: String,
     translateTriggerPhrase: String,
     nextSuggestionTriggerPhrase: String,
+    onSpeakTranslate: () -> Unit,
+    onSpeakNext: () -> Unit,
     modifier: Modifier = Modifier,
     // Step 3 (next-suggestion) only applies where suggestions exist -- Russian.
     showNextSuggestionStep: Boolean = true,
@@ -114,6 +116,7 @@ fun InstructionsPanel(
                             }
                             append(", pause and wait for the beep, then say the English word.")
                         },
+                        onClick = onSpeakTranslate,
                     )
                     if (showNextSuggestionStep) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -128,6 +131,7 @@ fun InstructionsPanel(
                                     append(nextSuggestionTriggerPhrase)
                                 }
                             },
+                            onClick = onSpeakNext,
                         )
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -164,8 +168,14 @@ private fun Step(
     iconColor: Color,
     heading: String,
     body: AnnotatedString,
+    onClick: (() -> Unit)? = null,
 ) {
-    Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
         Icon(icon, null, tint = iconColor, modifier = Modifier.padding(top = 2.dp))
         Column(modifier = Modifier.padding(start = 14.dp)) {
             Text(
