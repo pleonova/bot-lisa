@@ -44,11 +44,13 @@ import java.io.IOException
  * Single-screen caregiver-assist front end for bot-lisa.
  *
  * One text box, one behavior, auto-detected on the backend:
- * - Type/dictate an English word or phrase -> get its baby-register Russian
- *   translation (curated phrase library first, LLM fallback if nothing
- *   matches).
- * - Type/dictate a Russian phrase -> get related phrases from the library to
- *   expand your own active vocabulary around it.
+ * - Type/dictate an English word or phrase -> get its baby-register
+ *   translation into the selected target language (Russian by default;
+ *   curated phrase library first, on-device/LLM fallback otherwise).
+ * - Type/dictate a Russian phrase -> get related phrases from the library.
+ *   This "expand" mode is Russian-only for now (curated content + the
+ *   backend's Cyrillic-based mode detection); for any other target language
+ *   the next-suggestion command and its trigger are hidden.
  *
  * Networking config lives in ApiClient.kt / ServerConfig.kt. Server URL
  * defaults to http://10.0.2.2:8002 (orchestration-service, where /assist
@@ -59,15 +61,15 @@ import java.io.IOException
  * default does not).
  *
  * "Lisa Assistant" (below) is the hands-free mode: tap to start continuous
- * listening in Russian. Two independently editable trigger phrases (Settings
- * -> "Trigger phrase (translate)" / "Trigger phrase (next suggestion)")
- * drive it:
- *   - say the translate trigger ("как сказать" by default), pause, then an
- *     English word -- that word is sent to /assist as translate-mode.
- *   - say the next-suggestion trigger ("что ещё" by default) to have the
- *     app read the next related/suggested phrase from the most recent
- *     lookup aloud; say it again to hear the next one in that list.
- *   - anything else defaults to a normal Russian utterance, sent to
+ * listening in the target language (Russian by default). Two independently
+ * editable, per-language trigger phrases (Settings -> "Trigger phrase
+ * (translate)" / "Trigger phrase (next suggestion)") drive it:
+ *   - say the translate trigger (Russian "как сказать?" by default), pause,
+ *     then an English word -- that word is sent to /assist as translate-mode.
+ *   - say the next-suggestion trigger (Russian "что ещё?"; Russian target
+ *     only) to have the app read the next related/suggested phrase from the
+ *     most recent lookup aloud; say it again to hear the next in that list.
+ *   - anything else defaults to a normal target-language utterance, sent to
  *     /assist as expand-mode, same as typing it in.
  * See SpeechAssistant.kt for the listening state machine and
  * TriggerPhraseDetector.kt for the fuzzy phrase match -- both are ports of
@@ -165,29 +167,35 @@ fun LisaScreen(
     // used (spoken trigger), back on the next new input.
     var commandsDismissed by remember { mutableStateOf(false) }
 
-    // Target language for translation + spoken output -- NOT the
-    // related-phrases/expand mode, which stays Russian-only regardless. See
-    // LanguageConfig.kt for why.
+    // Target language: drives translation, the spoken voice, the hands-free
+    // STT locale, and the trigger phrases. Everything downstream reads from
+    // this so switching language updates the whole screen.
     var targetLanguage by remember { mutableStateOf(LanguageConfig.getTargetLanguage(context)) }
     var languageMenuExpanded by remember { mutableStateOf(false) }
 
-    // Lisa Assistant's two trigger phrases -- editable here, persisted via
-    // TriggerPhraseConfig.kt (same SharedPreferences pattern as the target
-    // language and server settings above). Only Russian has a listening
-    // mode wired up today, so this edits those two entries.
-    var translateTriggerPhrase by remember {
-        mutableStateOf(TriggerPhraseConfig.getTranslateTriggerPhrase(context, SupportedLanguages.RUSSIAN.code))
+    // Related-phrase / "next suggestion" support exists only for Russian
+    // (curated library + backend expand-mode detection). For any other
+    // target language, that command + its trigger + its instruction step are
+    // hidden until the backend can serve suggestions in that language.
+    val relatedPhrasesSupported = targetLanguage.code == SupportedLanguages.RUSSIAN.code
+
+    // Lisa Assistant's two trigger phrases -- editable in Settings, persisted
+    // per target-language via TriggerPhraseConfig.kt. Keyed on
+    // `targetLanguage` so switching language swaps in that language's phrases
+    // (Hindi "कैसे कहें?" / "और क्या?" by default).
+    var translateTriggerPhrase by remember(targetLanguage) {
+        mutableStateOf(TriggerPhraseConfig.getTranslateTriggerPhrase(context, targetLanguage.code))
     }
     fun onTranslateTriggerPhraseChange(newPhrase: String) {
         translateTriggerPhrase = newPhrase
-        TriggerPhraseConfig.setTranslateTriggerPhrase(context, SupportedLanguages.RUSSIAN.code, newPhrase)
+        TriggerPhraseConfig.setTranslateTriggerPhrase(context, targetLanguage.code, newPhrase)
     }
-    var nextSuggestionTriggerPhrase by remember {
-        mutableStateOf(TriggerPhraseConfig.getNextSuggestionTriggerPhrase(context, SupportedLanguages.RUSSIAN.code))
+    var nextSuggestionTriggerPhrase by remember(targetLanguage) {
+        mutableStateOf(TriggerPhraseConfig.getNextSuggestionTriggerPhrase(context, targetLanguage.code))
     }
     fun onNextSuggestionTriggerPhraseChange(newPhrase: String) {
         nextSuggestionTriggerPhrase = newPhrase
-        TriggerPhraseConfig.setNextSuggestionTriggerPhrase(context, SupportedLanguages.RUSSIAN.code, newPhrase)
+        TriggerPhraseConfig.setNextSuggestionTriggerPhrase(context, targetLanguage.code, newPhrase)
     }
 
     // TTS playback state. Drives the speaker-icon pulse in the result card,
@@ -196,7 +204,7 @@ fun LisaScreen(
     var translationSpeaking by remember { mutableStateOf(false) }
     var relatedSpeaking by remember { mutableStateOf(false) }
     // Which related-phrase row is currently being read (null = none). Cleared
-    // by russianSpeaker's onSpeakingChanged when playback ends.
+    // by phraseSpeaker's onSpeakingChanged when playback ends.
     var speakingIndex by remember { mutableStateOf<Int?>(null) }
 
     // Speaks translation results aloud -- see TranslationSpeaker.kt. Rebuilt
@@ -214,14 +222,12 @@ fun LisaScreen(
         onDispose { current.shutdown() }
     }
 
-    // A second, Russian-locale-fixed speaker for reading related/suggested
-    // phrases aloud (the next-suggestion trigger, below). Related phrases
-    // always come from the Russian curated library regardless of the
-    // target-language setting above -- same reason related-phrase lookup
-    // itself stays Russian-only, see LanguageConfig.kt -- so this can't
-    // reuse `speaker`, which follows the target language and would
-    // mispronounce Russian text through e.g. a Hindi voice.
-    var russianSpeaker by remember { mutableStateOf<TranslationSpeaker?>(null) }
+    // Speaker for reading related/suggested phrases aloud. Fixed to the
+    // Russian locale: related-phrase content only exists in Russian on the
+    // backend today, and the next-suggestion command is hidden for other
+    // target languages (see relatedPhrasesSupported). When a non-Russian
+    // curated set exists, switch this to targetLanguage.ttsLocale.
+    var phraseSpeaker by remember { mutableStateOf<TranslationSpeaker?>(null) }
     DisposableEffect(Unit) {
         val current = TranslationSpeaker(
             context,
@@ -231,7 +237,7 @@ fun LisaScreen(
                 if (!speaking) speakingIndex = null
             },
         )
-        russianSpeaker = current
+        phraseSpeaker = current
         onDispose { current.shutdown() }
     }
 
@@ -305,25 +311,22 @@ fun LisaScreen(
     // request.
     fun speakNextSuggestion() {
         val related = result?.related.orEmpty()
-        if (related.isEmpty()) {
-            russianSpeaker?.speak("Пока нет предложений.")
-            return
-        }
+        if (related.isEmpty()) return
         val index = suggestionIndex % related.size
         // Only claim the row / advance if TTS actually started, so a
         // not-ready engine doesn't leave the mic muted or a row stuck lit.
-        if (russianSpeaker?.speak(related[index].ru) == true) {
+        if (phraseSpeaker?.speak(related[index].ru) == true) {
             speakingIndex = index
             suggestionIndex = index + 1
         }
     }
 
     // Reads one specific related phrase aloud -- the trailing speaker button
-    // on a result row. Sets suggestionIndex so a following "что ещё?"
-    // continues from the next one.
+    // on a result row. Sets suggestionIndex so a following next-suggestion
+    // trigger continues from the next one.
     fun speakRelated(index: Int) {
         val phrase = result?.related?.getOrNull(index) ?: return
-        if (russianSpeaker?.speak(phrase.ru) == true) {
+        if (phraseSpeaker?.speak(phrase.ru) == true) {
             speakingIndex = index
             suggestionIndex = index + 1
         }
@@ -378,13 +381,13 @@ fun LisaScreen(
     val assistant = remember {
         SpeechAssistant(
             context = context,
-            defaultLanguageCode = SupportedLanguages.RUSSIAN.code,
+            getDefaultLanguageCode = { targetLanguage.code },
             translateLanguageCode = "en-US",
             getTranslateTriggerPhrase = {
-                TriggerPhraseConfig.getTranslateTriggerPhrase(context, SupportedLanguages.RUSSIAN.code)
+                TriggerPhraseConfig.getTranslateTriggerPhrase(context, targetLanguage.code)
             },
             getNextSuggestionTriggerPhrase = {
-                TriggerPhraseConfig.getNextSuggestionTriggerPhrase(context, SupportedLanguages.RUSSIAN.code)
+                TriggerPhraseConfig.getNextSuggestionTriggerPhrase(context, targetLanguage.code)
             },
             onUtterance = { text, _ -> handleAssistantUtterance.value(text) },
             onNextSuggestionRequested = { handleNextSuggestionRequest.value() },
@@ -535,7 +538,7 @@ fun LisaScreen(
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Target language") },
-                    supportingText = { Text("What English translates into, and the voice that reads it back. Related-phrase lookup stays Russian-only for now.") },
+                    supportingText = { Text("What English translates into, the voice that reads it back, and what Lisa Assistant listens for. Related-phrase suggestions still come from the Russian library for now.") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = languageMenuExpanded) },
                     modifier = Modifier
                         .menuAnchor()
@@ -576,18 +579,20 @@ fun LisaScreen(
                 value = translateTriggerPhrase,
                 onValueChange = { onTranslateTriggerPhraseChange(it) },
                 label = { Text("Trigger phrase (translate)") },
-                supportingText = { Text("Say this, pause, then an English word, to have Lisa Assistant translate it instead of treating it as Russian.") },
+                supportingText = { Text("Say this, pause, then an English word, to have Lisa Assistant translate it instead of treating it as ${targetLanguage.displayName}.") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
-            OutlinedTextField(
-                value = nextSuggestionTriggerPhrase,
-                onValueChange = { onNextSuggestionTriggerPhraseChange(it) },
-                label = { Text("Trigger phrase (next suggestion)") },
-                supportingText = { Text("Say this to have Lisa Assistant read the next suggested phrase aloud. Say it again for the next one in the list.") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
+            if (relatedPhrasesSupported) {
+                OutlinedTextField(
+                    value = nextSuggestionTriggerPhrase,
+                    onValueChange = { onNextSuggestionTriggerPhraseChange(it) },
+                    label = { Text("Trigger phrase (next suggestion)") },
+                    supportingText = { Text("Say this to have Lisa Assistant read the next suggested phrase aloud. Say it again for the next one in the list.") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+            }
             OutlinedTextField(
                 value = serverUrl,
                 onValueChange = { onServerUrlChange(it) },
@@ -621,7 +626,7 @@ fun LisaScreen(
                 input = it
                 commandsDismissed = false // caregiver typing -> chips come back
             },
-            placeholder = { Text("Enter English or Russian Text") },
+            placeholder = { Text("Enter English or ${targetLanguage.displayName} Text") },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             singleLine = true,
             shape = RoundedCornerShape(28.dp),
@@ -647,8 +652,10 @@ fun LisaScreen(
         InstructionsPanel(
             expanded = showInstructions,
             onToggle = { showInstructions = !showInstructions },
+            spokenLanguage = targetLanguage.displayName,
             translateTriggerPhrase = translateTriggerPhrase,
             nextSuggestionTriggerPhrase = nextSuggestionTriggerPhrase,
+            showNextSuggestionStep = relatedPhrasesSupported,
         )
 
         CommandChips(
@@ -663,6 +670,7 @@ fun LisaScreen(
             translateCaption = "how to say",
             nextPhrase = nextSuggestionTriggerPhrase,
             nextCaption = "what else",
+            showNextCommand = relatedPhrasesSupported,
         )
 
         errorText?.let {

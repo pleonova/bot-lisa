@@ -244,33 +244,32 @@ Still one scrolling `Column`, tighter spacing to match the mock.
      is blank**. As soon as the caregiver types, they hide (Search does the
      job). They reappear when the field is cleared, e.g. via the fox reset.
 
-   **Labels — both lines come from Settings and follow the target language,
-   nothing hard‑coded:**
+   **Labels — follow the target language (*done*):**
    - Bold line: the stored `translateTriggerPhrase` /
-     `nextSuggestionTriggerPhrase` for **`targetLanguage.code`** (the fields
-     the caregiver edits in §3.8, persisted by
-     [`TriggerPhraseConfig.kt`](app/src/main/java/com/botlisa/app/TriggerPhraseConfig.kt),
-     which is already keyed by language). `MainActivity` today passes
-     `SupportedLanguages.RUSSIAN.code` to these getters/setters
-     ([L118‑L131](app/src/main/java/com/botlisa/app/MainActivity.kt#L118-L131))
-     — switch that to `targetLanguage.code` so the phrase shown (and edited)
-     is the one for the selected language. Keep them as `remember`ed state
-     hoisted in `LisaScreen`, re‑read when `targetLanguage` changes, so the
-     chips re‑render live. Display‑format: capitalise first letter + append
-     "?"; keep the raw string for matching.
-   - Italic caption: an **on‑device translation of that same phrase from
-     `targetLanguage` → English** (see §4), re‑translated whenever the
-     caregiver edits the phrase or switches language. While the translation
-     is pending (first‑use model download) or if it fails, fall back to a
-     generic "how to say" / "what else". The caption runs through the **same
-     `formatCommand`** (leading capital + "?") as the bold phrase, so
-     "how to say" renders as *How to say?* — matching the Russian button.
+     `nextSuggestionTriggerPhrase` for `targetLanguage.code`. `MainActivity`
+     holds them as `remember(targetLanguage)` state and reads/writes
+     `TriggerPhraseConfig` with `targetLanguage.code`, so switching language
+     swaps the phrases. `formatCommand` capitalises + appends "?".
+   - Italic caption: still the static "how to say" / "what else" fallback —
+     the `targetLanguage`→English on‑device translation (§4) is not wired
+     yet.
 
-   > Note: Lisa Assistant's continuous‑listening STT locale and the
-   > related‑phrase/expand mode are still Russian‑only in the backend (see
-   > the README "Known limitations") — generalising *those* is the separate
-   > larger change. This item only makes the **chip's displayed phrase +
-   > caption** follow `targetLanguage`, which needs no backend work.
+   > **Language is a fully‑supported *option*, Russian stays default.**
+   > Selecting a language in Settings updates the whole screen: the
+   > translation target + voice, the search placeholder ("English or
+   > «lang»"), the hands‑free STT locale
+   > (`SpeechAssistant.getDefaultLanguageCode = { targetLanguage.code }`),
+   > and the trigger phrases (`remember(targetLanguage)` +
+   > `TriggerPhraseConfig` keyed by `targetLanguage.code`; Hindi translate
+   > default `कैसे कहें?`).
+   >
+   > **Next‑suggestion ("Что ещё?") is Russian‑only** — the curated library
+   > and `_has_cyrillic` expand detection are Russian. So for any non‑Russian
+   > target (`relatedPhrasesSupported = targetLanguage.code == RUSSIAN.code`
+   > is false) the orange command chip, its instruction step, *and* its
+   > Settings trigger field are all **hidden**. `phraseSpeaker` stays
+   > Russian‑locale. Un‑gate all of it once the backend serves suggestions
+   > per language.
 7. **Result card** — rework
    [L501‑L546](app/src/main/java/com/botlisa/app/MainActivity.kt#L501-L546):
    - *Done already:* `onSend()` clears `result` at the start, so the old

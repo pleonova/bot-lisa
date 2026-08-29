@@ -47,9 +47,12 @@ import androidx.compose.ui.unit.dp
 fun InstructionsPanel(
     expanded: Boolean,
     onToggle: () -> Unit,
+    spokenLanguage: String,
     translateTriggerPhrase: String,
     nextSuggestionTriggerPhrase: String,
     modifier: Modifier = Modifier,
+    // Step 3 (next-suggestion) only applies where suggestions exist -- Russian.
+    showNextSuggestionStep: Boolean = true,
 ) {
     val chevronRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
@@ -96,7 +99,7 @@ fun InstructionsPanel(
                         icon = Icons.Filled.Mic,
                         iconColor = MaterialTheme.colorScheme.primary,
                         heading = "Tap the mic",
-                        body = AnnotatedString("Then speak Russian normally."),
+                        body = AnnotatedString("Then speak $spokenLanguage normally."),
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Step(
@@ -112,19 +115,21 @@ fun InstructionsPanel(
                             append(", pause and wait for the beep, then say the English word.")
                         },
                     )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Step(
-                        number = 3,
-                        icon = Icons.Filled.Lightbulb,
-                        iconColor = orange,
-                        heading = "To hear the next suggestion",
-                        body = buildAnnotatedString {
-                            append("Say ")
-                            withStyle(SpanStyle(color = orange, fontWeight = FontWeight.Bold)) {
-                                append(nextSuggestionTriggerPhrase)
-                            }
-                        },
-                    )
+                    if (showNextSuggestionStep) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        Step(
+                            number = 3,
+                            icon = Icons.Filled.Lightbulb,
+                            iconColor = orange,
+                            heading = "To hear the next suggestion",
+                            body = buildAnnotatedString {
+                                append("Say ")
+                                withStyle(SpanStyle(color = orange, fontWeight = FontWeight.Bold)) {
+                                    append(nextSuggestionTriggerPhrase)
+                                }
+                            },
+                        )
+                    }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,

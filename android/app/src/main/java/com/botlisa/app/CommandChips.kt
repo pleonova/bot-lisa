@@ -41,26 +41,35 @@ fun CommandChips(
     nextPhrase: String,
     nextCaption: String,
     modifier: Modifier = Modifier,
+    // The next-suggestion command only works for Russian; hidden otherwise
+    // (see relatedPhrasesSupported in MainActivity).
+    showNextCommand: Boolean = true,
 ) {
     AnimatedVisibility(visible = visible, modifier = modifier) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = if (showNextCommand) {
+                Arrangement.spacedBy(12.dp)
+            } else {
+                Arrangement.Center
+            },
         ) {
             CommandItem(
                 color = MaterialTheme.colorScheme.tertiary,
                 icon = Icons.AutoMirrored.Filled.Chat,
                 phrase = translatePhrase,
                 caption = translateCaption,
-                modifier = Modifier.weight(1f),
+                modifier = if (showNextCommand) Modifier.weight(1f) else Modifier,
             )
-            CommandItem(
-                color = MaterialTheme.colorScheme.secondary,
-                icon = Icons.Filled.Lightbulb,
-                phrase = nextPhrase,
-                caption = nextCaption,
-                modifier = Modifier.weight(1f),
-            )
+            if (showNextCommand) {
+                CommandItem(
+                    color = MaterialTheme.colorScheme.secondary,
+                    icon = Icons.Filled.Lightbulb,
+                    phrase = nextPhrase,
+                    caption = nextCaption,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }
@@ -88,7 +97,7 @@ private fun CommandItem(
         )
         Text(
             // Same capitalisation + "?" treatment as the phrase above it, so
-            // the English caption mirrors the Russian button.
+            // the English caption mirrors the trigger-phrase line above it.
             formatCommand(caption),
             style = MaterialTheme.typography.labelSmall,
             fontStyle = FontStyle.Italic,

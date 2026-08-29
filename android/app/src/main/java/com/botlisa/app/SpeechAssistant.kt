@@ -16,8 +16,9 @@ import android.speech.SpeechRecognizer
  * ID.
  *
  * States:
- *   DEFAULT      -- listen in [defaultLanguageCode] (Russian). Every
- *                   transcript is checked against two independently
+ *   DEFAULT      -- listen in [getDefaultLanguageCode] (the target
+ *                   language, Hindi by default). Every transcript is
+ *                   checked against two independently
  *                   configured trigger phrases (see TriggerPhraseConfig.kt)
  *                   before being treated as an ordinary utterance:
  *                     - matches the *translate* trigger -> switch to
@@ -55,7 +56,11 @@ import android.speech.SpeechRecognizer
  */
 class SpeechAssistant(
     private val context: Context,
-    private val defaultLanguageCode: String,
+    /**
+     * BCP-47 locale to listen in for ordinary utterances -- read fresh each
+     * time so it tracks the selected target language (Hindi by default).
+     */
+    private val getDefaultLanguageCode: () -> String,
     private val translateLanguageCode: String,
     private val getTranslateTriggerPhrase: () -> String,
     private val getNextSuggestionTriggerPhrase: () -> String,
@@ -100,7 +105,7 @@ class SpeechAssistant(
             setRecognitionListener(listener)
         }
         state = State.LISTENING_DEFAULT
-        listenOnce(defaultLanguageCode)
+        listenOnce(getDefaultLanguageCode())
     }
 
     fun stop() {
@@ -125,7 +130,7 @@ class SpeechAssistant(
 
     private fun rearm() {
         if (stoppedByUser) return
-        val languageCode = if (state == State.LISTENING_FOR_WORD) translateLanguageCode else defaultLanguageCode
+        val languageCode = if (state == State.LISTENING_FOR_WORD) translateLanguageCode else getDefaultLanguageCode()
         listenOnce(languageCode)
     }
 

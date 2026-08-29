@@ -5,12 +5,14 @@ import android.content.Context
 /**
  * Trigger phrases that drive Lisa Assistant's hands-free listening mode
  * (see SpeechAssistant.kt). Two independent, separately-editable phrases,
- * both checked against every default-language (Russian) utterance:
+ * both checked against every default-language utterance (the listening
+ * language follows the selected target language -- Russian by default):
  *
- *   - **Translate trigger** (default "как сказать?") -- say this, pause,
- *     then an English word, and that next utterance is translated instead
- *     of treated as Russian. See SpeechAssistant.State.LISTENING_FOR_WORD.
- *   - **Next-suggestion trigger** (default "что ещё?") -- say this to have
+ *   - **Translate trigger** (Russian default "как сказать?", Hindi
+ *     "कैसे कहें?") -- say this, pause, then an English word, and that next
+ *     utterance is translated instead of treated as the target language.
+ *     See SpeechAssistant.State.LISTENING_FOR_WORD.
+ *   - **Next-suggestion trigger** (Russian default "что ещё?") -- say this to have
  *     the app read the next related/suggested phrase from the most recent
  *     lookup aloud. Saying it again reads the *next* one in that list,
  *     cycling back to the start once it runs out. Doesn't change listening
@@ -34,14 +36,24 @@ object TriggerPhraseConfig {
     private const val TRANSLATE_KEY_PREFIX = "trigger_phrase_"
     private const val NEXT_SUGGESTION_KEY_PREFIX = "next_suggestion_trigger_phrase_"
 
-    // One entry per default-listening-language code. Add an entry to both
-    // maps here when a second default-language listening mode exists --
-    // not needed yet, only Russian is wired into Lisa Assistant today.
+    // One entry per selectable target-language code. Add an entry to both
+    // maps when Lisa Assistant should listen in another language by default;
+    // the getters fall back to "" for any code without an entry.
     // The "?" is cosmetic -- TriggerPhraseDetector.normalize() strips
     // punctuation before matching -- but it keeps the phrase shown in
-    // Settings / the instructions / the reminder chips consistent.
+    // Settings / the instructions / the reminder chips consistent. Which
+    // entry is used follows the selected target language.
+    //
+    // The *translate* trigger works for any target language; add an entry
+    // per language you want a sensible default for (others fall back to "",
+    // i.e. no trigger until the caregiver sets one in Settings).
+    //
+    // The *next-suggestion* trigger only makes sense where related-phrase
+    // suggestions exist -- Russian only today -- so it deliberately has just
+    // the one entry.
     val DEFAULT_TRANSLATE_TRIGGER_PHRASES = mapOf(
         SupportedLanguages.RUSSIAN.code to "как сказать?",
+        SupportedLanguages.HINDI.code to "कैसे कहें?",
     )
     val DEFAULT_NEXT_SUGGESTION_TRIGGER_PHRASES = mapOf(
         SupportedLanguages.RUSSIAN.code to "что ещё?",
