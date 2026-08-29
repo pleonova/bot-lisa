@@ -1,8 +1,7 @@
 package com.botlisa.app
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -82,7 +81,6 @@ fun CommandChips(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CommandItem(
     color: Color,
@@ -93,15 +91,10 @@ private fun CommandItem(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        // Press-and-hold to hear the phrase; a plain tap does nothing (these
-        // are reminders, not lookup buttons).
+        // Tap to hear the phrase spoken.
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .combinedClickable(
-                onClick = {},
-                onLongClick = onSpeak,
-                onLongClickLabel = "Hear it spoken",
-            )
+            .clickable(onClick = onSpeak)
             .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),

@@ -643,6 +643,29 @@ fun LisaScreen(
             },
             placeholder = { Text("Enter English or ${targetLanguage.displayName} Text") },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            trailingIcon = {
+                // Reads aloud: the translation if there is one, otherwise
+                // whatever's in the field, in the target-language voice.
+                IconButton(onClick = {
+                    val r = result
+                    val text = if (r?.mode == "translate" && r.translation != null) {
+                        r.translation.ru
+                    } else {
+                        input
+                    }
+                    speaker?.speak(text)
+                }) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.VolumeUp,
+                        contentDescription = "Read aloud",
+                        tint = if (translationSpeaking) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+            },
             singleLine = true,
             shape = RoundedCornerShape(28.dp),
             textStyle = if (assistantOwnsField) {

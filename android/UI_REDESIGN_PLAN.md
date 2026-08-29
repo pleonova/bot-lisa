@@ -154,11 +154,13 @@ Still one scrolling `Column`, tighter spacing to match the mock.
 4. **Shared input / transcript field** — one rounded search field, directly
    under the mic button, that serves **both** roles:
    - *Type‑to‑search:* `leadingIcon = Icons.Filled.Search`, placeholder
-     "Enter English or Russian Text",
+     "Enter English or «lang» Text",
      `KeyboardOptions(imeAction = ImeAction.Search)`,
      `keyboardActions = KeyboardActions(onSearch = { onSend() })`. Drops the
-     old mic trailing icon and the separate "Look up" `Button` at
-     [L470‑L491](app/src/main/java/com/botlisa/app/MainActivity.kt#L470-L491).
+     old separate "Look up" `Button`.
+   - *`trailingIcon` — read aloud:* a `VolumeUp` `IconButton` inside the
+     field. Speaks the current translation if there is one, otherwise the
+     field text, in the target‑language voice (`speaker`).
    - *Voice transcript:* the recognised text is written into the **same**
      `input` state — this already happens in `handleAssistantUtterance`
      ([L285‑L288](app/src/main/java/com/botlisa/app/MainActivity.kt#L285-L288));
@@ -225,12 +227,11 @@ Still one scrolling `Column`, tighter spacing to match the mock.
      punctuation included — see §7 / defaults now carry "?").
 6. **Command chips** — two reminder items, identical in every mode: a bare
    accent icon (no disc, no ring) + the coloured phrase in bold + the italic
-   English caption below. **Press‑and‑hold** one (`combinedClickable`,
-   `onLongClick`) to hear its phrase spoken in the target‑language voice
-   (`onSpeakTranslate` / `onSpeakNext` → `speakTriggerPhrase`, which drops a
-   trailing "?"); a plain tap does nothing — these are reminders, not lookup
-   buttons. (The instruction‑panel steps, §3.5, keep plain‑tap to speak —
-   you deliberately opened that panel.)
+   English caption below. **Tap** one to hear its phrase spoken in the
+   target‑language voice (`onSpeakTranslate` / `onSpeakNext` →
+   `speakTriggerPhrase`, which drops a trailing "?"). They don't trigger a
+   lookup — a mnemonic you can also hear. The instruction‑panel steps (§3.5)
+   are tap‑to‑speak too.
    - Icons: teal speech‑bubble (`Icons.AutoMirrored.Filled.Chat`) for
      "Как сказать?", orange lightbulb (`Icons.Filled.Lightbulb`) for
      "Что ещё?".
@@ -288,8 +289,8 @@ Still one scrolling `Column`, tighter spacing to match the mock.
    > translate‑mode → auto‑spoken result → mic hears its own TTS → loop
    > (the "Spanish loops the results" bug). Un‑gate all of it once the
    > backend serves suggestions per language.
-7. **Result card** — rework
-   [L501‑L546](app/src/main/java/com/botlisa/app/MainActivity.kt#L501-L546):
+7. **Result card** —
+   - *Position:* at the bottom of the screen, after the command chips.
    - *Done already:* `onSend()` clears `result` at the start, so the old
      card disappears the moment a new lookup (typed or spoken) begins instead
      of lingering under a stale answer. And the "Related phrases:" heading
