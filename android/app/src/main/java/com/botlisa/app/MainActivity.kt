@@ -22,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -116,6 +117,10 @@ fun LisaScreen() {
     // its coroutine (scoped to this composition) is gone either way, so persisting `true`
     // would leave the button stuck disabled forever with nothing left to ever set it false.
     var input by rememberSaveable { mutableStateOf("") }
+    // True while the caregiver has the shared field focused for typing -- the
+    // live transcript must not overwrite text they're mid-edit on. See
+    // handleTranscript below.
+    var inputFocused by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var errorText by rememberSaveable { mutableStateOf<String?>(null) }
     var result by rememberSaveable { mutableStateOf<AssistResult?>(null) }
@@ -285,7 +290,9 @@ fun LisaScreen() {
     // caregiver is typing. Covers partials and the command phrases too
     // (those never reach onUtterance).
     val handleTranscript = rememberUpdatedState<(String) -> Unit> { text ->
-        if (assistantState != SpeechAssistant.State.IDLE && text.isNotBlank()) input = text
+        if (assistantState != SpeechAssistant.State.IDLE && !inputFocused && text.isNotBlank()) {
+            input = text
+        }
     }
 
     val assistant = remember {
@@ -485,7 +492,9 @@ fun LisaScreen() {
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             singleLine = true,
             shape = RoundedCornerShape(28.dp),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { inputFocused = it.isFocused },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { onSend() }),
         )

@@ -169,6 +169,36 @@ Still one scrolling `Column`, tighter spacing to match the mock.
      state.
    No separate pill composable and no `lastTranscript` state — `input` is the
    single source of truth for both typed and spoken text.
+
+   **Field ownership (typing vs. transcript).** The field has one owner at a
+   time so the two writers never fight:
+   - *Hands-free OFF* → **caregiver** owns it: plain editable text box, the
+     transcript never touches it.
+   - *Hands-free ON, field not focused* → **assistant** owns it: shows the
+     live transcript; ideally rendered muted/italic so it reads as "being
+     heard", not "typed".
+   - *Hands-free ON, field focused / a key pressed* → ownership flips back to
+     **caregiver**; transcript writes are suppressed until focus is lost
+     (submit or tap away), then the assistant resumes.
+   - Never discard the transcript when the caregiver holds the field — show
+     it in the placeholder / a small secondary line so they can see the mic
+     is still working.
+
+   *Status:* the **focus guard** (the third bullet) is implemented — a
+   `inputFocused` flag from `Modifier.onFocusChanged` gates `handleTranscript`
+   alongside the existing `assistantState != IDLE` check. The muted-styling
+   and secondary-line refinements are deferred to Step 8 (polish).
+
+   **Grace period before auto-send (deferred — Step 7).** Today a final
+   utterance does `input = text; onSend()` **instantly**
+   ([`handleAssistantUtterance`](app/src/main/java/com/botlisa/app/MainActivity.kt)),
+   so a misheard word is searched with no chance to fix it. Ideal: the final
+   transcript lands in the field, shows a brief "searching in ~1.5 s — tap to
+   edit" state, then fires; tapping the field within that window cancels the
+   auto-send and hands the field to the caregiver. Needs a cancelable
+   coroutine/timer in `handleAssistantUtterance` plus a small countdown
+   affordance; grouped with Step 7 since it also touches the
+   utterance→result path.
 5. **Collapsible instructions** — a filled lavender pill `Surface`
    (`clickable`) with a leading sparkle icon (`Icons.Filled.AutoAwesome`),
    the label "Hands‑free mode instructions", and a trailing chevron
@@ -358,7 +388,8 @@ Each step leaves the app buildable.
 4. **Shared input / transcript field** — restyle as the rounded search box
    under the mic, IME submit, drop "Look up" + old mic icon; add the
    `onTranscript` callback so partials + command phrases flow into `input`
-   too (English gloss line deferred).
+   too, gated by `assistantState != IDLE` **and** the focus guard (§3.4).
+   English gloss line + muted styling + grace-period deferred (Steps 7–8).
 5. **Collapsible instructions** — new copy, bold commands.
 6. **Command chips** — `CommandChips.kt`: buttons in text mode
    (teal → `onSend()` translate, orange → `speakNextSuggestion()`),
@@ -366,9 +397,14 @@ Each step leaves the app buildable.
    `targetLanguage`→EN captions via the new `OnDeviceTranslator` reverse
    path (source language is `targetLanguage`, not hard‑coded Russian).
 7. **Result / recommendations rework** — speaker icons,
-   `UtteranceProgressListener`, currently‑speaking highlight + pulse.
+   `UtteranceProgressListener`, currently‑speaking highlight + pulse. Also
+   the **grace period before auto-send** (§3.4): cancelable timer in
+   `handleAssistantUtterance` + "searching in ~1.5 s — tap to edit"
+   affordance.
 8. **Polish** — spacing to match the mock, dark‑mode pass, optional
-   settings‑as‑dialog.
+   settings‑as‑dialog. Includes the §3.4 field-ownership visuals: muted
+   transcript styling while the assistant owns the field, and a secondary
+   line keeping the transcript visible when the caregiver has focus.
 
 Steps 1–7 are largely independent; 8 is the biggest single chunk.
 
@@ -427,11 +463,14 @@ Text(instructions, style = MaterialTheme.typography.bodySmall)
   first use; source is `targetLanguage`, not hard‑coded Russian). *Default:
   ship the field with raw transcript now, add the gloss caption line as a
   follow‑up.*
-- **One field for typed + spoken text** — *Decided: yes, one shared rounded
-  field under the mic (§3.4).* Remaining sub‑question: should an incoming
-  partial transcript overwrite text the caregiver is mid‑way through typing?
-  *Default: only overwrite while `assistantState != IDLE`; ignore
-  `onTranscript` when the field has focus for typing.*
+- **One field for typed + spoken text** — *Decided & partly built:* one
+  shared rounded field under the mic (§3.4). The **focus guard is done** —
+  `onTranscript` writes to `input` only while `assistantState != IDLE` **and**
+  the field is not focused for typing. Still open, per the ownership model in
+  §3.4: (a) muted/italic styling while the assistant owns the field, (b) a
+  secondary line so the transcript stays visible when the caregiver has
+  focus, (c) the grace-period-before-auto-send with tap-to-edit. (a)/(b) →
+  Step 8, (c) → Step 7.
 - **One‑shot dictation** — the wireframe drops the "Look up" button and the
   input's mic icon. *Default: keep typing as a fallback that submits on the
   keyboard's Search action; remove the standalone one‑shot `speechLauncher`
