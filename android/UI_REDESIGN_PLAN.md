@@ -168,9 +168,13 @@ Still one scrolling `Column`, tighter spacing to match the mock.
      results and the command phrases (`как сказать` / `что ещё?`) into it so
      it updates live while listening. After `onSend()` the text stays in the
      field (as today) until the next utterance or a manual edit.
-   - *English gloss:* optional italic caption line **beneath** the field
-     (not inside it), shown only when a gloss is available. Deferred — see
-     §8.
+   - *English gloss (done):* a small‑print italic line **beneath** the field
+     (`transcriptGloss`). A debounced `LaunchedEffect(input, assistantState,
+     targetLanguage)` runs `OnDeviceTranslator.translateToEnglish(input,
+     targetLanguage)` while `assistantState == LISTENING_DEFAULT` and the
+     field is non‑blank; `null` (no line) otherwise or on any failure
+     (model not downloaded / no wifi). Needs the reverse
+     `translatorFor(source, target)` path added to `OnDeviceTranslator`.
    - Style it as a pill (`shape = CircleShape`/large corner) so it reads as
      the wireframe's "transcript snippet" while listening and as a search box
      when idle. Keep `LinearProgressIndicator` under it for the loading
@@ -433,8 +437,9 @@ Each step leaves the app buildable.
    under the mic, IME submit, drop "Look up" + old mic icon; add the
    `onTranscript` callback so partials + command phrases flow into `input`
    too, gated by `assistantState != IDLE` **and** the focus guard (§3.4).
-   English gloss line + muted styling deferred (Step 8). (A grace period
-   before auto-send was tried in 7b and reverted — §3.4.)
+   Muted styling deferred (Step 8); English gloss line done (`transcriptGloss`
+   + `OnDeviceTranslator.translateToEnglish`). (A grace period before
+   auto-send was tried in 7b and reverted — §3.4.)
 5. **Collapsible instructions** — `InstructionsPanel` card: lavender header
    ("How hands-free mode works"), 3 numbered `Step`s with accent icons +
    dividers, `Settings`-icon footer; phrases verbatim from Settings in
@@ -491,12 +496,11 @@ bold. Defaults now carry the "?" (`TriggerPhraseConfig`).
 - **App label** — rename the on‑screen title to "Assistant Lisa" only, or
   also `app_name` (home‑screen label)? *Default: rename both; package stays
   `com.botlisa.app`.*
-- **English gloss under the shared field** ("Time to brush your teeth. What
-  else?") — showing it live needs on‑the‑fly `targetLanguage`→English
-  translation of the transcript (ML Kit can, per‑pair model download on
-  first use; source is `targetLanguage`, not hard‑coded Russian). *Default:
-  ship the field with raw transcript now, add the gloss caption line as a
-  follow‑up.*
+- **English gloss under the shared field** — *Done.* Small‑print italic
+  `targetLanguage`→English translation of the live transcript
+  (`transcriptGloss` + `OnDeviceTranslator.translateToEnglish`), shown only
+  while hands‑free is listening; silently absent if the reverse model isn't
+  downloaded.
 - **One field for typed + spoken text** — *Decided & partly built:* one
   shared rounded field under the mic (§3.4). The **focus guard is done** —
   `onTranscript` writes to `input` only while `assistantState != IDLE` **and**

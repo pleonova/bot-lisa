@@ -11,14 +11,18 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
- * On-device English -> [target language] fallback translation, used when
- * orchestration-service's /assist reports no trustworthy curated-library
- * match -- either no match at all (`source == "mock"`), or the target
- * language isn't Russian, in which case a "curated match" can't be trusted
- * anyway (the library only has Russian content) -- see MainActivity.kt's
- * onSend(). Runs entirely on-device via Google's ML Kit -- no API key, no
- * network call at translate time (after a one-time per-language model
- * download), no per-call cost.
+ * On-device Google ML Kit translation, both directions:
+ * - `translate` (English -> target language): the fallback used when
+ *   orchestration-service's /assist reports no trustworthy curated-library
+ *   match -- either no match at all (`source == "mock"`), or the target
+ *   language isn't Russian (the library only has Russian content) -- see
+ *   MainActivity.kt's onSend().
+ * - `translateToEnglish` (target language -> English): the small-print gloss
+ *   shown under the hands-free transcript.
+ *
+ * Runs entirely on-device -- no API key, no network call at translate time
+ * (after a one-time per-language, per-direction model download), no
+ * per-call cost.
  *
  * Deliberately NOT used as the primary translation path: it produces
  * grammatically correct but standard/textbook phrasing, not the warm,
@@ -33,11 +37,11 @@ object OnDeviceTranslator {
 
     private val translators = mutableMapOf<String, Translator>()
 
-    private fun translatorFor(mlKitLanguage: String): Translator =
-        translators.getOrPut(mlKitLanguage) {
+    private fun translatorFor(source: String, target: String): Translator =
+        translators.getOrPut("$source>$target") {
             val options = TranslatorOptions.Builder()
-                .setSourceLanguage(TranslateLanguage.ENGLISH)
-                .setTargetLanguage(mlKitLanguage)
+                .setSourceLanguage(source)
+                .setTargetLanguage(target)
                 .build()
             Translation.getClient(options)
         }
@@ -57,7 +61,19 @@ object OnDeviceTranslator {
      * this and showing a friendly message, see MainActivity.kt's onSend().
      */
     suspend fun translate(text: String, target: TargetLanguage): String {
-        val translator = translatorFor(target.mlKitLanguage)
+        val translator = translatorFor(TranslateLanguage.ENGLISH, target.mlKitLanguage)
+        translator.downloadModelIfNeeded(downloadConditions).await()
+        return translator.translate(text).await()
+    }
+
+    /**
+     * Reverse direction: translates [text] (assumed to be in [from]'s
+     * language) into English -- used for the small-print gloss under the
+     * transcript. Own one-time per-language model download, same conditions.
+     */
+    suspend fun translateToEnglish(text: String, from: TargetLanguage): String {
+        if (from.mlKitLanguage == TranslateLanguage.ENGLISH) return text
+        val translator = translatorFor(from.mlKitLanguage, TranslateLanguage.ENGLISH)
         translator.downloadModelIfNeeded(downloadConditions).await()
         return translator.translate(text).await()
     }

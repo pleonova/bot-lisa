@@ -37,6 +37,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.IOException
 
@@ -146,6 +147,10 @@ fun LisaScreen(
     // live transcript must not overwrite text they're mid-edit on. See
     // handleTranscript below.
     var inputFocused by remember { mutableStateOf(false) }
+    // Small-print English translation of the current transcript, shown under
+    // the field. Null unless hands-free is actively listening (see the
+    // LaunchedEffect further down).
+    var transcriptGloss by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var errorText by rememberSaveable { mutableStateOf<String?>(null) }
     var result by rememberSaveable { mutableStateOf<AssistResult?>(null) }
@@ -381,6 +386,22 @@ fun LisaScreen(
     // word is sitting in the field from a previous session.
     LaunchedEffect(assistantState) {
         commandsDismissed = assistantState == SpeechAssistant.State.LISTENING_FOR_WORD
+    }
+
+    // Small-print English gloss of the transcript. Only while hands-free is
+    // listening in the target language (not IDLE, not the English-word
+    // phase), and debounced so partials don't hammer the translator. Fails
+    // silently -- no gloss -- if the target->English model isn't available.
+    LaunchedEffect(input, assistantState, targetLanguage) {
+        val show = assistantState == SpeechAssistant.State.LISTENING_DEFAULT && input.isNotBlank()
+        if (!show) {
+            transcriptGloss = null
+            return@LaunchedEffect
+        }
+        delay(350)
+        transcriptGloss = runCatching {
+            OnDeviceTranslator.translateToEnglish(input, targetLanguage)
+        }.getOrNull()
     }
 
     // Live transcript from Lisa Assistant -> the shared input/search field.
@@ -682,6 +703,16 @@ fun LisaScreen(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { onSend() }),
         )
+
+        transcriptGloss?.let { gloss ->
+            Text(
+                gloss,
+                style = MaterialTheme.typography.bodySmall,
+                fontStyle = FontStyle.Italic,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 16.dp, top = 2.dp),
+            )
+        }
 
         if (isLoading) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
