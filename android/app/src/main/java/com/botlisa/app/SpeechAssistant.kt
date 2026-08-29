@@ -96,19 +96,22 @@ class SpeechAssistant(
 
     /**
      * Short beep telling the caregiver "switched to English -- say the word
-     * now", played when the translate trigger is recognised. The mic for the
-     * English word opens a beat later so the beep isn't transcribed.
+     * now", played the instant the translate trigger is recognised (from a
+     * *partial* result -- see onPartialResults -- so it lands close to
+     * conversational speed rather than waiting out the recogniser's
+     * end-of-speech timeout). The English mic opens a short beat later so
+     * the beep itself isn't transcribed.
      */
     private fun beepThenListenForWord() {
         runCatching {
             val t = tone ?: ToneGenerator(AudioManager.STREAM_MUSIC, 80).also { tone = it }
-            t.startTone(ToneGenerator.TONE_PROP_BEEP, 150)
+            t.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
         }
         mainHandler.postDelayed({
             if (!stoppedByUser && state == State.LISTENING_FOR_WORD) {
                 listenOnce(translateLanguageCode)
             }
-        }, 250)
+        }, 120)
     }
 
     var state: State = State.IDLE
@@ -146,9 +149,15 @@ class SpeechAssistant(
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageCode)
-            // Partials feed onTranscript (live "what's being heard" UI). The
-            // state machine still only acts on the final result.
+            // Partials feed onTranscript, and the translate trigger is acted
+            // on straight from a partial (onPartialResults).
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            // Finalise soon after the speaker stops so the whole loop stays
+            // snappy. (Hints -- honoured by the modern Google recogniser,
+            // harmless where ignored.)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 600L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 400L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 300L)
         }
         runCatching { recognizer?.startListening(intent) }
             .onFailure { onError("Couldn't start listening: ${it.message}") }
@@ -180,6 +189,10 @@ class SpeechAssistant(
                 }
             }
             State.LISTENING_FOR_WORD -> {
+                // A late final of the trigger phrase itself -- we already
+                // fast-switched on a partial and the English mic is opening
+                // via beepThenListenForWord(). Ignore it.
+                if (TriggerPhraseDetector.matches(transcript, getTranslateTriggerPhrase())) return
                 if (transcript.isNotBlank()) onUtterance(transcript, State.LISTENING_FOR_WORD)
                 state = State.LISTENING_DEFAULT
                 rearm()
@@ -210,7 +223,18 @@ class SpeechAssistant(
                 ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 ?.firstOrNull()
                 .orEmpty()
-            if (partial.isNotBlank()) onTranscript(partial)
+            if (partial.isBlank()) return
+            onTranscript(partial)
+            // Fast path: switch to English-word mode + beep the moment a
+            // partial already contains the translate trigger, instead of
+            // waiting for the final result.
+            if (!stoppedByUser && state == State.LISTENING_DEFAULT &&
+                TriggerPhraseDetector.matches(partial, getTranslateTriggerPhrase())
+            ) {
+                state = State.LISTENING_FOR_WORD
+                recognizer?.stopListening() // finalise the trigger session now
+                beepThenListenForWord()
+            }
         }
 
         override fun onError(error: Int) {

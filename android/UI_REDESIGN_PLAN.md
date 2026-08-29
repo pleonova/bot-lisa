@@ -482,12 +482,16 @@ bold. Defaults now carry the "?" (`TriggerPhraseConfig`).
 >
 > ⚙ To edit voice commands, go to _settings_.
 
-> **"Wait for the beep" — done.** When the translate trigger is recognised,
-> `SpeechAssistant.beepThenListenForWord()` plays a short
-> `ToneGenerator.TONE_PROP_BEEP` (150 ms, `STREAM_MUSIC` so it follows the
-> earbud), then opens the English mic ~250 ms later (via `mainHandler`) so
-> the beep isn't transcribed. The `ToneGenerator` is lazy‑created and
-> released in `stop()`.
+> **"Wait for the beep" — done, and fast.** The translate trigger is matched
+> straight from a **partial** result (`onPartialResults`) rather than waiting
+> out the recogniser's end‑of‑speech timeout: on a partial match the state
+> flips to `LISTENING_FOR_WORD`, `recognizer.stopListening()` finalises the
+> trigger session, and `beepThenListenForWord()` plays a 120 ms
+> `ToneGenerator.TONE_PROP_BEEP` (`STREAM_MUSIC`, follows the earbud) then
+> opens the English mic 120 ms later. A late final of the trigger phrase that
+> arrives in `LISTENING_FOR_WORD` is ignored (matches the trigger again).
+> `listenOnce` also sets shorter `EXTRA_SPEECH_INPUT_*_SILENCE_LENGTH_MILLIS`
+> hints. Net: trigger → beep is near‑conversational.
 
 ---
 
