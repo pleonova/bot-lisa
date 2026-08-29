@@ -135,6 +135,7 @@ fun LisaScreen() {
     var serverUrl by remember { mutableStateOf(ServerConfig.getBaseUrl(context)) }
     var apiKey by remember { mutableStateOf(ServerConfig.getApiKey(context)) }
     var showServerSettings by rememberSaveable { mutableStateOf(false) }
+    var showInstructions by rememberSaveable { mutableStateOf(false) }
 
     // Target language for translation + spoken output -- NOT the
     // related-phrases/expand mode, which stays Russian-only regardless. See
@@ -396,22 +397,13 @@ fun LisaScreen() {
                 .padding(vertical = 8.dp),
         )
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text("Lisa Assistant", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "Hands-free mode: speak Russian normally. Say \"$translateTriggerPhrase\", pause, " +
-                        "then an English word to translate it. Say \"$nextSuggestionTriggerPhrase\" to hear " +
-                        "the next suggested phrase. Edit both in Settings.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                assistantError?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
-            }
+        assistantError?.let {
+            Text(
+                it,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
         }
 
         if (showServerSettings) {
@@ -502,6 +494,13 @@ fun LisaScreen() {
         if (isLoading) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
+
+        InstructionsPanel(
+            expanded = showInstructions,
+            onToggle = { showInstructions = !showInstructions },
+            translateTriggerPhrase = translateTriggerPhrase,
+            nextSuggestionTriggerPhrase = nextSuggestionTriggerPhrase,
+        )
 
         errorText?.let {
             Text(it, color = MaterialTheme.colorScheme.error)
