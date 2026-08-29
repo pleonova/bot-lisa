@@ -52,10 +52,15 @@ class TranslationSpeaker(
         tts.setOnUtteranceProgressListener(progressListener)
     }
 
-    /** Speaks [text] immediately, interrupting anything already being spoken. */
-    fun speak(text: String) {
-        if (!isReady || text.isBlank()) return
+    /**
+     * Speaks [text] immediately, interrupting anything already being spoken.
+     * Returns true if playback was actually started (engine ready, text
+     * non-blank) -- callers use this to avoid leaving UI stuck "playing".
+     */
+    fun speak(text: String): Boolean {
+        if (!isReady || text.isBlank()) return false
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "bot_lisa_${utteranceCount++}")
+        return true
     }
 
     /** Call when the owning screen (or language setting) goes away to free the TTS engine. */

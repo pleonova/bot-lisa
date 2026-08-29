@@ -68,6 +68,13 @@ class SpeechAssistant(
      * heard in the UI; does not affect the state machine.
      */
     private val onTranscript: (String) -> Unit = {},
+    /**
+     * While this returns true (the app's own TextToSpeech is playing a
+     * translation or a suggestion), recognised audio is discarded -- the mic
+     * would otherwise transcribe the assistant's own voice and treat a
+     * spoken suggestion as a new user utterance.
+     */
+    private val isMuted: () -> Boolean = { false },
     private val onStateChanged: (State) -> Unit,
     private val onError: (String) -> Unit,
 ) {
@@ -152,6 +159,12 @@ class SpeechAssistant(
 
     private val listener = object : RecognitionListener {
         override fun onResults(results: Bundle) {
+            // Drop anything captured while our own TTS is playing -- otherwise
+            // a spoken suggestion gets transcribed and re-sent as a query.
+            if (isMuted()) {
+                rearm()
+                return
+            }
             val transcript = results
                 .getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 ?.firstOrNull()
@@ -161,6 +174,7 @@ class SpeechAssistant(
         }
 
         override fun onPartialResults(partialResults: Bundle?) {
+            if (isMuted()) return
             val partial = partialResults
                 ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 ?.firstOrNull()

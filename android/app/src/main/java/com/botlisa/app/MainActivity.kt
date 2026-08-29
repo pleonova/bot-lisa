@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -171,8 +172,11 @@ fun LisaScreen() {
         TriggerPhraseConfig.setNextSuggestionTriggerPhrase(context, SupportedLanguages.RUSSIAN.code, newPhrase)
     }
 
-    // TTS playback state, for pulsing the speaker icons in the result card.
+    // TTS playback state. Drives the speaker-icon pulse in the result card,
+    // and -- crucially -- mutes the mic (isMuted below) so the assistant
+    // reading a suggestion aloud isn't transcribed back as a user utterance.
     var translationSpeaking by remember { mutableStateOf(false) }
+    var relatedSpeaking by remember { mutableStateOf(false) }
     // Which related-phrase row is currently being read (null = none). Cleared
     // by russianSpeaker's onSpeakingChanged when playback ends.
     var speakingIndex by remember { mutableStateOf<Int?>(null) }
@@ -204,7 +208,10 @@ fun LisaScreen() {
         val current = TranslationSpeaker(
             context,
             SupportedLanguages.RUSSIAN.ttsLocale,
-            onSpeakingChanged = { speaking -> if (!speaking) speakingIndex = null },
+            onSpeakingChanged = { speaking ->
+                relatedSpeaking = speaking
+                if (!speaking) speakingIndex = null
+            },
         )
         russianSpeaker = current
         onDispose { current.shutdown() }
@@ -285,9 +292,12 @@ fun LisaScreen() {
             return
         }
         val index = suggestionIndex % related.size
-        speakingIndex = index
-        russianSpeaker?.speak(related[index].ru)
-        suggestionIndex = index + 1
+        // Only claim the row / advance if TTS actually started, so a
+        // not-ready engine doesn't leave the mic muted or a row stuck lit.
+        if (russianSpeaker?.speak(related[index].ru) == true) {
+            speakingIndex = index
+            suggestionIndex = index + 1
+        }
     }
 
     // Reads one specific related phrase aloud -- the trailing speaker button
@@ -295,9 +305,10 @@ fun LisaScreen() {
     // continues from the next one.
     fun speakRelated(index: Int) {
         val phrase = result?.related?.getOrNull(index) ?: return
-        speakingIndex = index
-        suggestionIndex = index + 1
-        russianSpeaker?.speak(phrase.ru)
+        if (russianSpeaker?.speak(phrase.ru) == true) {
+            speakingIndex = index
+            suggestionIndex = index + 1
+        }
     }
 
     // Always-current handles onto onSend()/speakNextSuggestion() for Lisa
@@ -360,6 +371,7 @@ fun LisaScreen() {
             onUtterance = { text, _ -> handleAssistantUtterance.value(text) },
             onNextSuggestionRequested = { handleNextSuggestionRequest.value() },
             onTranscript = { handleTranscript.value(it) },
+            isMuted = { translationSpeaking || relatedSpeaking },
             onStateChanged = { assistantState = it },
             onError = { assistantError = it },
         )
@@ -548,7 +560,11 @@ fun LisaScreen() {
         // Shared field: the caregiver types here, AND Lisa Assistant's live
         // transcript lands here while hands-free is running (see
         // handleTranscript). Submits on the keyboard's Search action -- no
-        // separate "Look up" button.
+        // separate "Look up" button. While the assistant "owns" it -- hands-
+        // free running, field not focused, transcript present -- the text is
+        // italic + muted so it reads as "being heard", not "typed".
+        val assistantOwnsField = assistantState != SpeechAssistant.State.IDLE &&
+            !inputFocused && input.isNotBlank()
         OutlinedTextField(
             value = input,
             onValueChange = {
@@ -559,6 +575,14 @@ fun LisaScreen() {
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             singleLine = true,
             shape = RoundedCornerShape(28.dp),
+            textStyle = if (assistantOwnsField) {
+                LocalTextStyle.current.copy(
+                    fontStyle = FontStyle.Italic,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                LocalTextStyle.current
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .onFocusChanged { inputFocused = it.isFocused },
@@ -628,7 +652,7 @@ fun LisaScreen() {
                                 Text(
                                     "\"${r.input}\"",
                                     style = MaterialTheme.typography.bodySmall,
-                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                    fontStyle = FontStyle.Italic,
                                 )
                             }
                         }

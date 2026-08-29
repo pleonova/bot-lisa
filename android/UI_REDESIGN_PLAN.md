@@ -190,10 +190,13 @@ Still one scrolling `Column`, tighter spacing to match the mock.
      it in the placeholder / a small secondary line so they can see the mic
      is still working.
 
-   *Status:* the **focus guard** (the third bullet) is implemented — a
-   `inputFocused` flag from `Modifier.onFocusChanged` gates `handleTranscript`
-   alongside the existing `assistantState != IDLE` check. The muted-styling
-   and secondary-line refinements are deferred to Step 8 (polish).
+   *Status:* the **focus guard** is implemented (`inputFocused` from
+   `Modifier.onFocusChanged` gates `handleTranscript` alongside
+   `assistantState != IDLE`), and the **muted styling** while the assistant
+   owns the field is done (Step 8 — `assistantOwnsField` → the field's
+   `textStyle` goes italic + `onSurfaceVariant`). The **secondary line**
+   (keep the transcript visible when the caregiver takes focus) is still
+   optional.
 
    **Grace period before auto-send — tried in 7b, then removed.** A 1.5 s
    `scheduleAutoSend` delay + "Heard you — tap to edit" prompt was built and
@@ -338,6 +341,13 @@ var isSpeaking by remember { mutableStateOf(false) }
     `assistantState == LISTENING_FOR_WORD` (teal phrase heard) and inside
     the existing `onNextSuggestionRequested` handler (orange phrase heard).
     Both signals already exist.
+  - *`isMuted: () -> Boolean` param (done)* — while the app's own
+    TextToSpeech is playing (`translationSpeaking || relatedSpeaking`), the
+    recogniser's `onResults` / `onPartialResults` discard the audio (still
+    re‑arm). Without this the mic transcribes the assistant reading a
+    suggestion aloud and re‑sends it as a query. `TranslationSpeaker.speak()`
+    now returns `Boolean`; `speakRelated` / `speakNextSuggestion` only claim
+    the row + advance `suggestionIndex` when playback actually started.
 - **[`OnDeviceTranslator.kt`](app/src/main/java/com/botlisa/app/OnDeviceTranslator.kt)**
   - The command‑chip captions (§3.6) and the transcript gloss (§3.4) need
     **`targetLanguage` → English**, but this object currently only does
@@ -406,10 +416,15 @@ Each step leaves the app buildable.
    (`UtteranceProgressListener` → `Modifier.pulse`), currently‑speaking
    highlight + pulse, per‑phrase tap‑to‑hear. (A grace period before
    auto-send was tried and reverted — see §3.4.)
-8. **Polish** — spacing to match the mock, dark‑mode pass, optional
-   settings‑as‑dialog. Includes the §3.4 field-ownership visuals: muted
-   transcript styling while the assistant owns the field, and a secondary
-   line keeping the transcript visible when the caregiver has focus.
+8. **Polish** —
+   - *Done:* full **dark scheme** in `Theme.kt` (neutrals for both light and
+     dark; the three brand hues shared). Muted **assistant-owned field**:
+     while hands-free is running, the field is unfocused, and it holds
+     transcript text, the field text renders italic + `onSurfaceVariant`
+     (`assistantOwnsField` → `textStyle`), so it reads as "being heard".
+   - *Still optional:* pixel spacing against the mock, settings-as-`Dialog`,
+     and the §3.4 secondary line that keeps the transcript visible when the
+     caregiver takes focus.
 
 Steps 1–7 are largely independent; 8 is the biggest single chunk.
 
@@ -472,10 +487,11 @@ Text(instructions, style = MaterialTheme.typography.bodySmall)
   shared rounded field under the mic (§3.4). The **focus guard is done** —
   `onTranscript` writes to `input` only while `assistantState != IDLE` **and**
   the field is not focused for typing. Still open, per the ownership model in
-  §3.4: (a) muted/italic styling while the assistant owns the field, (b) a
-  secondary line so the transcript stays visible when the caregiver has
-  focus. Both → Step 8. (The grace-period-before-auto-send was tried in 7b
-  and reverted — the user wanted an immediate lookup.)
+  §3.4: (a) muted/italic styling while the assistant owns the field —
+  **done** (Step 8, `assistantOwnsField` → `textStyle`); (b) a secondary
+  line so the transcript stays visible when the caregiver has focus — still
+  optional. (The grace-period-before-auto-send was tried in 7b and reverted
+  — the user wanted an immediate lookup.)
 - **One‑shot dictation** — the wireframe drops the "Look up" button and the
   input's mic icon. *Default: keep typing as a fallback that submits on the
   keyboard's Search action; remove the standalone one‑shot `speechLauncher`
