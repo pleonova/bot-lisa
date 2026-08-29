@@ -195,16 +195,12 @@ Still one scrolling `Column`, tighter spacing to match the mock.
    alongside the existing `assistantState != IDLE` check. The muted-styling
    and secondary-line refinements are deferred to Step 8 (polish).
 
-   **Grace period before auto-send (deferred — Step 7).** Today a final
-   utterance does `input = text; onSend()` **instantly**
-   ([`handleAssistantUtterance`](app/src/main/java/com/botlisa/app/MainActivity.kt)),
-   so a misheard word is searched with no chance to fix it. Ideal: the final
-   transcript lands in the field, shows a brief "searching in ~1.5 s — tap to
-   edit" state, then fires; tapping the field within that window cancels the
-   auto-send and hands the field to the caregiver. Needs a cancelable
-   coroutine/timer in `handleAssistantUtterance` plus a small countdown
-   affordance; grouped with Step 7 since it also touches the
-   utterance→result path.
+   **Grace period before auto-send — tried in 7b, then removed.** A 1.5 s
+   `scheduleAutoSend` delay + "Heard you — tap to edit" prompt was built and
+   reverted: the user wanted the lookup to fire immediately with no
+   notification. `handleAssistantUtterance` is back to `input = text;
+   onSend()`. If a "fix a misheard word" affordance is wanted later it should
+   be non-blocking (e.g. an undo/edit on the *result*, not a pre-send hold).
 5. **Collapsible instructions** — a filled lavender pill `Surface`
    (`clickable`) with a leading sparkle icon (`Icons.Filled.AutoAwesome`),
    the label "Hands‑free mode instructions", and a trailing chevron
@@ -286,9 +282,8 @@ Still one scrolling `Column`, tighter spacing to match the mock.
      `speakingIndex`. `TranslationSpeaker` now takes an `onSpeakingChanged`
      callback (via `UtteranceProgressListener`, posted to the main thread);
      `russianSpeaker`'s clears `speakingIndex` when playback ends.
-   - *Pending (7b):* **grace period before auto-send** (§3.4) — cancelable
-     timer in `handleAssistantUtterance` + "searching in ~1.5 s — tap to
-     edit" affordance.
+   - *Removed:* the 7b grace period before auto-send — the user preferred an
+     immediate lookup, no "Heard you" prompt. See §3.4.
 8. **Settings panel** — unchanged content (target language, two trigger
    fields, server URL, API key at
    [L403‑L468](app/src/main/java/com/botlisa/app/MainActivity.kt#L403-L468));
@@ -398,7 +393,8 @@ Each step leaves the app buildable.
    under the mic, IME submit, drop "Look up" + old mic icon; add the
    `onTranscript` callback so partials + command phrases flow into `input`
    too, gated by `assistantState != IDLE` **and** the focus guard (§3.4).
-   English gloss line + muted styling + grace-period deferred (Steps 7–8).
+   English gloss line + muted styling deferred (Step 8). (A grace period
+   before auto-send was tried in 7b and reverted — §3.4.)
 5. **Collapsible instructions** — new copy, bold commands.
 6. **Command chips** — `CommandChips.kt`: two read‑only icon‑disc reminders,
    identical in every mode, not tappable. Hands‑free → `commandsDismissed`
@@ -406,11 +402,10 @@ Each step leaves the app buildable.
    hint, or script logic. Still pending: `targetLanguage`→EN captions via the
    new `OnDeviceTranslator` reverse path (source language is `targetLanguage`,
    not hard‑coded Russian).
-7. **Result / recommendations rework** — speaker icons,
-   `UtteranceProgressListener`, currently‑speaking highlight + pulse. Also
-   the **grace period before auto-send** (§3.4): cancelable timer in
-   `handleAssistantUtterance` + "searching in ~1.5 s — tap to edit"
-   affordance.
+7. **Result / recommendations rework** *(done)* — speaker icons
+   (`UtteranceProgressListener` → `Modifier.pulse`), currently‑speaking
+   highlight + pulse, per‑phrase tap‑to‑hear. (A grace period before
+   auto-send was tried and reverted — see §3.4.)
 8. **Polish** — spacing to match the mock, dark‑mode pass, optional
    settings‑as‑dialog. Includes the §3.4 field-ownership visuals: muted
    transcript styling while the assistant owns the field, and a secondary
@@ -479,8 +474,8 @@ Text(instructions, style = MaterialTheme.typography.bodySmall)
   the field is not focused for typing. Still open, per the ownership model in
   §3.4: (a) muted/italic styling while the assistant owns the field, (b) a
   secondary line so the transcript stays visible when the caregiver has
-  focus, (c) the grace-period-before-auto-send with tap-to-edit. (a)/(b) →
-  Step 8, (c) → Step 7.
+  focus. Both → Step 8. (The grace-period-before-auto-send was tried in 7b
+  and reverted — the user wanted an immediate lookup.)
 - **One‑shot dictation** — the wireframe drops the "Look up" button and the
   input's mic icon. *Default: keep typing as a fallback that submits on the
   keyboard's Search action; remove the standalone one‑shot `speechLauncher`
