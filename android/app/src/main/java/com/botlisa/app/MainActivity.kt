@@ -583,6 +583,9 @@ fun LisaScreen(
                 ExposedDropdownMenu(
                     expanded = languageMenuExpanded,
                     onDismissRequest = { languageMenuExpanded = false },
+                    // Cap the height so it fits below the field and opens
+                    // downward instead of flipping up over the label.
+                    modifier = Modifier.heightIn(max = 260.dp),
                 ) {
                     SupportedLanguages.ALL.forEach { language ->
                         DropdownMenuItem(
