@@ -17,6 +17,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -170,13 +171,23 @@ fun LisaScreen() {
         TriggerPhraseConfig.setNextSuggestionTriggerPhrase(context, SupportedLanguages.RUSSIAN.code, newPhrase)
     }
 
+    // TTS playback state, for pulsing the speaker icons in the result card.
+    var translationSpeaking by remember { mutableStateOf(false) }
+    // Which related-phrase row is currently being read (null = none). Cleared
+    // by russianSpeaker's onSpeakingChanged when playback ends.
+    var speakingIndex by remember { mutableStateOf<Int?>(null) }
+
     // Speaks translation results aloud -- see TranslationSpeaker.kt. Rebuilt
     // whenever the target language changes (or on rotation, like any other
     // `remember`); the previous instance is shut down first so the TTS
     // engine doesn't leak.
     var speaker by remember { mutableStateOf<TranslationSpeaker?>(null) }
     DisposableEffect(targetLanguage) {
-        val current = TranslationSpeaker(context, targetLanguage.ttsLocale)
+        val current = TranslationSpeaker(
+            context,
+            targetLanguage.ttsLocale,
+            onSpeakingChanged = { translationSpeaking = it },
+        )
         speaker = current
         onDispose { current.shutdown() }
     }
@@ -190,7 +201,11 @@ fun LisaScreen() {
     // mispronounce Russian text through e.g. a Hindi voice.
     var russianSpeaker by remember { mutableStateOf<TranslationSpeaker?>(null) }
     DisposableEffect(Unit) {
-        val current = TranslationSpeaker(context, SupportedLanguages.RUSSIAN.ttsLocale)
+        val current = TranslationSpeaker(
+            context,
+            SupportedLanguages.RUSSIAN.ttsLocale,
+            onSpeakingChanged = { speaking -> if (!speaking) speakingIndex = null },
+        )
         russianSpeaker = current
         onDispose { current.shutdown() }
     }
@@ -269,9 +284,20 @@ fun LisaScreen() {
             russianSpeaker?.speak("Пока нет предложений.")
             return
         }
-        val phrase = related[suggestionIndex % related.size]
+        val index = suggestionIndex % related.size
+        speakingIndex = index
+        russianSpeaker?.speak(related[index].ru)
+        suggestionIndex = index + 1
+    }
+
+    // Reads one specific related phrase aloud -- the trailing speaker button
+    // on a result row. Sets suggestionIndex so a following "что ещё?"
+    // continues from the next one.
+    fun speakRelated(index: Int) {
+        val phrase = result?.related?.getOrNull(index) ?: return
+        speakingIndex = index
+        suggestionIndex = index + 1
         russianSpeaker?.speak(phrase.ru)
-        suggestionIndex++
     }
 
     // Always-current handles onto onSend()/speakNextSuggestion() for Lisa
@@ -584,26 +610,39 @@ fun LisaScreen() {
 
                     if (r.mode == "translate" && r.translation != null) {
                         Text("Translation:", style = MaterialTheme.typography.labelLarge)
-                        Text(r.translation.ru, style = MaterialTheme.typography.headlineSmall)
-                        Text(
-                            "\"${r.input}\" · source: ${r.source} · ${r.latencyMs.toInt()} ms",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { speaker?.speak(r.translation.ru) }) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.VolumeUp,
+                                    contentDescription = "Play translation",
+                                    tint = if (translationSpeaking) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    modifier = Modifier.pulse(translationSpeaking),
+                                )
+                            }
+                            Column {
+                                Text(r.translation.ru, style = MaterialTheme.typography.headlineSmall)
+                                Text(
+                                    "\"${r.input}\"",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                )
+                            }
+                        }
                         if (relatedRelevant && r.related.isNotEmpty()) {
                             Spacer(Modifier.height(4.dp))
                             Text(
                                 "More related phrases (Russian curated library):",
                                 style = MaterialTheme.typography.labelMedium,
                             )
-                            RelatedPhraseList(r.related)
+                            RelatedPhraseList(r.related, speakingIndex, ::speakRelated)
                         }
                     } else if (r.related.isNotEmpty()) {
                         Text("Related phrases:", style = MaterialTheme.typography.labelLarge)
-                        Text(
-                            "for \"${r.input}\" · ${r.latencyMs.toInt()} ms",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        RelatedPhraseList(r.related)
+                        RelatedPhraseList(r.related, speakingIndex, ::speakRelated)
                     } else {
                         Text(
                             "No related phrases for \"${r.input}\".",
@@ -618,15 +657,46 @@ fun LisaScreen() {
 }
 
 @Composable
-private fun RelatedPhraseList(phrases: List<Phrase>) {
-    phrases.forEach { phrase ->
-        Column {
-            Text("• ${phrase.ru}", style = MaterialTheme.typography.bodyMedium)
-            Text(
-                "   ${phrase.glossEn}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+private fun RelatedPhraseList(
+    phrases: List<Phrase>,
+    speakingIndex: Int?,
+    onSpeak: (Int) -> Unit,
+) {
+    phrases.forEachIndexed { index, phrase ->
+        val active = index == speakingIndex
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = if (active) {
+                MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)
+            } else {
+                androidx.compose.ui.graphics.Color.Transparent
+            },
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(vertical = 4.dp, horizontal = 8.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(phrase.ru, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        phrase.glossEn,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = { onSpeak(index) }) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.VolumeUp,
+                        contentDescription = "Play phrase",
+                        tint = if (active) {
+                            MaterialTheme.colorScheme.secondary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.pulse(active),
+                    )
+                }
+            }
         }
     }
 }

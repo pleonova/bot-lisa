@@ -1,55 +1,66 @@
 package com.botlisa.app
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
 
 /**
- * Speaks a translated phrase aloud via Android's built-in TextToSpeech engine
- * -- "read the translation back to me": look up a word with one hand while
- * holding the baby with the other, and hear it spoken instead of having to
- * read the screen. TTS output follows whatever audio route is currently
- * active on the phone (a single earbud, a Bluetooth earpiece, wired
- * headphones, or the speaker if nothing's connected) -- no special routing
- * code needed for the one-earbud use case, that's just how Android audio
- * output already works.
+ * Speaks a phrase aloud via Android's built-in TextToSpeech engine -- "read
+ * it back to me" for the one-earbud-in use case. Output follows whatever
+ * audio route is currently active.
  *
- * [locale] is a required constructor parameter, driven by the target
- * language picked in Settings (LanguageConfig.kt) -- see MainActivity.kt,
- * which recreates this whenever that setting changes.
+ * [locale] is required and comes from the target-language setting
+ * (LanguageConfig.kt); MainActivity recreates this whenever that changes.
  *
- * Tied to the Activity/Composable lifecycle (unlike OnDeviceTranslator,
- * which is a process-wide singleton): a fresh instance on rotation, or when
- * the target language changes, is normal and cheap -- TextToSpeech
- * initialization takes well under what a user would notice.
+ * [onSpeakingChanged] reports playback start/stop on the main thread, so the
+ * UI can pulse the speaker icon while audio is actually playing.
+ *
+ * Tied to the Activity/Composable lifecycle; a fresh instance on rotation or
+ * a language change is normal and cheap.
  */
-class TranslationSpeaker(context: Context, private val locale: Locale) {
+class TranslationSpeaker(
+    context: Context,
+    private val locale: Locale,
+    private val onSpeakingChanged: (Boolean) -> Unit = {},
+) {
 
     private var isReady = false
+    private var utteranceCount = 0
+    private val mainHandler = Handler(Looper.getMainLooper())
 
-    private val tts: TextToSpeech = TextToSpeech(context.applicationContext) { status ->
-        if (status == TextToSpeech.SUCCESS) {
-            configureLanguage()
-        }
-        // No-op on failure -- isReady stays false, speak() below silently does
-        // nothing rather than crashing. Good enough for now; worth surfacing
-        // to the user (e.g. "no Hindi voice installed on this device") if
-        // this turns out to matter in practice.
+    private val progressListener = object : UtteranceProgressListener() {
+        private fun stopped() { mainHandler.post { onSpeakingChanged(false) } }
+        override fun onStart(utteranceId: String?) { mainHandler.post { onSpeakingChanged(true) } }
+        override fun onDone(utteranceId: String?) = stopped()
+
+        @Deprecated("Deprecated in Java", ReplaceWith("onError(utteranceId, errorCode)"))
+        override fun onError(utteranceId: String?) = stopped()
+        override fun onStop(utteranceId: String?, interrupted: Boolean) = stopped()
     }
 
-    private fun configureLanguage() {
+    private val tts: TextToSpeech = TextToSpeech(context.applicationContext) { status ->
+        if (status == TextToSpeech.SUCCESS) configureOnReady()
+        // No-op on failure -- isReady stays false, speak() silently does nothing.
+    }
+
+    private fun configureOnReady() {
         val result = tts.setLanguage(locale)
         isReady = result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED
+        tts.setOnUtteranceProgressListener(progressListener)
     }
 
     /** Speaks [text] immediately, interrupting anything already being spoken. */
     fun speak(text: String) {
         if (!isReady || text.isBlank()) return
-        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "bot_lisa_translation")
+        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "bot_lisa_${utteranceCount++}")
     }
 
     /** Call when the owning screen (or language setting) goes away to free the TTS engine. */
     fun shutdown() {
+        onSpeakingChanged(false)
         tts.stop()
         tts.shutdown()
     }

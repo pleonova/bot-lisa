@@ -273,15 +273,22 @@ Still one scrolling `Column`, tighter spacing to match the mock.
      *"No related phrases for \"…\"."* line instead of a bare heading. The
      `• phrase / gloss` rows are factored into a `RelatedPhraseList`
      composable.
-   - translate mode: speaker `IconButton` (pulses while TTS active) +
-     `Text(translation.ru, headlineSmall)` +
-     `Text(input, bodySmall, italic)`. Drop the `source · latencyMs` line
-     (or move it under settings).
-   - expand / "Recommendations": label + `r.related` rendered as pill rows,
-     each `Row(phrase.ru + gloss, trailing speaker IconButton)`. The row
-     whose index `== speakingIndex` gets an orange container + pulse.
-     Speaker tap calls a new `speakRelated(i)` that sets `speakingIndex = i`
-     and speaks; `speakNextSuggestion()` also updates `speakingIndex`.
+   - *Done (7a):* translate mode is a `Row` of a speaker `IconButton`
+     (pulses via `Modifier.pulse()` while `translationSpeaking`, tap
+     re‑speaks through `speaker`) + `translation.ru` (`headlineSmall`) +
+     `"input"` italic. `source · latencyMs` line dropped.
+   - *Done (7a):* related phrases render as `RelatedPhraseList` rows —
+     `Surface` (secondary‑tinted when active) wrapping
+     `Row(Column(ru + gloss).weight(1f), trailing speaker IconButton)`. The
+     row whose index `== speakingIndex` is highlighted and its icon pulses.
+     `speakRelated(i)` sets `speakingIndex = i` + `suggestionIndex = i + 1`
+     and speaks via `russianSpeaker`; `speakNextSuggestion()` also sets
+     `speakingIndex`. `TranslationSpeaker` now takes an `onSpeakingChanged`
+     callback (via `UtteranceProgressListener`, posted to the main thread);
+     `russianSpeaker`'s clears `speakingIndex` when playback ends.
+   - *Pending (7b):* **grace period before auto-send** (§3.4) — cancelable
+     timer in `handleAssistantUtterance` + "searching in ~1.5 s — tap to
+     edit" affordance.
 8. **Settings panel** — unchanged content (target language, two trigger
    fields, server URL, API key at
    [L403‑L468](app/src/main/java/com/botlisa/app/MainActivity.kt#L403-L468));
