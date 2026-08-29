@@ -137,6 +137,14 @@ fun LisaScreen() {
     var showServerSettings by rememberSaveable { mutableStateOf(false) }
     var showInstructions by rememberSaveable { mutableStateOf(false) }
 
+    // Command chips (§3.6): hidden once a command is used (tapped in text
+    // mode, or heard as a spoken trigger), shown again on the next new input
+    // -- the caregiver typing, or a fresh utterance being sent.
+    var commandsDismissed by remember { mutableStateOf(false) }
+    // Cyrillic anywhere in the field -> treat as target-language text (the
+    // same heuristic the backend uses to pick expand vs. translate).
+    val inputHasCyrillic = input.any { it in 'Ѐ'..'ӿ' }
+
     // Target language for translation + spoken output -- NOT the
     // related-phrases/expand mode, which stays Russian-only regardless. See
     // LanguageConfig.kt for why.
@@ -275,9 +283,13 @@ fun LisaScreen() {
     // here.)
     val handleAssistantUtterance = rememberUpdatedState<(String) -> Unit> { text ->
         input = text
+        commandsDismissed = false // fresh utterance being sent -> chips come back
         onSend()
     }
-    val handleNextSuggestionRequest = rememberUpdatedState { speakNextSuggestion() }
+    val handleNextSuggestionRequest = rememberUpdatedState {
+        speakNextSuggestion()
+        commandsDismissed = true // spoken "что ещё?" -> hide the chips
+    }
 
     var assistantState by remember { mutableStateOf(SpeechAssistant.State.IDLE) }
     var assistantError by remember { mutableStateOf<String?>(null) }
@@ -285,6 +297,12 @@ fun LisaScreen() {
     // Header subtitle + (later) central-button colour. derivedStateOf so more
     // inputs (speaking state, result mode) can fold in without changing callers.
     val uiPhase by remember { derivedStateOf { uiPhaseOf(assistantState) } }
+
+    // Spoken translate trigger ("как сказать") -> the assistant switches to
+    // LISTENING_FOR_WORD; that transition is our signal to hide the chips.
+    LaunchedEffect(assistantState) {
+        if (assistantState == SpeechAssistant.State.LISTENING_FOR_WORD) commandsDismissed = true
+    }
 
     // Live transcript from Lisa Assistant -> the shared input/search field.
     // Only while hands-free is running, so it never clobbers something the
@@ -479,7 +497,10 @@ fun LisaScreen() {
         // separate "Look up" button.
         OutlinedTextField(
             value = input,
-            onValueChange = { input = it },
+            onValueChange = {
+                input = it
+                commandsDismissed = false // caregiver typing -> chips come back
+            },
             placeholder = { Text("Enter English or Russian Text") },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             singleLine = true,
@@ -500,6 +521,39 @@ fun LisaScreen() {
             onToggle = { showInstructions = !showInstructions },
             translateTriggerPhrase = translateTriggerPhrase,
             nextSuggestionTriggerPhrase = nextSuggestionTriggerPhrase,
+        )
+
+        CommandChips(
+            mode = if (assistantState == SpeechAssistant.State.IDLE) {
+                CommandChipsMode.BUTTONS
+            } else {
+                CommandChipsMode.REMINDERS
+            },
+            visible = !commandsDismissed,
+            // Enable the button whose script matches what's typed -- Latin ->
+            // translate, Cyrillic -> suggestions (same split the backend uses
+            // to pick a mode). Empty field -> neither, plus a hint.
+            translateEnabled = input.isNotBlank() && !inputHasCyrillic,
+            nextEnabled = input.isNotBlank() && inputHasCyrillic,
+            hint = if (input.isBlank()) "Start typing to use these buttons" else null,
+            translatePhrase = translateTriggerPhrase,
+            // TODO(step 6b): translate these captions targetLanguage -> English
+            // via OnDeviceTranslator; static fallbacks for now.
+            translateCaption = "how to say",
+            nextPhrase = nextSuggestionTriggerPhrase,
+            nextCaption = "what else",
+            // Both text-mode buttons run a lookup on the field text -- the
+            // backend picks translate vs. related-phrases from the script
+            // itself. (The spoken "что ещё?" trigger still just speaks the
+            // next already-fetched suggestion via speakNextSuggestion().)
+            onTranslate = {
+                onSend()
+                commandsDismissed = true
+            },
+            onNext = {
+                onSend()
+                commandsDismissed = true
+            },
         )
 
         errorText?.let {

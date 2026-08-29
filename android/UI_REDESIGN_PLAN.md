@@ -84,7 +84,7 @@ top of the same plumbing.*
 | Large central mic button — grey → purple → teal, pulsing while listening | Mic is a tiny trailing icon on the input; on/off is a `Start`/`Stop` text button | New `AssistantButton` composable: big circle, color per phase, infinite‑transition pulse |
 | Transcript "pill" under the mic ("Пора чистить зубки. Что ещё?") + italic English gloss | Each recognised utterance is already written into the visible input field (`input = text` in `handleAssistantUtterance` / the one‑shot mic) and echoed in the result card as `"${r.input}"`. Missing: it is not positioned under the mic, no partial/streaming updates (partial results disabled), no English gloss, and the command phrases (`как сказать` / `что ещё?`) never land there (consumed as triggers first) | **Keep it one shared field** — the same rounded search box is both the type‑to‑search input and the voice‑transcript display. Move that field directly under the mic, add an `onTranscript` callback so it also shows partials + command phrases, and render the gloss as a caption line beneath it. No separate pill component. |
 | Collapsible "Hands-free mode instructions" with chevron | Instructions always visible as body text in the card | Collapsible section (`AnimatedVisibility`); **new copy** (see §7) with command phrases **bold** |
-| Teal "Как сказать?" + orange "Что ещё?" — buttons in text mode, "Quick reminders:" card in hands‑free | Spoken triggers documented only in the instructions blob; no typed equivalents | `CommandChips` (§3.6): **buttons** when `assistantState == IDLE` (teal → `onSend()` translate, orange → `speakNextSuggestion()`), **non‑interactive reminders** in hands‑free. Visible on the text‑mode home screen and the hands‑free empty state; hidden once a command is used, back on new input. Both label lines come from the Settings trigger‑phrase fields for `targetLanguage` (`TriggerPhraseConfig`) — bold phrase + an on‑device `targetLanguage`→English translation for the caption (source language is not hard‑coded Russian) — and update live. |
+| Teal "Как сказать?" + orange "Что ещё?" — buttons in text mode, "Quick reminders:" card in hands‑free | Spoken triggers documented only in the instructions blob; no typed equivalents | `CommandChips` (§3.6): **buttons** when `assistantState == IDLE` (both → `onSend()`; script‑aware enablement — Latin→teal, Cyrillic→orange, empty→"start typing" hint), **non‑interactive reminders** in hands‑free. Visible on the text‑mode home screen and the hands‑free empty state; hidden once a command is used, back on new input. Both label lines come from the Settings trigger‑phrase fields for `targetLanguage` (`TriggerPhraseConfig`) — bold phrase + an on‑device `targetLanguage`→English translation for the caption (source language is not hard‑coded Russian) — and update live. |
 | Result: purple speaker icon + big Russian word + English caption | Text‑only "Translation:" block with source/latency line | Restyle; add speaker icon that pulses while TTS speaks |
 | Recommendations: list of phrase pills each with a speaker icon; the one being read is orange + pulsing | Bulleted `• phrase / gloss` list, no per‑item audio | Pill list with trailing speaker `IconButton`; track "currently speaking" index |
 | Search‑style input: rounded, magnifier icon, "Enter English or Russian Text" | `OutlinedTextField` with label + mic trailing icon + separate "Look up" button | Restyle as a rounded search field; submit on IME action; drop the separate button and the one‑shot mic icon |
@@ -212,13 +212,20 @@ Still one scrolling `Column`, tighter spacing to match the mock.
    next‑suggestion trigger). Same content in both modes, different behaviour:
 
    - **Text mode** (`assistantState == IDLE`) — interactive **buttons** on
-     the home screen:
-     - Teal → run the translate path on the current field contents (same as
-       `onSend()` resolving to translate mode — the typed equivalent of
-       saying the phrase then a word). Empty field → focus it, no request.
-     - Orange → `speakNextSuggestion()`
-       ([L264‑L273](app/src/main/java/com/botlisa/app/MainActivity.kt#L264-L273))
-       — read/advance the next related phrase from the last result.
+     the home screen. Both call `onSend()`; the backend picks translate vs.
+     related‑phrases from the script itself, so the two are the same request
+     — the labels just frame intent, and **script‑aware enablement** makes
+     it legible:
+     - Empty field → both disabled + hint under the row:
+       *"Start typing to use these buttons"*.
+     - Field has **Latin** text → only **teal** enabled (translate).
+     - Field has **Cyrillic** (`input.any { it in 'Ѐ'..'ӿ' }`) → only
+       **orange** enabled (suggestions).
+     The disabled button stays visible but greyed, so the caregiver learns
+     the mapping. Orange does **not** call `speakNextSuggestion()` (that only
+     speaks an already‑fetched suggestion and does nothing on a cold screen —
+     which read as "the button doesn't work"); the spoken "что ещё?" trigger
+     still routes to `speakNextSuggestion()`.
    - **Hands‑free mode** (`assistantState != IDLE`) — the **same two items
      as non‑interactive reminders** (`enabled = false`, no `onClick`):
      mnemonics for what to *say*. Rendered as the tinted "Quick reminders:"
@@ -392,7 +399,9 @@ Each step leaves the app buildable.
    English gloss line + muted styling + grace-period deferred (Steps 7–8).
 5. **Collapsible instructions** — new copy, bold commands.
 6. **Command chips** — `CommandChips.kt`: buttons in text mode
-   (teal → `onSend()` translate, orange → `speakNextSuggestion()`),
+   (both → `onSend()`; script‑aware enablement — Latin enables teal,
+   Cyrillic enables orange, empty shows a "start typing" hint; spoken
+   "что ещё?" still → `speakNextSuggestion()`),
    reminder card in hands‑free; `commandsDismissed` visibility lifecycle;
    `targetLanguage`→EN captions via the new `OnDeviceTranslator` reverse
    path (source language is `targetLanguage`, not hard‑coded Russian).
