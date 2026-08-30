@@ -144,6 +144,22 @@ def _content_words(text: str) -> set[str]:
     return {w for w in _WORD_RE.findall(text.lower()) if w not in _STOPWORDS}
 
 
+# A curated phrase only overrides a live translation when the caregiver's
+# English input essentially *is* that phrase -- not merely shares one word
+# with it. Measured as the Jaccard overlap of the two content-word sets:
+# "good night" vs "Good night." scores 1.0 (snap to curated), but "time"
+# vs "Time to sleep, little one." scores 0.33 and must be translated live.
+CURATED_MATCH_MIN_OVERLAP = 0.6
+
+
+def _curated_overlap(text: str, gloss: str) -> float:
+    a = _content_words(text)
+    b = _content_words(gloss)
+    if not a or not b:
+        return 0.0
+    return len(a & b) / len(a | b)
+
+
 class Phrase(BaseModel):
     ru: str
     gloss_en: str
@@ -181,11 +197,11 @@ def assist(request: Request, req: AssistRequest) -> AssistResponse:
     Caregiver-facing helper (distinct from /ask, which is the child-directed
     perception-event flow). One input box, auto-detected:
 
-    - English in -> "translate" mode. Checks the curated phrase library first
-      (word-overlap against gloss_en); only falls back to a live/mock LLM
-      translation when nothing in the library is a good match. This mirrors
-      the project's core principle that hand-vetted phrases should win over
-      fresh generations.
+    - English in -> "translate" mode. Always a live/mock LLM translation of
+      the input, unless the input essentially *is* a curated phrase (high
+      content-word overlap with its gloss_en, see CURATED_MATCH_MIN_OVERLAP),
+      in which case the hand-vetted phrase wins. A single incidental shared
+      word ("time" -> "Time to sleep, little one.") no longer counts.
     - Russian in -> "expand" mode. Returns nearby phrases from the library so
       the caregiver can grow their own active vocabulary around what they
       just said, rather than getting a single next-line suggestion.
@@ -220,7 +236,9 @@ def assist(request: Request, req: AssistRequest) -> AssistResponse:
 
     # translate mode
     top = candidates[0] if candidates else None
-    is_curated_match = bool(top and _content_words(text) & _content_words(top["gloss_en"]))
+    is_curated_match = bool(
+        top and _curated_overlap(text, top["gloss_en"]) >= CURATED_MATCH_MIN_OVERLAP
+    )
 
     if is_curated_match:
         translation = Phrase(ru=top["ru"], gloss_en=top["gloss_en"], embed_score=_round_score(top.get("embed_score")), hybrid_score=_round_score(top.get("hybrid_score")))
