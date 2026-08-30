@@ -11,12 +11,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.QuestionAnswer
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -39,9 +41,10 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Collapsible "How hands-free mode works" card. Tap the lavender header to
- * expand a three-step walkthrough; the two command phrases are shown in
- * their accent colour and come straight from Settings, so a customised
- * phrase (and its punctuation) shows here verbatim.
+ * expand a numbered walkthrough; each command phrase is shown in its accent
+ * colour, verbatim from Settings, and tapping a step speaks the phrase. The
+ * two related-phrase steps (next suggestion, suggested reply) only appear
+ * for Russian ([showNextSuggestionStep]).
  */
 @Composable
 fun InstructionsPanel(
@@ -49,19 +52,75 @@ fun InstructionsPanel(
     onToggle: () -> Unit,
     spokenLanguage: String,
     translateTriggerPhrase: String,
+    meaningTriggerPhrase: String,
     nextSuggestionTriggerPhrase: String,
+    answerTriggerPhrase: String,
     onSpeakTranslate: () -> Unit,
+    onSpeakMeaning: () -> Unit,
     onSpeakNext: () -> Unit,
+    onSpeakAnswer: () -> Unit,
     modifier: Modifier = Modifier,
-    // Step 3 (next-suggestion) only applies where suggestions exist -- Russian.
     showNextSuggestionStep: Boolean = true,
 ) {
     val chevronRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
         label = "instructions-chevron",
     )
+    val primary = MaterialTheme.colorScheme.primary
     val teal = MaterialTheme.colorScheme.tertiary
     val orange = MaterialTheme.colorScheme.secondary
+    val divider = MaterialTheme.colorScheme.outlineVariant
+
+    fun say(phrase: String, color: Color, tail: String = "") = buildAnnotatedString {
+        append("Say ")
+        withStyle(SpanStyle(color = color, fontWeight = FontWeight.Bold)) { append(phrase) }
+        if (tail.isNotEmpty()) append(tail)
+    }
+
+    val steps = buildList {
+        add(
+            StepSpec(
+                Icons.Filled.Mic, primary, "Tap the mic",
+                AnnotatedString(
+                    if (showNextSuggestionStep) "Then speak $spokenLanguage normally."
+                    else "Then say a command below.",
+                ),
+                null,
+            ),
+        )
+        add(
+            StepSpec(
+                Icons.Filled.Translate, teal, "To translate a word into $spokenLanguage",
+                say(translateTriggerPhrase, teal, ", then the English word after the beep and wait for the $spokenLanguage translation."),
+                onSpeakTranslate,
+            ),
+        )
+        if (showNextSuggestionStep) {
+            add(
+                StepSpec(
+                    Icons.Filled.Lightbulb, orange, "To hear the next suggestion",
+                    say(nextSuggestionTriggerPhrase, orange, " to cycle through more phrases."),
+                    onSpeakNext,
+                ),
+            )
+        }
+        add(
+            StepSpec(
+                Icons.AutoMirrored.Filled.MenuBook, teal, "To hear what a phrase means",
+                say(meaningTriggerPhrase, teal, ", for an English translation of what was just said."),
+                onSpeakMeaning,
+            ),
+        )
+        if (showNextSuggestionStep) {
+            add(
+                StepSpec(
+                    Icons.Filled.QuestionAnswer, orange, "To hear a suggested reply",
+                    say(answerTriggerPhrase, orange, " for phrases you could say back."),
+                    onSpeakAnswer,
+                ),
+            )
+        }
+    }
 
     Surface(
         shape = RoundedCornerShape(18.dp),
@@ -96,51 +155,18 @@ fun InstructionsPanel(
 
             AnimatedVisibility(visible = expanded) {
                 Column {
-                    Step(
-                        number = 1,
-                        icon = Icons.Filled.Mic,
-                        iconColor = MaterialTheme.colorScheme.primary,
-                        heading = "Tap the mic",
-                        body = AnnotatedString(
-                            if (showNextSuggestionStep) {
-                                "Then speak $spokenLanguage normally."
-                            } else {
-                                "Then say a command below."
-                            },
-                        ),
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Step(
-                        number = 2,
-                        icon = Icons.AutoMirrored.Filled.Chat,
-                        iconColor = teal,
-                        heading = "To translate a word",
-                        body = buildAnnotatedString {
-                            append("Say ")
-                            withStyle(SpanStyle(color = teal, fontWeight = FontWeight.Bold)) {
-                                append(translateTriggerPhrase)
-                            }
-                            append(", pause and wait for the beep, then say the English word.")
-                        },
-                        onClick = onSpeakTranslate,
-                    )
-                    if (showNextSuggestionStep) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    steps.forEachIndexed { i, s ->
+                        if (i > 0) HorizontalDivider(color = divider)
                         Step(
-                            number = 3,
-                            icon = Icons.Filled.Lightbulb,
-                            iconColor = orange,
-                            heading = "To hear the next suggestion",
-                            body = buildAnnotatedString {
-                                append("Say ")
-                                withStyle(SpanStyle(color = orange, fontWeight = FontWeight.Bold)) {
-                                    append(nextSuggestionTriggerPhrase)
-                                }
-                            },
-                            onClick = onSpeakNext,
+                            number = i + 1,
+                            icon = s.icon,
+                            iconColor = s.iconColor,
+                            heading = s.heading,
+                            body = s.body,
+                            onClick = s.onClick,
                         )
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    HorizontalDivider(color = divider)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -166,6 +192,14 @@ fun InstructionsPanel(
         }
     }
 }
+
+private data class StepSpec(
+    val icon: ImageVector,
+    val iconColor: Color,
+    val heading: String,
+    val body: AnnotatedString,
+    val onClick: (() -> Unit)?,
+)
 
 @Composable
 private fun Step(

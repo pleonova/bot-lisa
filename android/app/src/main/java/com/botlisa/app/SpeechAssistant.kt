@@ -67,9 +67,13 @@ class SpeechAssistant(
     private val getDefaultLanguageCode: () -> String,
     private val translateLanguageCode: String,
     private val getTranslateTriggerPhrase: () -> String,
+    private val getMeaningTriggerPhrase: () -> String,
     private val getNextSuggestionTriggerPhrase: () -> String,
+    private val getAnswerTriggerPhrase: () -> String,
     private val onUtterance: (text: String, state: State) -> Unit,
+    private val onMeaningRequested: () -> Unit,
     private val onNextSuggestionRequested: () -> Unit,
+    private val onAnswerRequested: () -> Unit,
     /**
      * Every transcript this recogniser produces -- partials while the
      * caregiver is still speaking, and finals -- including the command
@@ -91,27 +95,33 @@ class SpeechAssistant(
 
     private var recognizer: SpeechRecognizer? = null
     private var stoppedByUser = true
+    // True from the moment a *partial* matches the translate trigger until
+    // that recognition session ends (naturally or nudged) -- at which point
+    // onResults/onError re-arm the mic in English. No recogniser surgery in
+    // this window; we just wait for the current session to finish cleanly.
+    private var switchingToWord = false
+    // Recoverable errors in a row with no successful recognition between --
+    // bail out (visible "tap to restart") rather than retry-loop forever.
+    private var consecutiveErrors = 0
     private val mainHandler = Handler(Looper.getMainLooper())
     private var tone: ToneGenerator? = null
 
-    /**
-     * Short beep telling the caregiver "switched to English -- say the word
-     * now", played the instant the translate trigger is recognised (from a
-     * *partial* result -- see onPartialResults -- so it lands close to
-     * conversational speed rather than waiting out the recogniser's
-     * end-of-speech timeout). The English mic opens a short beat later so
-     * the beep itself isn't transcribed.
-     */
-    private fun beepThenListenForWord() {
+    private fun newRecognizer(): SpeechRecognizer =
+        SpeechRecognizer.createSpeechRecognizer(context).apply { setRecognitionListener(listener) }
+
+    private fun beep() {
         runCatching {
             val t = tone ?: ToneGenerator(AudioManager.STREAM_MUSIC, 80).also { tone = it }
             t.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
         }
+    }
+
+    // Called once the trigger session has ended: open the English mic after a
+    // short gap so the beep isn't transcribed.
+    private fun listenForWord() {
         mainHandler.postDelayed({
-            if (!stoppedByUser && state == State.LISTENING_FOR_WORD) {
-                listenOnce(translateLanguageCode)
-            }
-        }, 120)
+            if (!stoppedByUser && state == State.LISTENING_FOR_WORD) listenOnce(translateLanguageCode)
+        }, 150)
     }
 
     var state: State = State.IDLE
@@ -126,16 +136,17 @@ class SpeechAssistant(
             return
         }
         stoppedByUser = false
+        switchingToWord = false
+        consecutiveErrors = 0
         recognizer?.destroy()
-        recognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
-            setRecognitionListener(listener)
-        }
+        recognizer = newRecognizer()
         state = State.LISTENING_DEFAULT
         listenOnce(getDefaultLanguageCode())
     }
 
     fun stop() {
         stoppedByUser = true
+        switchingToWord = false
         mainHandler.removeCallbacksAndMessages(null)
         recognizer?.stopListening()
         recognizer?.destroy()
@@ -155,9 +166,9 @@ class SpeechAssistant(
             // Finalise soon after the speaker stops so the whole loop stays
             // snappy. (Hints -- honoured by the modern Google recogniser,
             // harmless where ignored.)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 600L)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 400L)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 300L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 450L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 250L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 200L)
         }
         runCatching { recognizer?.startListening(intent) }
             .onFailure { onError("Couldn't start listening: ${it.message}") }
@@ -175,11 +186,24 @@ class SpeechAssistant(
             State.LISTENING_DEFAULT -> {
                 when {
                     transcript.isNotBlank() && TriggerPhraseDetector.matches(transcript, getTranslateTriggerPhrase()) -> {
+                        // Trigger caught on the final result (partials didn't
+                        // fire). Session already ended -- beep, then open the
+                        // English mic.
+                        switchingToWord = false
                         state = State.LISTENING_FOR_WORD
-                        beepThenListenForWord()
+                        beep()
+                        listenForWord()
+                    }
+                    transcript.isNotBlank() && TriggerPhraseDetector.matches(transcript, getMeaningTriggerPhrase()) -> {
+                        onMeaningRequested()
+                        rearm()
                     }
                     transcript.isNotBlank() && TriggerPhraseDetector.matches(transcript, getNextSuggestionTriggerPhrase()) -> {
                         onNextSuggestionRequested()
+                        rearm()
+                    }
+                    transcript.isNotBlank() && TriggerPhraseDetector.matches(transcript, getAnswerTriggerPhrase()) -> {
+                        onAnswerRequested()
                         rearm()
                     }
                     else -> {
@@ -203,16 +227,25 @@ class SpeechAssistant(
 
     private val listener = object : RecognitionListener {
         override fun onResults(results: Bundle) {
+            val transcript = results
+                .getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                ?.firstOrNull()
+                .orEmpty()
+            // A partial already matched the translate trigger; this is that
+            // session ending. Show it, then open the English mic.
+            if (switchingToWord) {
+                switchingToWord = false
+                if (transcript.isNotBlank()) onTranscript(transcript)
+                listenForWord()
+                return
+            }
             // Drop anything captured while our own TTS is playing -- otherwise
             // a spoken suggestion gets transcribed and re-sent as a query.
             if (isMuted()) {
                 rearm()
                 return
             }
-            val transcript = results
-                .getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                ?.firstOrNull()
-                .orEmpty()
+            consecutiveErrors = 0
             if (transcript.isNotBlank()) onTranscript(transcript)
             handleTranscript(transcript)
         }
@@ -225,25 +258,54 @@ class SpeechAssistant(
                 .orEmpty()
             if (partial.isBlank()) return
             onTranscript(partial)
-            // Fast path: switch to English-word mode + beep the moment a
-            // partial already contains the translate trigger, instead of
-            // waiting for the final result.
-            if (!stoppedByUser && state == State.LISTENING_DEFAULT &&
+            // Fast path: beep + switch to English-word mode the moment a
+            // partial already contains the translate trigger. We do NOT touch
+            // the recogniser -- the session ends on its own (short silence
+            // timeout) or we nudge it with stopListening() after a beat;
+            // either way onResults/onError then re-arms in English.
+            if (!stoppedByUser && !switchingToWord && state == State.LISTENING_DEFAULT &&
                 TriggerPhraseDetector.matches(partial, getTranslateTriggerPhrase())
             ) {
+                switchingToWord = true
                 state = State.LISTENING_FOR_WORD
-                recognizer?.stopListening() // finalise the trigger session now
-                beepThenListenForWord()
+                beep()
+                mainHandler.postDelayed({
+                    if (switchingToWord && !stoppedByUser) {
+                        runCatching { recognizer?.stopListening() }
+                    }
+                }, 600)
             }
         }
 
         override fun onError(error: Int) {
             if (stoppedByUser) return
+            // The trigger session ended with an error instead of a result --
+            // still fine, just open the English mic.
+            if (switchingToWord) {
+                switchingToWord = false
+                listenForWord()
+                return
+            }
             when (error) {
-                // No speech heard, or nothing recognizable -- the built-in
-                // recognizer's equivalent of speech_lab's silence gate.
-                // Don't change state, just keep listening.
-                SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> rearm()
+                // No speech, nothing recognized, or a transient recogniser
+                // hiccup -- keep listening rather than dying, unless it keeps
+                // happening with nothing recognised in between.
+                SpeechRecognizer.ERROR_NO_MATCH,
+                SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
+                SpeechRecognizer.ERROR_CLIENT,
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
+                SpeechRecognizer.ERROR_SERVER_DISCONNECTED,
+                -> {
+                    consecutiveErrors++
+                    if (consecutiveErrors >= 6) {
+                        consecutiveErrors = 0
+                        onError("Lisa Assistant stopped listening (error code $error). Tap to restart.")
+                        stoppedByUser = true
+                        state = State.IDLE
+                    } else {
+                        mainHandler.postDelayed({ if (!stoppedByUser) rearm() }, 200)
+                    }
+                }
                 else -> {
                     onError("Lisa Assistant stopped listening (error code $error). Tap to restart.")
                     stoppedByUser = true

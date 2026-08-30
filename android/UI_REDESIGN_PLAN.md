@@ -215,34 +215,40 @@ Still one scrolling `Column`, tighter spacing to match the mock.
    (`var showInstructions … = false`):
    - **Header** (lavender, `primary @ 10%`, clickable): `AutoAwesome` icon +
      **"How hands-free mode works"** + `ExpandMore` chevron (rotates 180°).
-   - **Body** (`AnimatedVisibility`): three numbered `Step`s, each an accent
-     icon + bold "N. heading" + a body line, split by `HorizontalDivider`s.
-     **Steps 2 & 3 are tappable** — tap to hear that trigger phrase spoken
-     (`Step(onClick = …)` → same `speakTriggerPhrase` as the chips):
+   - **Body** (`AnimatedVisibility`): a `buildList` of `StepSpec`s rendered
+     `forEachIndexed` (so numbering has no gaps whatever is hidden), each an
+     accent icon + bold "N. heading" + a body line, split by
+     `HorizontalDivider`s. Every step except step 1 is **tappable** — tap to
+     hear that trigger phrase spoken (`speakTriggerPhrase`). Order:
      1. `Mic` / primary — **Tap the mic** — "Then speak «lang» normally."
-     2. `Chat` / tertiary — **To translate a word** — "Say «translate
-        trigger» _(bold, tertiary)_, pause and wait for the beep, then say
-        the English word."
-     3. `Lightbulb` / secondary — **To hear the next suggestion** — "Say
-        «next‑suggestion trigger» _(bold, secondary)_"
+     2. `Translate` / **teal** — **To translate a word into «lang»** — "Say
+        «translate trigger», then the English word after the beep and wait
+        for the «lang» translation."
+     3. `Lightbulb` / **orange** — **To hear the next suggestion** — "Say
+        «trigger» to cycle through more phrases." Russian only.
+     4. `MenuBook` / **teal** — **To hear what a phrase means** — "Say
+        «meaning trigger», for an English translation of what was just said."
+     5. `QuestionAnswer` / **orange** — **To hear a suggested reply** — "Say
+        «trigger» for phrases you could say back." Russian only.
    - **Footer** (after a divider): `Settings` icon + "To edit voice
      commands, go to _settings_."
    - The trigger phrases are printed **verbatim from Settings** (their
      punctuation included — see §7 / defaults now carry "?").
-6. **Command chips** — two reminder items, identical in every mode: a bare
-   accent icon (no disc, no ring) + the coloured phrase in bold + the italic
-   English caption below. **Tap** one to hear its phrase spoken in the
-   target‑language voice (`onSpeakTranslate` / `onSpeakNext` →
-   `speakTriggerPhrase`, which drops a trailing "?"). They don't trigger a
-   lookup — a mnemonic you can also hear. The instruction‑panel steps (§3.5)
-   are tap‑to‑speak too.
-   - Icons: teal speech‑bubble (`Icons.AutoMirrored.Filled.Chat`) for
-     "Как сказать?", orange lightbulb (`Icons.Filled.Lightbulb`) for
-     "Что ещё?".
+6. **Command chips** — reminder items in a `FlowRow` (`maxItemsInEachRow =
+   2`): bare accent icon + coloured phrase (bold) + italic English caption.
+   **Tap** one to hear its phrase spoken in the target‑language voice
+   (`spec.onSpeak` → `speakTriggerPhrase`, drops a trailing "?"). They don't
+   trigger a lookup — a mnemonic you can also hear; the §3.5 instruction
+   steps are tap‑to‑speak too.
+   - MainActivity passes an `items: List<CommandChipSpec>` — **2 for
+     non‑Russian** targets (translate, "what does that mean?"), **4 for
+     Russian** (+ next‑suggestion, + "how to answer?"). `CommandKind` fixes
+     each chip's icon + colour: translate = `Translate` / **teal**, meaning =
+     `MenuBook` / **teal**, next‑suggestion = `Lightbulb` / **orange**,
+     answer = `QuestionAnswer` / **orange**.
    - No hint text, no lookup buttons, no script‑aware enablement. In text
      mode a lookup is done with the keyboard's **Search** key; in hands‑free
-     with
-     the spoken triggers.
+     with the spoken triggers.
 
    **Visibility** — `CommandChips(visible = …)` from MainActivity:
    - **Hands‑free** (`assistantState != IDLE`): `!commandsDismissed`.
@@ -274,18 +280,31 @@ Still one scrolling `Column`, tighter spacing to match the mock.
    > and the trigger phrases (`remember(targetLanguage)` +
    > `TriggerPhraseConfig` keyed by `targetLanguage.code`).
    >
+   > **Four spoken commands**, each an editable per‑language trigger in
+   > `TriggerPhraseConfig` + a "Voice command — …" field in Settings, all
+   > matched by `SpeechAssistant` against every default‑language utterance:
+   > | command | Russian default | action |
+   > |---|---|---|
+   > | translate | `как сказать?` | beep → listen for an English word → translate it |
+   > | what does that mean? | `что это значит?` | translate the *previous* utterance to English, speak it (`englishSpeaker`, US locale) |
+   > | next suggestion | `что ещё?` | read the next phrase from the current result list — **Russian only** |
+   > | how to answer? | `как ответить?` | fresh related‑phrases lookup on the previous utterance — **Russian only** |
+   >
    > **Auto trigger defaults per language.**
    > `TriggerPhraseConfig.DEFAULT_*_TRIGGER_PHRASES` carries a hand‑authored
-   > translation of "how to say?" / "what else?" for every entry in
-   > `SupportedLanguages.ALL` — ru, hi, mr (Marathi), es, fr, de.
-   > `getPhrase` falls back to the **English phrase itself** for any code
-   > with no entry, so a new language always has a working default.
+   > translation of each for every entry in `SupportedLanguages.ALL` — ru,
+   > hi, mr (Marathi), es, fr, de (answer trigger: ru only). `getPhrase`
+   > falls back to the **English phrase itself** for any code with no entry,
+   > so a new language always has a working default. The last plain
+   > utterance is stashed in `lastUtterance` for the meaning/answer commands
+   > to act on.
    >
-   > **Next‑suggestion ("Что ещё?") is Russian‑only** — the curated library
-   > and `_has_cyrillic` expand detection are Russian. So for any non‑Russian
-   > target (`relatedPhrasesSupported = targetLanguage.code == RUSSIAN.code`
-   > is false): the orange command chip, its instruction step, and its
-   > Settings trigger field are **hidden**; `phraseSpeaker` stays
+   > **Related‑phrase commands (next‑suggestion, how‑to‑answer) are
+   > Russian‑only** — the curated library and `_has_cyrillic` expand
+   > detection are Russian. So for any non‑Russian target
+   > (`relatedPhrasesSupported = targetLanguage.code == RUSSIAN.code` is
+   > false): the orange command chip, those instruction steps, and their
+   > Settings trigger fields are **hidden**; `phraseSpeaker` stays
    > Russian‑locale; and a **plain (non‑trigger) hands‑free utterance does
    > *not* fire a lookup** — `handleAssistantUtterance` only runs `onSend()`
    > for `LISTENING_FOR_WORD` (the English word after the translate trigger)
@@ -470,28 +489,33 @@ Steps 1–7 are largely independent; 8 is the biggest single chunk.
 
 ## 7. Hands‑free instruction copy
 
-Lives in `InstructionsPanel` (§3.5) as three numbered `Step`s + a footer.
-The two trigger phrases are printed **verbatim from Settings** — their own
-capitalisation and punctuation — in their accent colour (teal / orange),
-bold. Defaults now carry the "?" (`TriggerPhraseConfig`).
+Lives in `InstructionsPanel` (§3.5) as numbered `Step`s + a footer. Trigger
+phrases print **verbatim from Settings** — their own capitalisation and
+punctuation — in the step's accent colour, bold.
 
-> **How hands‑free mode works**
+> **How hands‑free mode works** *(Russian target; "Russian" is the selected language)*
 > 1. **Tap the mic** — Then speak Russian normally.
-> 2. **To translate a word** — Say **как сказать?**, pause and wait for the beep, then say the English word.
-> 3. **To hear the next suggestion** — Say **что ещё?**
+> 2. **To translate a word into Russian** — Say **как сказать?**, then the English word after the beep and wait for the Russian translation.
+> 3. **To hear the next suggestion** — Say **что ещё?** to cycle through more phrases. *(Russian only)*
+> 4. **To hear what a phrase means** — Say **что это значит?**, for an English translation of what was just said.
+> 5. **To hear a suggested reply** — Say **как ответить?** for phrases you could say back. *(Russian only)*
 >
 > ⚙ To edit voice commands, go to _settings_.
 
-> **"Wait for the beep" — done, and fast.** The translate trigger is matched
-> straight from a **partial** result (`onPartialResults`) rather than waiting
-> out the recogniser's end‑of‑speech timeout: on a partial match the state
-> flips to `LISTENING_FOR_WORD`, `recognizer.stopListening()` finalises the
-> trigger session, and `beepThenListenForWord()` plays a 120 ms
-> `ToneGenerator.TONE_PROP_BEEP` (`STREAM_MUSIC`, follows the earbud) then
-> opens the English mic 120 ms later. A late final of the trigger phrase that
-> arrives in `LISTENING_FOR_WORD` is ignored (matches the trigger again).
-> `listenOnce` also sets shorter `EXTRA_SPEECH_INPUT_*_SILENCE_LENGTH_MILLIS`
-> hints. Net: trigger → beep is near‑conversational.
+> **"Wait for the beep" — fast, no recogniser surgery.** On a **partial**
+> (`onPartialResults`) match of the translate trigger: `switchingToWord =
+> true`, state → `LISTENING_FOR_WORD`, `beep()` (120 ms
+> `ToneGenerator.TONE_PROP_BEEP`, `STREAM_MUSIC`) — the beep is instant. The
+> recogniser is **not** touched; the current session ends on its own (short
+> `EXTRA_SPEECH_INPUT_*_SILENCE_LENGTH_MILLIS` hints) or is nudged with
+> `stopListening()` after 600 ms. The resulting `onResults`/`onError`, seeing
+> `switchingToWord`, opens the English mic 150 ms later (`listenForWord()`).
+> Earlier attempts to `cancel()`/`destroy()`/recreate the recogniser here
+> produced `ERROR_CLIENT` (5) then `ERROR_SERVER_DISCONNECTED` (11) — hence
+> the "just let the session finish" design. `onError` also treats
+> `ERROR_CLIENT` / `RECOGNIZER_BUSY` / `SERVER_DISCONNECTED` as recoverable
+> (delayed re‑arm), giving up only after `consecutiveErrors >= 6` with
+> nothing recognised in between.
 
 ---
 

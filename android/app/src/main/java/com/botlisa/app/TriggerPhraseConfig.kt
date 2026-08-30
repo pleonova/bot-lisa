@@ -4,26 +4,28 @@ import android.content.Context
 
 /**
  * Trigger phrases that drive Lisa Assistant's hands-free listening mode
- * (see SpeechAssistant.kt). Two independent, separately-editable phrases,
- * both checked against every default-language utterance (the listening
- * language follows the selected target language -- Russian by default):
+ * (see SpeechAssistant.kt). Independent, separately-editable phrases, each
+ * checked against every default-language utterance (the listening language
+ * follows the selected target language -- Russian by default):
  *
- *   - **Translate trigger** (Russian default "как сказать?", Hindi
- *     "कैसे कहें?") -- say this, pause, then an English word, and that next
- *     utterance is translated instead of treated as the target language.
- *     See SpeechAssistant.State.LISTENING_FOR_WORD.
- *   - **Next-suggestion trigger** (Russian default "что ещё?") -- say this to have
+ *   - **Translate trigger** (Russian "как сказать?") -- say this, pause,
+ *     then an English word, and that next utterance is translated instead of
+ *     treated as the target language. See
+ *     SpeechAssistant.State.LISTENING_FOR_WORD.
+ *   - **Meaning trigger** (Russian "что это значит?") -- say this to hear an
+ *     English translation of the *previous* target-language utterance spoken
+ *     aloud. Works for any target language.
+ *   - **Next-suggestion trigger** (Russian "что ещё?") -- say this to have
  *     the app read the next related/suggested phrase from the most recent
- *     lookup aloud. Saying it again reads the *next* one in that list,
- *     cycling back to the start once it runs out. Doesn't change listening
- *     state -- it's handled and then Lisa Assistant keeps listening in the
- *     default state, same as an ordinary Russian utterance that didn't
- *     match anything.
+ *     lookup aloud, cycling through the list. Russian only.
+ *   - **Answer trigger** (Russian "как ответить?") -- say this to run a
+ *     fresh related-phrases lookup on the previous utterance, surfacing
+ *     things you could say back. Russian only.
  *
- * Both are editable in Settings rather than hardcoded, and both use
- * TriggerPhraseDetector's same fuzzy match -- deliberately kept phonetically
- * distinct from each other by default so the fuzzy matcher doesn't confuse
- * one for the other; if you change either in Settings, keep that in mind.
+ * All are editable in Settings rather than hardcoded, and all use
+ * TriggerPhraseDetector's same fuzzy match -- kept phonetically distinct by
+ * default so the matcher doesn't confuse them; keep that in mind if you edit
+ * one.
  *
  * Storage mirrors LanguageConfig.kt's SharedPreferences pattern. The
  * translate-trigger key name (`trigger_phrase_<code>`) predates this file
@@ -35,18 +37,21 @@ object TriggerPhraseConfig {
     private const val PREFS_NAME = "bot_lisa_prefs"
     private const val TRANSLATE_KEY_PREFIX = "trigger_phrase_"
     private const val NEXT_SUGGESTION_KEY_PREFIX = "next_suggestion_trigger_phrase_"
+    private const val MEANING_KEY_PREFIX = "meaning_trigger_phrase_"
+    private const val ANSWER_KEY_PREFIX = "answer_trigger_phrase_"
 
-    // Every target language gets a default translate / next-suggestion
-    // trigger meaning the same as the Russian originals ("how to say?" /
-    // "what else?"). A language without a hand-authored entry falls back to
-    // the English phrase itself (see getPhrase), so adding a new language to
-    // SupportedLanguages.ALL always yields *some* working default.
+    // Each command has a default per target language, meaning the same as
+    // its Russian original. A language with no hand-authored entry falls
+    // back to the English phrase itself (see getPhrase), so a new language
+    // in SupportedLanguages.ALL always has *some* working default.
     //
     // The "?" is cosmetic -- TriggerPhraseDetector.normalize() strips
-    // punctuation before matching -- but keeps the phrase shown in Settings /
-    // instructions / reminder chips consistent.
+    // punctuation before matching -- but keeps the phrase consistent in
+    // Settings / instructions / chips.
     const val TRANSLATE_TRIGGER_EN = "how to say?"
+    const val MEANING_TRIGGER_EN = "what does that mean?"
     const val NEXT_SUGGESTION_TRIGGER_EN = "what else?"
+    const val ANSWER_TRIGGER_EN = "how to answer?"
 
     val DEFAULT_TRANSLATE_TRIGGER_PHRASES = mapOf(
         SupportedLanguages.RUSSIAN.code to "как сказать?",
@@ -56,6 +61,14 @@ object TriggerPhraseConfig {
         SupportedLanguages.FRENCH.code to "comment dit-on ?",
         SupportedLanguages.GERMAN.code to "wie sagt man?",
     )
+    val DEFAULT_MEANING_TRIGGER_PHRASES = mapOf(
+        SupportedLanguages.RUSSIAN.code to "что это значит?",
+        SupportedLanguages.HINDI.code to "इसका क्या मतलब है?",
+        SupportedLanguages.MARATHI.code to "याचा अर्थ काय?",
+        SupportedLanguages.SPANISH.code to "¿qué significa eso?",
+        SupportedLanguages.FRENCH.code to "qu'est-ce que ça veut dire ?",
+        SupportedLanguages.GERMAN.code to "was bedeutet das?",
+    )
     val DEFAULT_NEXT_SUGGESTION_TRIGGER_PHRASES = mapOf(
         SupportedLanguages.RUSSIAN.code to "что ещё?",
         SupportedLanguages.HINDI.code to "और क्या?",
@@ -64,6 +77,10 @@ object TriggerPhraseConfig {
         SupportedLanguages.FRENCH.code to "quoi d'autre ?",
         SupportedLanguages.GERMAN.code to "was noch?",
     )
+    // Answer suggestions are Russian-only (curated library) for now.
+    val DEFAULT_ANSWER_TRIGGER_PHRASES = mapOf(
+        SupportedLanguages.RUSSIAN.code to "как ответить?",
+    )
 
     fun getTranslateTriggerPhrase(context: Context, languageCode: String): String =
         getPhrase(context, TRANSLATE_KEY_PREFIX, DEFAULT_TRANSLATE_TRIGGER_PHRASES, TRANSLATE_TRIGGER_EN, languageCode)
@@ -71,11 +88,23 @@ object TriggerPhraseConfig {
     fun setTranslateTriggerPhrase(context: Context, languageCode: String, phrase: String) =
         setPhrase(context, TRANSLATE_KEY_PREFIX, languageCode, phrase)
 
+    fun getMeaningTriggerPhrase(context: Context, languageCode: String): String =
+        getPhrase(context, MEANING_KEY_PREFIX, DEFAULT_MEANING_TRIGGER_PHRASES, MEANING_TRIGGER_EN, languageCode)
+
+    fun setMeaningTriggerPhrase(context: Context, languageCode: String, phrase: String) =
+        setPhrase(context, MEANING_KEY_PREFIX, languageCode, phrase)
+
     fun getNextSuggestionTriggerPhrase(context: Context, languageCode: String): String =
         getPhrase(context, NEXT_SUGGESTION_KEY_PREFIX, DEFAULT_NEXT_SUGGESTION_TRIGGER_PHRASES, NEXT_SUGGESTION_TRIGGER_EN, languageCode)
 
     fun setNextSuggestionTriggerPhrase(context: Context, languageCode: String, phrase: String) =
         setPhrase(context, NEXT_SUGGESTION_KEY_PREFIX, languageCode, phrase)
+
+    fun getAnswerTriggerPhrase(context: Context, languageCode: String): String =
+        getPhrase(context, ANSWER_KEY_PREFIX, DEFAULT_ANSWER_TRIGGER_PHRASES, ANSWER_TRIGGER_EN, languageCode)
+
+    fun setAnswerTriggerPhrase(context: Context, languageCode: String, phrase: String) =
+        setPhrase(context, ANSWER_KEY_PREFIX, languageCode, phrase)
 
     private fun getPhrase(
         context: Context,

@@ -184,16 +184,22 @@ fun LisaScreen(
     // hidden until the backend can serve suggestions in that language.
     val relatedPhrasesSupported = targetLanguage.code == SupportedLanguages.RUSSIAN.code
 
-    // Lisa Assistant's two trigger phrases -- editable in Settings, persisted
-    // per target-language via TriggerPhraseConfig.kt. Keyed on
-    // `targetLanguage` so switching language swaps in that language's phrases
-    // (Hindi "कैसे कहें?" / "और क्या?" by default).
+    // Lisa Assistant's voice-command trigger phrases -- editable in Settings,
+    // persisted per target-language via TriggerPhraseConfig.kt. Keyed on
+    // `targetLanguage` so switching language swaps in that language's phrases.
     var translateTriggerPhrase by remember(targetLanguage) {
         mutableStateOf(TriggerPhraseConfig.getTranslateTriggerPhrase(context, targetLanguage.code))
     }
     fun onTranslateTriggerPhraseChange(newPhrase: String) {
         translateTriggerPhrase = newPhrase
         TriggerPhraseConfig.setTranslateTriggerPhrase(context, targetLanguage.code, newPhrase)
+    }
+    var meaningTriggerPhrase by remember(targetLanguage) {
+        mutableStateOf(TriggerPhraseConfig.getMeaningTriggerPhrase(context, targetLanguage.code))
+    }
+    fun onMeaningTriggerPhraseChange(newPhrase: String) {
+        meaningTriggerPhrase = newPhrase
+        TriggerPhraseConfig.setMeaningTriggerPhrase(context, targetLanguage.code, newPhrase)
     }
     var nextSuggestionTriggerPhrase by remember(targetLanguage) {
         mutableStateOf(TriggerPhraseConfig.getNextSuggestionTriggerPhrase(context, targetLanguage.code))
@@ -202,12 +208,24 @@ fun LisaScreen(
         nextSuggestionTriggerPhrase = newPhrase
         TriggerPhraseConfig.setNextSuggestionTriggerPhrase(context, targetLanguage.code, newPhrase)
     }
+    var answerTriggerPhrase by remember(targetLanguage) {
+        mutableStateOf(TriggerPhraseConfig.getAnswerTriggerPhrase(context, targetLanguage.code))
+    }
+    fun onAnswerTriggerPhraseChange(newPhrase: String) {
+        answerTriggerPhrase = newPhrase
+        TriggerPhraseConfig.setAnswerTriggerPhrase(context, targetLanguage.code, newPhrase)
+    }
+
+    // The last ordinary target-language utterance heard hands-free -- what
+    // the "what does that mean?" / "how to answer?" commands act on.
+    var lastUtterance by remember { mutableStateOf("") }
 
     // TTS playback state. Drives the speaker-icon pulse in the result card,
     // and -- crucially -- mutes the mic (isMuted below) so the assistant
     // reading a suggestion aloud isn't transcribed back as a user utterance.
     var translationSpeaking by remember { mutableStateOf(false) }
     var relatedSpeaking by remember { mutableStateOf(false) }
+    var englishSpeaking by remember { mutableStateOf(false) }
     // Which related-phrase row is currently being read (null = none). Cleared
     // by phraseSpeaker's onSpeakingChanged when playback ends.
     var speakingIndex by remember { mutableStateOf<Int?>(null) }
@@ -243,6 +261,19 @@ fun LisaScreen(
             },
         )
         phraseSpeaker = current
+        onDispose { current.shutdown() }
+    }
+
+    // English-locale speaker for the "what does that mean?" command, which
+    // reads an English translation of the previous utterance aloud.
+    var englishSpeaker by remember { mutableStateOf<TranslationSpeaker?>(null) }
+    DisposableEffect(Unit) {
+        val current = TranslationSpeaker(
+            context,
+            java.util.Locale.US,
+            onSpeakingChanged = { englishSpeaking = it },
+        )
+        englishSpeaker = current
         onDispose { current.shutdown() }
     }
 
@@ -344,6 +375,30 @@ fun LisaScreen(
         speaker?.speak(phrase.trimEnd('?', ' '))
     }
 
+    // "what does that mean?" -- translate the previous target-language
+    // utterance into English and read it aloud (English voice).
+    fun speakMeaningOfLast() {
+        val text = lastUtterance.ifBlank { input }
+        if (text.isBlank()) return
+        scope.launch {
+            val english = runCatching {
+                OnDeviceTranslator.translateToEnglish(text, targetLanguage)
+            }.getOrNull()
+            if (!english.isNullOrBlank()) englishSpeaker?.speak(english)
+        }
+    }
+
+    // "how to answer?" -- a fresh related-phrases lookup on the previous
+    // utterance, so the result card shows things you could say back. Russian
+    // only (same backend limitation as the next-suggestion command).
+    fun requestAnswerSuggestions() {
+        val text = lastUtterance.ifBlank { input }
+        if (text.isBlank() || !relatedPhrasesSupported) return
+        input = text
+        commandsDismissed = false
+        onSend()
+    }
+
     // Always-current handles onto onSend()/speakNextSuggestion() for Lisa
     // Assistant's callbacks below. SpeechAssistant is constructed once (via
     // `remember`) and holds onto whatever lambdas it's given at that first
@@ -356,6 +411,11 @@ fun LisaScreen(
     // here.)
     val handleAssistantUtterance =
         rememberUpdatedState<(String, SpeechAssistant.State) -> Unit> { text, state ->
+            // Remember the last plain utterance for the meaning / answer
+            // commands to act on.
+            if (state == SpeechAssistant.State.LISTENING_DEFAULT && text.isNotBlank()) {
+                lastUtterance = text
+            }
             // The English word after the translate trigger always runs a
             // lookup. A plain default-mode utterance only does for Russian --
             // "expand" mode has nothing to return for other languages, and
@@ -367,6 +427,8 @@ fun LisaScreen(
                 onSend()
             }
         }
+    val handleMeaningRequest = rememberUpdatedState { speakMeaningOfLast() }
+    val handleAnswerRequest = rememberUpdatedState { requestAnswerSuggestions() }
     val handleNextSuggestionRequest = rememberUpdatedState {
         speakNextSuggestion()
         commandsDismissed = true // spoken "что ещё?" -> hide the chips
@@ -422,13 +484,21 @@ fun LisaScreen(
             getTranslateTriggerPhrase = {
                 TriggerPhraseConfig.getTranslateTriggerPhrase(context, targetLanguage.code)
             },
+            getMeaningTriggerPhrase = {
+                TriggerPhraseConfig.getMeaningTriggerPhrase(context, targetLanguage.code)
+            },
             getNextSuggestionTriggerPhrase = {
                 TriggerPhraseConfig.getNextSuggestionTriggerPhrase(context, targetLanguage.code)
             },
+            getAnswerTriggerPhrase = {
+                TriggerPhraseConfig.getAnswerTriggerPhrase(context, targetLanguage.code)
+            },
             onUtterance = { text, state -> handleAssistantUtterance.value(text, state) },
+            onMeaningRequested = { handleMeaningRequest.value() },
             onNextSuggestionRequested = { handleNextSuggestionRequest.value() },
+            onAnswerRequested = { handleAnswerRequest.value() },
             onTranscript = { handleTranscript.value(it) },
-            isMuted = { translationSpeaking || relatedSpeaking },
+            isMuted = { translationSpeaking || relatedSpeaking || englishSpeaking },
             onStateChanged = { assistantState = it },
             onError = { assistantError = it },
         )
@@ -617,8 +687,16 @@ fun LisaScreen(
             OutlinedTextField(
                 value = translateTriggerPhrase,
                 onValueChange = { onTranslateTriggerPhraseChange(it) },
-                label = { Text("Trigger phrase (translate)") },
+                label = { Text("Voice command — translate") },
                 supportingText = { Text("Say this, pause, then an English word, to have Lisa Assistant translate it instead of treating it as ${targetLanguage.displayName}.") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = meaningTriggerPhrase,
+                onValueChange = { onMeaningTriggerPhraseChange(it) },
+                label = { Text("Voice command — what does that mean?") },
+                supportingText = { Text("Say this to hear an English translation of the last thing you said, spoken aloud.") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
@@ -626,8 +704,16 @@ fun LisaScreen(
                 OutlinedTextField(
                     value = nextSuggestionTriggerPhrase,
                     onValueChange = { onNextSuggestionTriggerPhraseChange(it) },
-                    label = { Text("Trigger phrase (next suggestion)") },
+                    label = { Text("Voice command — next suggestion") },
                     supportingText = { Text("Say this to have Lisa Assistant read the next suggested phrase aloud. Say it again for the next one in the list.") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = answerTriggerPhrase,
+                    onValueChange = { onAnswerTriggerPhraseChange(it) },
+                    label = { Text("Voice command — how to answer?") },
+                    supportingText = { Text("Say this to look up phrases you could say back to what you just heard.") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                 )
@@ -726,9 +812,13 @@ fun LisaScreen(
             onToggle = { showInstructions = !showInstructions },
             spokenLanguage = targetLanguage.displayName,
             translateTriggerPhrase = translateTriggerPhrase,
+            meaningTriggerPhrase = meaningTriggerPhrase,
             nextSuggestionTriggerPhrase = nextSuggestionTriggerPhrase,
+            answerTriggerPhrase = answerTriggerPhrase,
             onSpeakTranslate = { speakTriggerPhrase(translateTriggerPhrase) },
+            onSpeakMeaning = { speakTriggerPhrase(meaningTriggerPhrase) },
             onSpeakNext = { speakTriggerPhrase(nextSuggestionTriggerPhrase) },
+            onSpeakAnswer = { speakTriggerPhrase(answerTriggerPhrase) },
             showNextSuggestionStep = relatedPhrasesSupported,
         )
 
@@ -738,15 +828,34 @@ fun LisaScreen(
             // you type, the keyboard's Search key does the same job.
             visible = !commandsDismissed &&
                 (assistantState != SpeechAssistant.State.IDLE || input.isBlank()),
-            translatePhrase = translateTriggerPhrase,
-            // TODO(step 6b): translate these captions targetLanguage -> English
-            // via OnDeviceTranslator; static fallbacks for now.
-            translateCaption = "how to say",
-            nextPhrase = nextSuggestionTriggerPhrase,
-            nextCaption = "what else",
-            onSpeakTranslate = { speakTriggerPhrase(translateTriggerPhrase) },
-            onSpeakNext = { speakTriggerPhrase(nextSuggestionTriggerPhrase) },
-            showNextCommand = relatedPhrasesSupported,
+            items = buildList {
+                add(
+                    CommandChipSpec(
+                        CommandKind.TRANSLATE, translateTriggerPhrase,
+                        TriggerPhraseConfig.TRANSLATE_TRIGGER_EN,
+                    ) { speakTriggerPhrase(translateTriggerPhrase) },
+                )
+                add(
+                    CommandChipSpec(
+                        CommandKind.MEANING, meaningTriggerPhrase,
+                        TriggerPhraseConfig.MEANING_TRIGGER_EN,
+                    ) { speakTriggerPhrase(meaningTriggerPhrase) },
+                )
+                if (relatedPhrasesSupported) {
+                    add(
+                        CommandChipSpec(
+                            CommandKind.NEXT_SUGGESTION, nextSuggestionTriggerPhrase,
+                            TriggerPhraseConfig.NEXT_SUGGESTION_TRIGGER_EN,
+                        ) { speakTriggerPhrase(nextSuggestionTriggerPhrase) },
+                    )
+                    add(
+                        CommandChipSpec(
+                            CommandKind.ANSWER, answerTriggerPhrase,
+                            TriggerPhraseConfig.ANSWER_TRIGGER_EN,
+                        ) { speakTriggerPhrase(answerTriggerPhrase) },
+                    )
+                }
+            },
         )
 
         errorText?.let {
