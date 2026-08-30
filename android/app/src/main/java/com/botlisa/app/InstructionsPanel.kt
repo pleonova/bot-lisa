@@ -98,7 +98,7 @@ fun InstructionsPanel(
         if (showNextSuggestionStep) {
             add(
                 StepSpec(
-                    Icons.Filled.Lightbulb, orange, "To hear the next suggestion",
+                    Icons.Filled.Lightbulb, orange, "To hear the next suggestion in $spokenLanguage",
                     say(nextSuggestionTriggerPhrase, orange, " to cycle through more phrases."),
                     onSpeakNext,
                 ),
@@ -106,7 +106,7 @@ fun InstructionsPanel(
         }
         add(
             StepSpec(
-                Icons.AutoMirrored.Filled.MenuBook, teal, "To hear what a phrase means",
+                Icons.AutoMirrored.Filled.MenuBook, teal, "To hear what a phrase means in English",
                 say(meaningTriggerPhrase, teal, ", for an English translation of what was just said."),
                 onSpeakMeaning,
             ),
@@ -114,7 +114,7 @@ fun InstructionsPanel(
         if (showNextSuggestionStep) {
             add(
                 StepSpec(
-                    Icons.Filled.QuestionAnswer, orange, "To hear a suggested reply",
+                    Icons.Filled.QuestionAnswer, orange, "To hear a suggested reply in $spokenLanguage",
                     say(answerTriggerPhrase, orange, " for phrases you could say back."),
                     onSpeakAnswer,
                 ),

@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -86,12 +88,12 @@ private fun CommandItem(spec: CommandChipSpec, modifier: Modifier = Modifier) {
             .clickable(onClick = spec.onSpeak)
             .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(32.dp))
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(42.dp))
+        Spacer(Modifier.height(6.dp))
         Text(
             formatCommand(spec.phrase),
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = color,
             textAlign = TextAlign.Center,
@@ -99,7 +101,7 @@ private fun CommandItem(spec: CommandChipSpec, modifier: Modifier = Modifier) {
         Text(
             // Same capitalisation + "?" treatment as the phrase above it.
             formatCommand(spec.caption),
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.bodyMedium,
             fontStyle = FontStyle.Italic,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
