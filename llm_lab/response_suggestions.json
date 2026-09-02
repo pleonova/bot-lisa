@@ -1,0 +1,20 @@
+[
+  {
+    "id": "question_1",
+    "heard_utterance": "Хочешь ещё?",
+    "utterance_type": "question",
+    "instruction": "Suggest 3 short, natural responses a caregiver could say back to this question, in warm infant-directed Russian."
+  },
+  {
+    "id": "comment_1",
+    "heard_utterance": "Смотри, собака!",
+    "utterance_type": "comment",
+    "instruction": "Suggest 3 short, natural responses acknowledging this comment, in warm infant-directed Russian."
+  },
+  {
+    "id": "greeting_1",
+    "heard_utterance": "Привет!",
+    "utterance_type": "greeting",
+    "instruction": "Suggest 3 short, natural greeting responses, in warm infant-directed Russian."
+  }
+]

@@ -1,0 +1,17 @@
+[
+  {
+    "id": "bedtime_1",
+    "trigger_phrase": "спокойной ночи",
+    "instruction": "Suggest 3 short things a caregiver might say or do right after this phrase, as part of the same bedtime routine. Not paraphrases of the phrase itself — genuinely different follow-up phrases (e.g. brushing teeth, turning off lights, a hug)."
+  },
+  {
+    "id": "mealtime_1",
+    "trigger_phrase": "кушать",
+    "instruction": "Suggest 3 short things a caregiver might say as part of the same mealtime routine (e.g. washing hands, sitting at the table, saying thank you for food)."
+  },
+  {
+    "id": "bathtime_1",
+    "trigger_phrase": "купаться",
+    "instruction": "Suggest 3 short phrases a caregiver might say as part of the same bathtime routine."
+  }
+]
