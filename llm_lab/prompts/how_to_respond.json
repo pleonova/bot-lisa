@@ -1,0 +1,28 @@
+{
+  "task": "how_to_respond",
+  "instruction": "Suggest 3 short, natural replies {speaker} could say back to this {input_kind}.",
+  "utterance_label": "They said",
+  "cases": [
+    {
+      "id": "question_1",
+      "utterance": "Хочешь ещё?",
+      "input_kind": "question",
+      "examples": ["accepting", "declining gently", "asking for just a little"],
+      "note": "expects direct answers to the question"
+    },
+    {
+      "id": "comment_1",
+      "utterance": "Смотри, собака!",
+      "input_kind": "comment",
+      "examples": ["agreeing", "naming what the dog is doing", "asking a follow-up question"],
+      "note": "expects acknowledging replies"
+    },
+    {
+      "id": "greeting_1",
+      "utterance": "Привет!",
+      "input_kind": "greeting",
+      "examples": ["greeting back", "an endearment", "asking how they are"],
+      "note": "expects greeting replies"
+    }
+  ]
+}

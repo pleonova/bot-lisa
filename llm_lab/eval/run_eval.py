@@ -1,10 +1,13 @@
 """
 Phase 1 — local quality check (Mac, no RAM/CPU constraints).
 
-Runs both candidate model sizes (2B and 4B) against the routine-relations and
-response-suggestion prompt sets, and writes results to eval/outputs/ for the
-Russian-speaking collaborator to review for register (infant-directed vocabulary,
-diminutives, sentence length) and contextual relevance.
+Runs both candidate model sizes (2B and 4B) against the what-else and
+how-to-respond prompt sets, and writes results to eval/outputs/ for the
+Russian-speaking collaborator to review for register and contextual relevance.
+
+The prompt sets are audience-neutral: who is speaking to whom, in what language
+and register, comes from a persona file (prompts/personas/<name>.json). Default
+is `caregiver_infant`; set $LLM_LAB_PERSONA to evaluate another audience.
 
 This is a scratch evaluation script (speech_lab-style), not production code.
 Nothing here is wired into the app or backend.
@@ -22,7 +25,8 @@ Usage:
 
 Model files are looked for, in order, under:
     $LLM_LAB_MODELS  ->  ~/models  ->  llm_lab/models
-Overrides: $LLAMA_SERVER (binary path), $LLM_LAB_PORT (default 8080).
+Overrides: $LLAMA_SERVER (binary path), $LLM_LAB_PORT (8080),
+           $LLM_LAB_PERSONA (persona file stem, default "caregiver_infant").
 """
 
 import os
@@ -63,9 +67,15 @@ MODEL_DIRS = [
     ROOT / "models",
 ]
 
-SYSTEM_PROMPT = (
-    "You are generating short, warm Russian phrases for a toddler's caregiver. "
-    "Use diminutives, simple vocabulary, sentences under 8 words. Reply in Russian only."
+PERSONA_NAME = os.environ.get("LLM_LAB_PERSONA", "caregiver_infant")
+
+# Filled from the persona file. Keep the phrasing generic — the specifics
+# (who/whom/register/language) all come from the persona.
+SYSTEM_TEMPLATE = (
+    "You are helping {speaker} who is talking to {addressee}. "
+    "Everything you produce is in {language}. "
+    "Keep it {register}. "
+    "Reply with the phrases only — one per line, no numbering, no preamble."
 )
 
 # Belt-and-suspenders: the server runs with --reasoning off, but strip any
@@ -73,6 +83,14 @@ SYSTEM_PROMPT = (
 THINK_RE = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
 
 GEN_PARAMS = {"temperature": 0.6, "top_p": 0.9, "seed": 42, "max_tokens": 256}
+
+
+def load_persona() -> dict:
+    path = ROOT / "prompts" / "personas" / f"{PERSONA_NAME}.json"
+    if not path.exists():
+        available = sorted(p.stem for p in (ROOT / "prompts" / "personas").glob("*.json"))
+        raise SystemExit(f"persona '{PERSONA_NAME}' not found at {path}. Available: {available}")
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def resolve_model(key: str) -> Path | None:
@@ -141,16 +159,30 @@ def chat(system: str, user: str) -> str:
     return THINK_RE.sub("", text).strip()
 
 
-def run_prompt_set(prompt_set_path: Path) -> list[dict]:
-    cases = json.loads(prompt_set_path.read_text(encoding="utf-8"))
+def build_user_msg(spec: dict, persona: dict, case: dict) -> str:
+    # persona supplies {speaker} etc.; the case supplies {activity}/{input_kind}.
+    fields = {**persona, **case}
+    parts = [spec["instruction"].format(**fields)]
+    examples = case.get("examples")
+    if examples:
+        parts.append("(e.g. " + ", ".join(examples) + ")")
+    context = case.get("context") or []
+    if context:
+        parts.append("Earlier: " + " / ".join(context))
+    label = spec.get("utterance_label", "Phrase")
+    parts.append(f'{label}: "{case["utterance"]}"')
+    return " ".join(parts)
+
+
+def run_prompt_set(prompt_set_path: Path, persona: dict, system_prompt: str) -> list[dict]:
+    spec = json.loads(prompt_set_path.read_text(encoding="utf-8"))
     results = []
-    for case in cases:
-        subject = case.get("trigger_phrase") or case.get("heard_utterance")
-        user_msg = f'{case["instruction"]} Context: "{subject}"'
+    for case in spec["cases"]:
+        user_msg = build_user_msg(spec, persona, case)
         results.append({
             "id": case["id"],
-            "input": subject,
-            "output": chat(SYSTEM_PROMPT, user_msg),
+            "input": case["utterance"],
+            "output": chat(system_prompt, user_msg),
         })
     return results
 
@@ -162,13 +194,17 @@ def main():
             "$LLAMA_SERVER at the binary."
         )
 
+    persona = load_persona()
+    system_prompt = SYSTEM_TEMPLATE.format(**persona)
+    print(f"Persona: {PERSONA_NAME} ({persona['speaker']} -> {persona['addressee']})")
+
     outputs_dir = ROOT / "eval" / "outputs"
     outputs_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     prompt_sets = {
-        "routine_relations": ROOT / "prompts" / "routine_relations.json",
-        "response_suggestions": ROOT / "prompts" / "response_suggestions.json",
+        "what_else": ROOT / "prompts" / "what_else.json",
+        "how_to_respond": ROOT / "prompts" / "how_to_respond.json",
     }
 
     ran_any = False
@@ -186,8 +222,8 @@ def main():
         try:
             for set_name, set_path in prompt_sets.items():
                 print(f"  {set_name} ...")
-                results = run_prompt_set(set_path)
-                out_file = outputs_dir / f"{model_name}_{set_name}_{timestamp}.json"
+                results = run_prompt_set(set_path, persona, system_prompt)
+                out_file = outputs_dir / f"{model_name}_{set_name}_{PERSONA_NAME}_{timestamp}.json"
                 out_file.write_text(
                     json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8"
                 )

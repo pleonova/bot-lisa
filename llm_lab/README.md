@@ -37,8 +37,11 @@ llm_lab/
 ├── README.md
 ├── .gitignore              # keeps large GGUF files and raw outputs out of git
 ├── prompts/
-│   ├── routine_relations.json     # test cases for "что ещё"
-│   └── response_suggestions.json  # test cases for "как ответить"
+│   ├── personas/
+│   │   ├── caregiver_infant.json  # default: speaker / addressee / language / register
+│   │   └── adults.json            # example alt persona (two adults)
+│   ├── what_else.json        # "что ещё" trigger — cases + follow-up examples
+│   └── how_to_respond.json   # "как ответить" trigger — cases + reply examples
 ├── eval/
 │   ├── run_eval.py         # runs both model sizes against both prompt sets
 │   └── outputs/            # generated outputs land here for review (gitignored)
@@ -66,5 +69,20 @@ Overrides: `$LLAMA_SERVER` (binary path), `$LLM_LAB_PORT` (default 8080).
 > wheels on abetlen's index currently fail a CRC check on extract. The
 > `llama-server` route needs no Python build and reuses the same brew install
 > as Phase 2.
+
+## Personas
+The prompt sets carry the *task* (what to suggest, with concrete examples) but
+not the *voice*. Who is speaking, to whom, in what language and register lives in
+`prompts/personas/<name>.json` and is substituted into the system prompt and the
+`{speaker}` slot of each instruction. `run_eval.py` uses `caregiver_infant` by
+default. To evaluate a different audience:
+
+```bash
+LLM_LAB_PERSONA=adults python3 llm_lab/eval/run_eval.py
+```
+
+Output filenames include the persona name (`<model>_<set>_<persona>_<ts>.json`),
+so caregiver and adult runs don't collide. Add a new `personas/*.json` to test
+another audience — no change to the prompt sets or the script.
 
 Review `eval/outputs/` with the collaborator before deciding whether to proceed to Phase 3.

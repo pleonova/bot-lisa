@@ -1,0 +1,28 @@
+{
+  "task": "what_else",
+  "instruction": "Suggest 3 short things {speaker} might say or do right after this, still part of the same {activity}. Not paraphrases of it — genuinely different follow-up phrases.",
+  "utterance_label": "Phrase",
+  "cases": [
+    {
+      "id": "bedtime_1",
+      "utterance": "спокойной ночи",
+      "activity": "bedtime routine",
+      "examples": ["brushing teeth", "turning off the light", "a goodnight hug"],
+      "note": "expects sibling routine steps, not paraphrases of the phrase"
+    },
+    {
+      "id": "mealtime_1",
+      "utterance": "кушать",
+      "activity": "mealtime routine",
+      "examples": ["washing hands", "sitting down at the table", "saying thank you for the food"],
+      "note": "expects sibling routine steps"
+    },
+    {
+      "id": "bathtime_1",
+      "utterance": "купаться",
+      "activity": "bathtime routine",
+      "examples": ["getting undressed", "testing the water", "washing hair", "drying off with a towel"],
+      "note": "expects sibling routine steps"
+    }
+  ]
+}
