@@ -47,16 +47,7 @@ llm_lab/
 
 ## Setup
 ```bash
-brew install llama.cpp                 # Phase 2 (llama-bench); harmless to install now
-
-python3 -m venv llm_lab/.venv && source llm_lab/.venv/bin/activate
-
-# PyPI ships llama-cpp-python as source only (it would compile from scratch).
-# abetlen's index has a prebuilt Apple-Silicon wheel, py3-none tagged, so it
-# works on any Python 3.x incl. 3.14 — no Xcode/CMake needed. Use /whl/cpu to
-# skip the Metal GPU backend.
-pip install llama-cpp-python \
-  --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/metal
+brew install llama.cpp   # provides llama-server (Phase 1) and llama-bench (Phase 2)
 
 # Same Q4_K_M GGUFs we'd run on-device. Unsloth repos; bartowski's
 # (bartowski/Qwen_Qwen3.5-{4B,2B}-GGUF) are interchangeable.
@@ -65,9 +56,15 @@ curl -L -O https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4
 curl -L -O https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf
 
 cd -                                   # back to repo
-python llm_lab/eval/run_eval.py        # finds GGUFs in ~/models automatically
+python3 llm_lab/eval/run_eval.py       # stdlib only — no venv, no pip
 ```
-`run_eval.py` looks for the GGUFs under `$LLM_LAB_MODELS`, then `~/models`, then
-`llm_lab/models/` — put them wherever is convenient.
+`run_eval.py` drives `llama-server` over its HTTP API (one model load per size).
+It finds the GGUFs under `$LLM_LAB_MODELS`, then `~/models`, then `llm_lab/models/`.
+Overrides: `$LLAMA_SERVER` (binary path), `$LLM_LAB_PORT` (default 8080).
+
+> Not using `llama-cpp-python`: PyPI ships it source-only, and the prebuilt
+> wheels on abetlen's index currently fail a CRC check on extract. The
+> `llama-server` route needs no Python build and reuses the same brew install
+> as Phase 2.
 
 Review `eval/outputs/` with the collaborator before deciding whether to proceed to Phase 3.
