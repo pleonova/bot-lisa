@@ -21,18 +21,25 @@ this leaves `llama-bench` ready for Phase 2.)
 Usage:
     brew install llama.cpp
     # download the GGUFs (see README "Setup") into ~/models/ or llm_lab/models/
-    python llm_lab/eval/run_eval.py
+    python3 llm_lab/eval/run_eval.py                       # everything
+    python3 llm_lab/eval/run_eval.py --model 4b --set what_else --print
+    python3 llm_lab/eval/run_eval.py --set what_else --case bedtime_1 --dry-run
+
+Flags (see --help): --model {2b,4b,all}  --set {what_else,how_to_respond,all}
+    --case ID (repeatable)  --persona NAME  --print  --dry-run
 
 Model files are looked for, in order, under:
     $LLM_LAB_MODELS  ->  ~/models  ->  llm_lab/models
 Overrides: $LLAMA_SERVER (binary path), $LLM_LAB_PORT (8080),
-           $LLM_LAB_PERSONA (persona file stem, default "caregiver_infant").
+           $LLM_LAB_PERSONA (persona file stem, default "caregiver_infant";
+           --persona wins over the env var).
 """
 
 import os
 import re
 import json
 import shutil
+import argparse
 import subprocess
 import time
 import urllib.error
@@ -67,7 +74,12 @@ MODEL_DIRS = [
     ROOT / "models",
 ]
 
-PERSONA_NAME = os.environ.get("LLM_LAB_PERSONA", "caregiver_infant")
+DEFAULT_PERSONA = os.environ.get("LLM_LAB_PERSONA", "caregiver_infant")
+
+PROMPT_SETS = {
+    "what_else": "prompts/what_else.json",
+    "how_to_respond": "prompts/how_to_respond.json",
+}
 
 # Filled from the persona file. Keep the phrasing generic — the specifics
 # (who/whom/register/language) all come from the persona.
@@ -85,11 +97,11 @@ THINK_RE = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
 GEN_PARAMS = {"temperature": 0.6, "top_p": 0.9, "seed": 42, "max_tokens": 256}
 
 
-def load_persona() -> dict:
-    path = ROOT / "prompts" / "personas" / f"{PERSONA_NAME}.json"
+def load_persona(name: str) -> dict:
+    path = ROOT / "prompts" / "personas" / f"{name}.json"
     if not path.exists():
         available = sorted(p.stem for p in (ROOT / "prompts" / "personas").glob("*.json"))
-        raise SystemExit(f"persona '{PERSONA_NAME}' not found at {path}. Available: {available}")
+        raise SystemExit(f"persona '{name}' not found at {path}. Available: {available}")
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -174,56 +186,96 @@ def build_user_msg(spec: dict, persona: dict, case: dict) -> str:
     return " ".join(parts)
 
 
-def run_prompt_set(prompt_set_path: Path, persona: dict, system_prompt: str) -> list[dict]:
-    spec = json.loads(prompt_set_path.read_text(encoding="utf-8"))
+def load_spec(set_name: str, case_ids: list[str] | None) -> dict:
+    spec = json.loads((ROOT / PROMPT_SETS[set_name]).read_text(encoding="utf-8"))
+    if case_ids:
+        spec["cases"] = [c for c in spec["cases"] if c["id"] in case_ids]
+    return spec
+
+
+def run_prompt_set(spec: dict, persona: dict, system_prompt: str,
+                   do_print: bool) -> list[dict]:
     results = []
     for case in spec["cases"]:
         user_msg = build_user_msg(spec, persona, case)
-        results.append({
-            "id": case["id"],
-            "input": case["utterance"],
-            "output": chat(system_prompt, user_msg),
-        })
+        output = chat(system_prompt, user_msg)
+        results.append({"id": case["id"], "input": case["utterance"], "output": output})
+        if do_print:
+            print(f"\n  [{case['id']}] {case['utterance']}\n{_indent(output)}\n")
     return results
 
 
-def main():
-    if not LLAMA_SERVER:
-        raise SystemExit(
-            "llama-server not found. Run `brew install llama.cpp`, or point "
-            "$LLAMA_SERVER at the binary."
-        )
+def _indent(text: str) -> str:
+    return "\n".join("    " + line for line in text.splitlines())
 
-    persona = load_persona()
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        description="Phase 1 prompt eval against local Qwen3.5 GGUFs via llama-server.")
+    p.add_argument("--model", choices=["2b", "4b", "all"], default="all",
+                   help="model size to run (default: all)")
+    p.add_argument("--set", dest="prompt_set", choices=[*PROMPT_SETS, "all"], default="all",
+                   help="prompt set to run (default: all)")
+    p.add_argument("--case", action="append", metavar="ID", dest="cases",
+                   help="only this case id; repeatable (default: all cases in the set)")
+    p.add_argument("--persona", default=DEFAULT_PERSONA,
+                   help=f"persona file stem (default: {DEFAULT_PERSONA})")
+    p.add_argument("--print", dest="do_print", action="store_true",
+                   help="echo id + output to the terminal as results come back")
+    p.add_argument("--dry-run", action="store_true",
+                   help="print the assembled system + user prompts and exit (no model call)")
+    return p.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    persona = load_persona(args.persona)
     system_prompt = SYSTEM_TEMPLATE.format(**persona)
-    print(f"Persona: {PERSONA_NAME} ({persona['speaker']} -> {persona['addressee']})")
+    set_names = list(PROMPT_SETS) if args.prompt_set == "all" else [args.prompt_set]
+    model_keys = ([f"qwen3.5-{args.model}"] if args.model != "all"
+                  else list(MODEL_CANDIDATES))
+
+    print(f"Persona: {args.persona} ({persona['speaker']} -> {persona['addressee']})")
+
+    if args.dry_run:
+        print(f"\nSYSTEM: {system_prompt}")
+        for set_name in set_names:
+            spec = load_spec(set_name, args.cases)
+            for case in spec["cases"]:
+                print(f"\n=== {set_name} / {case['id']} ===")
+                print(f"USER  : {build_user_msg(spec, persona, case)}")
+        return
+
+    if not LLAMA_SERVER:
+        raise SystemExit("llama-server not found. Run `brew install llama.cpp`, "
+                         "or point $LLAMA_SERVER at the binary.")
 
     outputs_dir = ROOT / "eval" / "outputs"
     outputs_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    prompt_sets = {
-        "what_else": ROOT / "prompts" / "what_else.json",
-        "how_to_respond": ROOT / "prompts" / "how_to_respond.json",
-    }
-
     ran_any = False
-    for model_name in MODEL_CANDIDATES:
-        model_path = resolve_model(model_name)
+    for model_key in model_keys:
+        model_path = resolve_model(model_key)
         if model_path is None:
             searched = [str(d) for d in MODEL_DIRS if d is not None]
-            print(f"Skipping {model_name}: no GGUF found under {searched}. "
+            print(f"Skipping {model_key}: no GGUF found under {searched}. "
                   f"Download it first (see README 'Setup').")
             continue
 
         ran_any = True
-        print(f"Loading {model_name} ({model_path.name}) into llama-server ...")
+        print(f"Loading {model_key} ({model_path.name}) into llama-server ...")
         proc = start_server(model_path)
         try:
-            for set_name, set_path in prompt_sets.items():
-                print(f"  {set_name} ...")
-                results = run_prompt_set(set_path, persona, system_prompt)
-                out_file = outputs_dir / f"{model_name}_{set_name}_{PERSONA_NAME}_{timestamp}.json"
+            for set_name in set_names:
+                spec = load_spec(set_name, args.cases)
+                if not spec["cases"]:
+                    print(f"  {set_name}: no matching cases, skipped")
+                    continue
+                print(f"  {set_name} ({len(spec['cases'])} case(s)) ...")
+                results = run_prompt_set(spec, persona, system_prompt, args.do_print)
+                out_file = (outputs_dir /
+                            f"{model_key}_{set_name}_{args.persona}_{timestamp}.json")
                 out_file.write_text(
                     json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8"
                 )

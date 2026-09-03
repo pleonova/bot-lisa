@@ -43,7 +43,7 @@ llm_lab/
 │   ├── what_else.json        # "что ещё" trigger — cases + follow-up examples
 │   └── how_to_respond.json   # "как ответить" trigger — cases + reply examples
 ├── eval/
-│   ├── run_eval.py         # runs both model sizes against both prompt sets
+│   ├── run_eval.py         # runs model sizes × prompt sets; --model/--set/--case to narrow
 │   └── outputs/            # generated outputs land here for review (gitignored)
 └── models/                 # place downloaded .gguf files here (gitignored)
 ```
@@ -70,15 +70,44 @@ Overrides: `$LLAMA_SERVER` (binary path), `$LLM_LAB_PORT` (default 8080).
 > `llama-server` route needs no Python build and reuses the same brew install
 > as Phase 2.
 
+## Iterating on prompts
+Everything worth tweaking is plain text under `prompts/`:
+
+| To change… | Edit |
+|---|---|
+| task wording / the utterance label | `instruction`, `utterance_label` in `what_else.json` / `how_to_respond.json` |
+| a test case or its examples | the `cases[]` entry — `utterance`, `activity` / `input_kind`, `examples`, optional `context` |
+| voice: who speaks, register, language | `prompts/personas/<name>.json` |
+| sampling (temp, seed, max tokens) | `GEN_PARAMS` near the top of `eval/run_eval.py` |
+
+Then re-run a narrow slice instead of the full sweep — a one-case run is ~7s:
+
+```bash
+# show the exact prompt a change produces — no model call
+python3 llm_lab/eval/run_eval.py --set what_else --case bedtime_1 --dry-run
+
+# run one size / set / case and print results inline
+python3 llm_lab/eval/run_eval.py --model 4b --set what_else --case bedtime_1 --print
+
+# try another audience
+python3 llm_lab/eval/run_eval.py --persona adults --set how_to_respond --print
+
+# full sweep once you're happy (both sizes, both sets, all cases)
+python3 llm_lab/eval/run_eval.py
+```
+
+`--case` is repeatable. Every non-dry run also writes
+`eval/outputs/<model>_<set>_<persona>_<timestamp>.json`. `--help` lists all flags.
+
 ## Personas
 The prompt sets carry the *task* (what to suggest, with concrete examples) but
 not the *voice*. Who is speaking, to whom, in what language and register lives in
 `prompts/personas/<name>.json` and is substituted into the system prompt and the
 `{speaker}` slot of each instruction. `run_eval.py` uses `caregiver_infant` by
-default. To evaluate a different audience:
+default; pick another with `--persona <name>` (or `$LLM_LAB_PERSONA`):
 
 ```bash
-LLM_LAB_PERSONA=adults python3 llm_lab/eval/run_eval.py
+python3 llm_lab/eval/run_eval.py --persona adults
 ```
 
 Output filenames include the persona name (`<model>_<set>_<persona>_<ts>.json`),
