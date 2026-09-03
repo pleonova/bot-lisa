@@ -47,10 +47,19 @@ llm_lab/
 
 ## Setup
 ```bash
-brew install llama.cpp
+brew install llama.cpp                 # Phase 2 (llama-bench); harmless to install now
 pip install llama-cpp-python --break-system-packages
-mkdir -p llm_lab/models
-# download qwen3.5-4b-q4_k_m.gguf and qwen3.5-2b-q4_k_m.gguf into llm_lab/models/
-python llm_lab/eval/run_eval.py
+
+# Same Q4_K_M GGUFs we'd run on-device. Unsloth repos; bartowski's
+# (bartowski/Qwen_Qwen3.5-{4B,2B}-GGUF) are interchangeable.
+mkdir -p ~/models && cd ~/models
+wget https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf
+wget https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf
+
+cd -                                   # back to repo
+python llm_lab/eval/run_eval.py        # finds GGUFs in ~/models automatically
 ```
+`run_eval.py` looks for the GGUFs under `$LLM_LAB_MODELS`, then `~/models`, then
+`llm_lab/models/` — put them wherever is convenient.
+
 Review `eval/outputs/` with the collaborator before deciding whether to proceed to Phase 3.

@@ -1,0 +1,11 @@
+# Local virtualenv
+.venv/
+venv/
+
+# Large model weights — download locally, never commit
+models/
+*.gguf
+
+# Raw eval outputs — review locally with the collaborator, don't commit
+eval/outputs/
+!eval/outputs/.gitkeep
