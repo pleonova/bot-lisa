@@ -60,6 +60,10 @@ object TriggerPhraseConfig {
         SupportedLanguages.SPANISH.code to "¿cómo se dice?",
         SupportedLanguages.FRENCH.code to "comment dit-on ?",
         SupportedLanguages.GERMAN.code to "wie sagt man?",
+        SupportedLanguages.PORTUGUESE.code to "como se diz?",
+        SupportedLanguages.ROMANIAN.code to "cum se spune?",
+        SupportedLanguages.UKRAINIAN.code to "як сказати?",
+        SupportedLanguages.MANDARIN.code to "怎么说？",
     )
     val DEFAULT_MEANING_TRIGGER_PHRASES = mapOf(
         SupportedLanguages.RUSSIAN.code to "что это значит?",
@@ -68,6 +72,10 @@ object TriggerPhraseConfig {
         SupportedLanguages.SPANISH.code to "¿qué significa eso?",
         SupportedLanguages.FRENCH.code to "qu'est-ce que ça veut dire ?",
         SupportedLanguages.GERMAN.code to "was bedeutet das?",
+        SupportedLanguages.PORTUGUESE.code to "o que significa isso?",
+        SupportedLanguages.ROMANIAN.code to "ce înseamnă asta?",
+        SupportedLanguages.UKRAINIAN.code to "що це означає?",
+        SupportedLanguages.MANDARIN.code to "这是什么意思？",
     )
     val DEFAULT_NEXT_SUGGESTION_TRIGGER_PHRASES = mapOf(
         SupportedLanguages.RUSSIAN.code to "что ещё?",
@@ -76,6 +84,10 @@ object TriggerPhraseConfig {
         SupportedLanguages.SPANISH.code to "¿qué más?",
         SupportedLanguages.FRENCH.code to "quoi d'autre ?",
         SupportedLanguages.GERMAN.code to "was noch?",
+        SupportedLanguages.PORTUGUESE.code to "que mais?",
+        SupportedLanguages.ROMANIAN.code to "ce altceva?",
+        SupportedLanguages.UKRAINIAN.code to "що ще?",
+        SupportedLanguages.MANDARIN.code to "还有什么？",
     )
     // Answer suggestions are Russian-only (curated library) for now.
     val DEFAULT_ANSWER_TRIGGER_PHRASES = mapOf(
