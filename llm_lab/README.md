@@ -48,13 +48,21 @@ llm_lab/
 ## Setup
 ```bash
 brew install llama.cpp                 # Phase 2 (llama-bench); harmless to install now
-pip install llama-cpp-python --break-system-packages
+
+python3 -m venv llm_lab/.venv && source llm_lab/.venv/bin/activate
+
+# PyPI ships llama-cpp-python as source only (it would compile from scratch).
+# abetlen's index has a prebuilt Apple-Silicon wheel, py3-none tagged, so it
+# works on any Python 3.x incl. 3.14 — no Xcode/CMake needed. Use /whl/cpu to
+# skip the Metal GPU backend.
+pip install llama-cpp-python \
+  --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/metal
 
 # Same Q4_K_M GGUFs we'd run on-device. Unsloth repos; bartowski's
 # (bartowski/Qwen_Qwen3.5-{4B,2B}-GGUF) are interchangeable.
 mkdir -p ~/models && cd ~/models
-wget https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf
-wget https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf
+curl -L -O https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf
+curl -L -O https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf
 
 cd -                                   # back to repo
 python llm_lab/eval/run_eval.py        # finds GGUFs in ~/models automatically
