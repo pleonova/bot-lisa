@@ -1,16 +1,29 @@
 {
   "task": "what_else",
   "user_template": [
-    "Suggest 3 short things {speaker} might say or do right after this, still part of the same {activity}.{hint_clause}",
+    [
+      "Suggest 3 short things {speaker} might say or do right after this,",
+      "still part of the same {activity}.{hint_clause}"
+    ],
     "",
     "Rules:",
-    "- Each phrase names a concrete next action in the routine or exchange (a thing you do or say), not a description, feeling, or comparison.",
-    "- Do not use similes or metaphors — state the action plainly.",
-    "- Each phrase should work as something the speaker would actually say in the moment — short announcement, invitation, or request form, not decorative narration.",
-    "- Not paraphrases of the original phrase, and not each other — 3 genuinely different steps.",
+    [
+      "- Each phrase names a concrete next step: a physical or ritual action, or a plain thing you say",
+      "(a short presence/reassurance statement counts, e.g. saying you're there or it's okay) —",
+      "not decorative sensory description or comparison."
+    ],
+    "- Do not use similes or metaphors — state the thing plainly.",
+    [
+      "- Each phrase should work as something the speaker would actually say in the moment —",
+      "short announcement, invitation, reassurance, or request form, not decorative narration."
+    ],
+    [
+      "- Not paraphrases of the original phrase, and not each other —",
+      "3 genuinely different steps.{persona_rules_clause}"
+    ],
     "",
-    "Wrong (decorative, not an action): \"{bad_example}\"",
-    "Right (concrete action), for example:",
+    "Wrong (decorative, not a concrete step): \"{bad_example}\"",
+    "Right (concrete step), for example:",
     "{good_examples}",
     "",
     "Heard: \"{utterance}\""

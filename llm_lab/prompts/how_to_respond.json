@@ -5,7 +5,10 @@
     "",
     "Rules:",
     "- Each reply is something {speaker} would actually say back, not a description of what to say.",
-    "- Reply to the substance of what was said — no generic filler vague enough to answer anything.",
+    [
+      "- Reply to the substance of what was said —",
+      "no generic filler vague enough to answer anything."
+    ],
     "- Not paraphrases of each other — 3 genuinely different replies.",
     "",
     "Wrong (generic filler, not a real reply): \"{bad_example}\"",

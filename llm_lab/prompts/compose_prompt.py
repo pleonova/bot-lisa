@@ -51,6 +51,14 @@ def compose_prompt(case: dict, task: str = "what_else", generic: bool = False) -
 
     good_examples = "\n".join(f'- "{g}"' for g in examples["good_examples"])
 
+    # Optional persona-specific extra rules (e.g. caregiver_infant allows
+    # reassurance-only steps). Rendered as extra bullet lines appended after
+    # the task's own rules; empty for personas that don't define any, and
+    # simply ignored by str.format() for task templates with no
+    # {persona_rules_clause} slot.
+    persona_rules = persona.get("extra_rules") or []
+    persona_rules_clause = "".join(f"\n- {rule}" for rule in persona_rules)
+
     # Merge in this order so a case can't accidentally clobber the pieces
     # that make the prompt make sense (speaker/hint_clause/examples), but
     # still supplies whatever task-specific slot the template needs
@@ -61,10 +69,17 @@ def compose_prompt(case: dict, task: str = "what_else", generic: bool = False) -
         "hint_clause": hint_clause,
         "bad_example": examples["bad_example"],
         "good_examples": good_examples,
+        "persona_rules_clause": persona_rules_clause,
     }
     # user_template is stored as a list of lines (not one long escaped
-    # string) so prompts/<task>.json stays readable/diffable.
-    user_template = "\n".join(template["user_template"])
+    # string) so prompts/<task>.json stays readable/diffable. A line that's
+    # itself a list is a single long line word-wrapped across several JSON
+    # array entries for editability; join its fragments with a space to
+    # get back the one logical line before joining lines with "\n".
+    def _line(entry):
+        return " ".join(entry) if isinstance(entry, list) else entry
+
+    user_template = "\n".join(_line(entry) for entry in template["user_template"])
     user = user_template.format(**fields)
     return system, user
 
