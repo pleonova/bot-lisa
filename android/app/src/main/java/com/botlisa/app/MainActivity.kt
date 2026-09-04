@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -29,14 +30,19 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -451,6 +457,16 @@ fun LisaScreen(
         commandsDismissed = assistantState == SpeechAssistant.State.LISTENING_FOR_WORD
     }
 
+    // SpeechAssistant can go IDLE on its own -- not just via stopHandsFree()
+    // -- e.g. its ten-minute silence watchdog (SpeechAssistant.kt). Whatever
+    // the cause, the foreground service (and the wake lock/notification that
+    // come with it) has no reason to keep running once hands-free is IDLE.
+    LaunchedEffect(assistantState) {
+        if (assistantState == SpeechAssistant.State.IDLE) {
+            ListeningForegroundService.stop(context)
+        }
+    }
+
     // Small-print English gloss of the transcript. Only while hands-free is
     // listening in the target language (not IDLE, not the English-word
     // phase), and debounced so partials don't hammer the translator. Fails
@@ -666,37 +682,57 @@ fun LisaScreen(
         }
 
         if (showServerSettings) {
-            ExposedDropdownMenuBox(
-                expanded = languageMenuExpanded,
-                onExpandedChange = { languageMenuExpanded = it },
-            ) {
+            // Material3's ExposedDropdownMenu flips above the field whenever
+            // it doesn't measure enough room below (a 48dp margin plus the
+            // menu's own height) -- capping the height alone doesn't stop
+            // that. Anchor a plain Popup to the field's bottom edge instead,
+            // which always opens downward regardless of available space.
+            var languageFieldHeightPx by remember { mutableStateOf(0) }
+            Box {
                 OutlinedTextField(
                     value = targetLanguage.displayName,
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Target language") },
                     supportingText = { Text("What English translates into, the voice that reads it back, and what Lisa Assistant listens for. Related-phrase suggestions still come from the Russian library for now.") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = languageMenuExpanded) },
-                    modifier = Modifier
-                        .menuAnchor()
-                        .fillMaxWidth(),
-                )
-                ExposedDropdownMenu(
-                    expanded = languageMenuExpanded,
-                    onDismissRequest = { languageMenuExpanded = false },
-                    // Cap the height so it fits below the field and opens
-                    // downward instead of flipping up over the label.
-                    modifier = Modifier.heightIn(max = 260.dp),
-                ) {
-                    SupportedLanguages.ALL.forEach { language ->
-                        DropdownMenuItem(
-                            text = { Text(language.displayName) },
-                            onClick = {
-                                targetLanguage = language
-                                LanguageConfig.setTargetLanguage(context, language)
-                                languageMenuExpanded = false
-                            },
+                    trailingIcon = {
+                        Icon(
+                            Icons.Filled.ArrowDropDown,
+                            contentDescription = if (languageMenuExpanded) "Collapse" else "Expand",
+                            modifier = Modifier.rotate(if (languageMenuExpanded) 180f else 0f),
                         )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onGloballyPositioned { languageFieldHeightPx = it.size.height }
+                        .clickable { languageMenuExpanded = !languageMenuExpanded },
+                )
+                if (languageMenuExpanded) {
+                    Popup(
+                        alignment = Alignment.TopStart,
+                        offset = IntOffset(0, languageFieldHeightPx),
+                        onDismissRequest = { languageMenuExpanded = false },
+                        properties = PopupProperties(focusable = true),
+                    ) {
+                        Surface(
+                            shape = MaterialTheme.shapes.extraSmall,
+                            tonalElevation = 3.dp,
+                            shadowElevation = 3.dp,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
+                                SupportedLanguages.ALL.forEach { language ->
+                                    DropdownMenuItem(
+                                        text = { Text(language.displayName) },
+                                        onClick = {
+                                            targetLanguage = language
+                                            LanguageConfig.setTargetLanguage(context, language)
+                                            languageMenuExpanded = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

@@ -56,7 +56,10 @@ import android.speech.SpeechRecognizer
  * continuously until [stop] is called; a fatal error (e.g. no recognizer on
  * this device, or a permission problem the caller didn't head off) reports
  * itself once via [onError] and leaves the assistant idle rather than
- * looping forever on a state it can't recover from.
+ * looping forever on a state it can't recover from. It also stops itself
+ * (via [onError]) after ten minutes with no speech detected at all -- see
+ * the silence watchdog below -- so hands-free mode doesn't listen to an
+ * empty room indefinitely.
  */
 class SpeechAssistant(
     private val context: Context,
@@ -93,6 +96,15 @@ class SpeechAssistant(
 ) {
     enum class State { IDLE, LISTENING_DEFAULT, LISTENING_FOR_WORD }
 
+    companion object {
+        // Hands-free is meant to run indefinitely, but there's no point
+        // keeping the mic (and, with it, the foreground service + wake lock
+        // in ListeningForegroundService.kt) alive if nobody's said anything
+        // at all in a long while -- auto-stop rather than drain battery
+        // listening to an empty room.
+        private const val SILENCE_TIMEOUT_MS = 10 * 60 * 1000L
+    }
+
     private var recognizer: SpeechRecognizer? = null
     private var stoppedByUser = true
     // True from the moment a *partial* matches the translate trigger until
@@ -105,6 +117,24 @@ class SpeechAssistant(
     private var consecutiveErrors = 0
     private val mainHandler = Handler(Looper.getMainLooper())
     private var tone: ToneGenerator? = null
+
+    // Fires if resetSilenceTimeout() isn't called again within
+    // SILENCE_TIMEOUT_MS -- i.e. ten minutes pass with no speech (not even
+    // an unrecognised partial) detected at all.
+    private val silenceWatchdog = Runnable {
+        if (!stoppedByUser) {
+            stop()
+            onError("Lisa Assistant stopped listening after 10 minutes of silence.")
+        }
+    }
+
+    // Called on start() and every time actual speech is heard (a non-blank
+    // partial or final transcript) -- NOT on NO_MATCH/SPEECH_TIMEOUT, which
+    // is what "silence" means here.
+    private fun resetSilenceTimeout() {
+        mainHandler.removeCallbacks(silenceWatchdog)
+        mainHandler.postDelayed(silenceWatchdog, SILENCE_TIMEOUT_MS)
+    }
 
     private fun newRecognizer(): SpeechRecognizer =
         SpeechRecognizer.createSpeechRecognizer(context).apply { setRecognitionListener(listener) }
@@ -141,6 +171,7 @@ class SpeechAssistant(
         recognizer?.destroy()
         recognizer = newRecognizer()
         state = State.LISTENING_DEFAULT
+        resetSilenceTimeout()
         listenOnce(getDefaultLanguageCode())
     }
 
@@ -231,6 +262,7 @@ class SpeechAssistant(
                 .getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 ?.firstOrNull()
                 .orEmpty()
+            if (transcript.isNotBlank()) resetSilenceTimeout()
             // A partial already matched the translate trigger; this is that
             // session ending. Show it, then open the English mic.
             if (switchingToWord) {
@@ -257,6 +289,7 @@ class SpeechAssistant(
                 ?.firstOrNull()
                 .orEmpty()
             if (partial.isBlank()) return
+            resetSilenceTimeout()
             onTranscript(partial)
             // Fast path: beep + switch to English-word mode the moment a
             // partial already contains the translate trigger. We do NOT touch
@@ -294,11 +327,21 @@ class SpeechAssistant(
                 return
             }
             when (error) {
-                // No speech, nothing recognized, or a transient recogniser
-                // hiccup -- keep listening rather than dying, unless it keeps
-                // happening with nothing recognised in between.
+                // Just means nobody said anything recognisable this session --
+                // the expected steady state while hands-free sits waiting for
+                // the trigger phrase (each session only waits ~450ms of
+                // silence before timing out, so this fires constantly during
+                // normal idle listening). Never counts toward the give-up
+                // threshold below -- keep listening indefinitely.
                 SpeechRecognizer.ERROR_NO_MATCH,
                 SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
+                -> {
+                    mainHandler.postDelayed({ if (!stoppedByUser) rearm() }, 200)
+                }
+                // Transient recogniser hiccups -- keep listening rather than
+                // dying, unless it keeps happening with nothing recognised in
+                // between, which (unlike the no-match case above) suggests
+                // something's actually wrong with the recogniser/service.
                 SpeechRecognizer.ERROR_CLIENT,
                 SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
                 SpeechRecognizer.ERROR_SERVER_DISCONNECTED,
