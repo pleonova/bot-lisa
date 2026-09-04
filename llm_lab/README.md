@@ -156,27 +156,44 @@ Every non-dry run also writes
 `..._<persona>_generic_<timestamp>.json` under `--generic`).
 
 ## Personas
-The prompt sets carry the *task* (what to suggest, with concrete rules) but not
-the *voice*. Who is speaking and in what register lives in
-`prompts/personas/<persona_id>.json` (`system_template`, `default_speaker`).
-`run_eval.py` uses `caregiver_infant` by default; pick another with
-`--persona <persona_id>` (or `$LLM_LAB_PERSONA`):
+A persona is the *voice* — who's speaking, to whom, in what register. It's
+kept separate from the *task* (what to suggest, in `prompts/<task>.json`) so
+the same rules work across audiences.
+
+Two exist so far:
+- `caregiver_infant` (default) — the caregiver talking to a small child
+- `adult_adult` — one adult talking to another
+
+Switch with `--persona <id>` (or `$LLM_LAB_PERSONA`):
 
 ```bash
 python3 llm_lab/eval/run_eval.py --persona adult_adult
 ```
 
-`--persona` does double duty: for both tasks it also selects which case file
-runs, `eval/cases/<task>_<persona_id>.json` — so each persona gets its own
-realistic scenario instead of forcing one persona's cases onto another's
-voice (bedtime/mealtime/bathtime + a "Хочешь ещё?"-style Q&A for
-`caregiver_infant`; a work-meeting wrap-up + a deadline question for
-`adult_adult`).
+### What `--persona` controls
 
-Adding a new persona means: a `personas/<id>.json`, an
-`examples/<task>.<lang>.<id>.json` bad/good pair per task, and an
-`eval/cases/<task>_<id>.json` per task you want it to cover — no edit to
-`prompts/what_else.json`, `prompts/how_to_respond.json`, or the other
-personas' files.
+One id picks two things at once:
+
+| Controls | File |
+|---|---|
+| voice — register, who's speaking (`system_template`, `default_speaker`) | `prompts/personas/<id>.json` |
+| which cases run | `eval/cases/<task>_<id>.json` |
+
+Cases are persona-specific rather than shared, so each persona runs a
+scenario that actually fits its voice, instead of one persona's cases being
+forced onto another's voice:
+- `caregiver_infant`: bedtime/mealtime/bathtime routines, a "Хочешь ещё?"-style Q&A
+- `adult_adult`: a meeting wrap-up, a deadline question
+
+### Adding a new persona
+
+Three files, one shared id, no edits anywhere else:
+
+1. `prompts/personas/<id>.json` — the voice
+2. `prompts/examples/<task>.<lang>.<id>.json` — a bad/good example, per task
+3. `eval/cases/<task>_<id>.json` — cases, per task you want it to cover
+
+None of this touches `prompts/what_else.json`, `prompts/how_to_respond.json`,
+or another persona's files.
 
 Review `eval/outputs/` with the collaborator before deciding whether to proceed to Phase 3.
