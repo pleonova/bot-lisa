@@ -5,9 +5,25 @@ Runs both candidate model sizes (2B and 4B) against the what-else and
 how-to-respond prompt sets, and writes results to eval/outputs/ for the
 Russian-speaking collaborator to review for register and contextual relevance.
 
-The prompt sets are audience-neutral: who is speaking to whom, in what language
-and register, comes from a persona file (prompts/personas/<name>.json). Default
-is `caregiver_infant`; set $LLM_LAB_PERSONA to evaluate another audience.
+Two different architectures live side by side here, reflecting how far each
+prompt set has been iterated on:
+
+- what_else: fully decoupled. prompts/what_else.json carries only the task
+  rules (persona- and language-agnostic); voice comes from
+  prompts/personas/<persona_id>.json; the contrastive bad/good example pair
+  comes from prompts/examples/what_else.<lang>.<persona_id>.json; and the
+  cases themselves live in eval/cases/what_else_<persona_id>.json, each case
+  self-describing its own persona + language. prompts/compose_prompt.py
+  stitches all four into the final prompt. `--persona` selects which case
+  file to run; `--generic` drops each case's own examples hint to test
+  whether persona + rules + bad/good contrast alone generalize.
+
+- how_to_respond: not yet migrated to that split. Its cases (with inline
+  examples) still live directly in prompts/how_to_respond.json, and
+  `--persona` just picks a persona file for voice — same case set either way.
+  It reuses the persona files' `system_template` / `default_speaker`, but
+  since it has no per-language examples file it always renders in
+  DEFAULT_LANGUAGE.
 
 This is a scratch evaluation script (speech_lab-style), not production code.
 Nothing here is wired into the app or backend.
@@ -26,17 +42,18 @@ Usage:
     python3 llm_lab/eval/run_eval.py --set what_else --case bedtime_1 --dry-run
 
 Flags (see --help): --model {2b,4b,all}  --set {what_else,how_to_respond,all}
-    --case ID (repeatable)  --persona NAME  --print  --dry-run
+    --case ID (repeatable)  --persona NAME  --generic  --print  --dry-run
 
 Model files are looked for, in order, under:
     $LLM_LAB_MODELS  ->  ~/models  ->  llm_lab/models
 Overrides: $LLAMA_SERVER (binary path), $LLM_LAB_PORT (8080),
-           $LLM_LAB_PERSONA (persona file stem, default "caregiver_infant";
+           $LLM_LAB_PERSONA (persona id, default "caregiver_infant";
            --persona wins over the env var).
 """
 
 import os
 import re
+import sys
 import json
 import shutil
 import argparse
@@ -48,6 +65,9 @@ from pathlib import Path
 from datetime import datetime
 
 ROOT = Path(__file__).parent.parent  # llm_lab/
+sys.path.insert(0, str(ROOT))
+
+from prompts import compose_prompt  # noqa: E402
 
 LLAMA_SERVER = os.environ.get("LLAMA_SERVER") or shutil.which("llama-server")
 HOST = "127.0.0.1"
@@ -76,19 +96,14 @@ MODEL_DIRS = [
 
 DEFAULT_PERSONA = os.environ.get("LLM_LAB_PERSONA", "caregiver_infant")
 
+# how_to_respond has no per-language examples file (it isn't migrated to the
+# persona/example split yet), so its system prompt renders in this language.
+DEFAULT_LANGUAGE = "Russian"
+
 PROMPT_SETS = {
     "what_else": "prompts/what_else.json",
     "how_to_respond": "prompts/how_to_respond.json",
 }
-
-# Filled from the persona file. Keep the phrasing generic — the specifics
-# (who/whom/register/language) all come from the persona.
-SYSTEM_TEMPLATE = (
-    "You are helping {speaker} who is talking to {addressee}. "
-    "Everything you produce is in {language}. "
-    "Keep it {register}. "
-    "Reply with the phrases only — one per line, no numbering, no preamble."
-)
 
 # Belt-and-suspenders: the server runs with --reasoning off, but strip any
 # stray <think>…</think> just in case the template emits it anyway.
@@ -171,9 +186,30 @@ def chat(system: str, user: str) -> str:
     return THINK_RE.sub("", text).strip()
 
 
-def build_user_msg(spec: dict, persona: dict, case: dict) -> str:
-    # persona supplies {speaker} etc.; the case supplies {activity}/{input_kind}.
-    fields = {**persona, **case}
+def load_what_else_cases(persona_name: str, case_ids: list[str] | None) -> list[dict]:
+    path = ROOT / "eval" / "cases" / f"what_else_{persona_name}.json"
+    if not path.exists():
+        available = sorted(
+            p.stem.removeprefix("what_else_")
+            for p in (ROOT / "eval" / "cases").glob("what_else_*.json")
+        )
+        raise SystemExit(f"no what_else cases for persona '{persona_name}' at {path}. "
+                          f"Available: {available}")
+    cases = json.loads(path.read_text(encoding="utf-8"))["cases"]
+    if case_ids:
+        cases = [c for c in cases if c["id"] in case_ids]
+    return cases
+
+
+def load_how_to_respond_spec(case_ids: list[str] | None) -> dict:
+    spec = json.loads((ROOT / PROMPT_SETS["how_to_respond"]).read_text(encoding="utf-8"))
+    if case_ids:
+        spec["cases"] = [c for c in spec["cases"] if c["id"] in case_ids]
+    return spec
+
+
+def build_how_to_respond_user(spec: dict, persona: dict, case: dict) -> str:
+    fields = {"speaker": persona["default_speaker"], **case}
     parts = [spec["instruction"].format(**fields)]
     examples = case.get("examples")
     if examples:
@@ -186,19 +222,38 @@ def build_user_msg(spec: dict, persona: dict, case: dict) -> str:
     return " ".join(parts)
 
 
-def load_spec(set_name: str, case_ids: list[str] | None) -> dict:
-    spec = json.loads((ROOT / PROMPT_SETS[set_name]).read_text(encoding="utf-8"))
-    if case_ids:
-        spec["cases"] = [c for c in spec["cases"] if c["id"] in case_ids]
-    return spec
+def run_what_else(persona_name: str, case_ids: list[str] | None,
+                   do_print: bool, generic: bool, dry_run: bool) -> list[dict]:
+    cases = load_what_else_cases(persona_name, case_ids)
+    results = []
+    for case in cases:
+        system, user = compose_prompt.compose_prompt(case, task="what_else", generic=generic)
+        if dry_run:
+            print(f"\n=== what_else / {case['id']} ===")
+            print(f"SYSTEM: {system}")
+            print(f"USER  : {user}")
+            continue
+        output = chat(system, user)
+        results.append({"id": case["id"], "input": case["utterance"], "output": output})
+        if do_print:
+            print(f"\n  [{case['id']}] {case['utterance']}\n{_indent(output)}\n")
+    return results
 
 
-def run_prompt_set(spec: dict, persona: dict, system_prompt: str,
-                   do_print: bool) -> list[dict]:
+def run_how_to_respond(persona_name: str, case_ids: list[str] | None,
+                        do_print: bool, dry_run: bool) -> list[dict]:
+    persona = load_persona(persona_name)
+    system = persona["system_template"].format(language=DEFAULT_LANGUAGE)
+    spec = load_how_to_respond_spec(case_ids)
     results = []
     for case in spec["cases"]:
-        user_msg = build_user_msg(spec, persona, case)
-        output = chat(system_prompt, user_msg)
+        user = build_how_to_respond_user(spec, persona, case)
+        if dry_run:
+            print(f"\n=== how_to_respond / {case['id']} ===")
+            print(f"SYSTEM: {system}")
+            print(f"USER  : {user}")
+            continue
+        output = chat(system, user)
         results.append({"id": case["id"], "input": case["utterance"], "output": output})
         if do_print:
             print(f"\n  [{case['id']}] {case['utterance']}\n{_indent(output)}\n")
@@ -219,7 +274,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--case", action="append", metavar="ID", dest="cases",
                    help="only this case id; repeatable (default: all cases in the set)")
     p.add_argument("--persona", default=DEFAULT_PERSONA,
-                   help=f"persona file stem (default: {DEFAULT_PERSONA})")
+                   help=f"persona id (default: {DEFAULT_PERSONA}). For what_else this "
+                        f"also selects eval/cases/what_else_<persona>.json")
+    p.add_argument("--generic", action="store_true",
+                   help="what_else only: drop each case's own examples hint — tests "
+                        "whether persona + rules + bad/good contrast generalize alone")
     p.add_argument("--print", dest="do_print", action="store_true",
                    help="echo id + output to the terminal as results come back")
     p.add_argument("--dry-run", action="store_true",
@@ -229,21 +288,18 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    persona = load_persona(args.persona)
-    system_prompt = SYSTEM_TEMPLATE.format(**persona)
     set_names = list(PROMPT_SETS) if args.prompt_set == "all" else [args.prompt_set]
-    model_keys = ([f"qwen3.5-{args.model}"] if args.model != "all"
-                  else list(MODEL_CANDIDATES))
 
-    print(f"Persona: {args.persona} ({persona['speaker']} -> {persona['addressee']})")
+    print(f"Persona: {args.persona}")
+
+    def run_set(set_name: str, dry_run: bool) -> list[dict]:
+        if set_name == "what_else":
+            return run_what_else(args.persona, args.cases, args.do_print, args.generic, dry_run)
+        return run_how_to_respond(args.persona, args.cases, args.do_print, dry_run)
 
     if args.dry_run:
-        print(f"\nSYSTEM: {system_prompt}")
         for set_name in set_names:
-            spec = load_spec(set_name, args.cases)
-            for case in spec["cases"]:
-                print(f"\n=== {set_name} / {case['id']} ===")
-                print(f"USER  : {build_user_msg(spec, persona, case)}")
+            run_set(set_name, dry_run=True)
         return
 
     if not LLAMA_SERVER:
@@ -253,6 +309,9 @@ def main() -> None:
     outputs_dir = ROOT / "eval" / "outputs"
     outputs_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    model_keys = ([f"qwen3.5-{args.model}"] if args.model != "all"
+                  else list(MODEL_CANDIDATES))
 
     ran_any = False
     for model_key in model_keys:
@@ -268,14 +327,14 @@ def main() -> None:
         proc = start_server(model_path)
         try:
             for set_name in set_names:
-                spec = load_spec(set_name, args.cases)
-                if not spec["cases"]:
+                results = run_set(set_name, dry_run=False)
+                if not results:
                     print(f"  {set_name}: no matching cases, skipped")
                     continue
-                print(f"  {set_name} ({len(spec['cases'])} case(s)) ...")
-                results = run_prompt_set(spec, persona, system_prompt, args.do_print)
+                print(f"  {set_name} ({len(results)} case(s)) ...")
+                variant = f"{args.persona}_generic" if (set_name == "what_else" and args.generic) else args.persona
                 out_file = (outputs_dir /
-                            f"{model_key}_{set_name}_{args.persona}_{timestamp}.json")
+                            f"{model_key}_{set_name}_{variant}_{timestamp}.json")
                 out_file.write_text(
                     json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8"
                 )

@@ -1,7 +1,6 @@
 {
-  "name": "caregiver_infant",
-  "speaker": "the caregiver",
-  "addressee": "a small child",
-  "language": "Russian",
-  "register": "warm and infant-directed: diminutives, simple vocabulary, sentences under 8 words"
+  "id": "caregiver_infant",
+  "description": "The caregiver talking to a small child. Warm, infant-directed register.",
+  "default_speaker": "the caregiver",
+  "system_template": "You are helping the caregiver who is talking to a small child. Everything you produce is in {language}. Keep it warm and infant-directed: diminutives, simple vocabulary, sentences under 8 words. Reply with the phrases only — one per line, no numbering, no preamble."
 }

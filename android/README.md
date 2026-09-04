@@ -87,8 +87,8 @@ remembers an old address from a previous install, just retype it.*
   that's just how Android routes audio. Voice follows the target-language
   setting (see below).
 - `LanguageConfig.kt` — the list of selectable target languages (Russian,
-  Hindi, Marathi, Spanish, French, German today — add an entry to extend it)
-  and the
+  Hindi, Marathi, Spanish, French, German, Portuguese, Romanian, Ukrainian,
+  and Mandarin today — add an entry to extend it) and the
   SharedPreferences-backed setting for which one is active. Drives
   `OnDeviceTranslator.kt` and `TranslationSpeaker.kt`. Does **not** drive
   related-phrase/expand mode, which stays tied to the Russian curated
@@ -110,8 +110,10 @@ measure is a single shared password rather than individual logins.*
   "Server settings" and `PHONE_DEPLOY.md`) guarding the deployed backend, but
   it's one key for all users, not per-user auth.
 - Mic input uses the system speech recognizer (requires Google app /
-  network), locale fixed to `ru-RU` — dictating English will likely
-  mis-transcribe; typing English works fine.
+  network), listening in whichever target language is currently selected
+  (`SpeechAssistant.kt`'s `getDefaultLanguageCode()`) — dictating English
+  while a non-English target language is active will likely mis-transcribe;
+  typing English works fine regardless.
 - Voice doesn't work on most emulator AVDs — confirmed working fine on a
   real phone, but the default/"Google APIs" system images most AVDs use
   don't include Google's speech-recognition service at all, so the mic
@@ -137,8 +139,8 @@ measure is a single shared password rather than individual logins.*
   heuristic (`_has_cyrillic()`) is Cyrillic-specific. Generalizing that is a
   separate, larger change (curate content for the new language, and make
   the backend's script detection language-aware) tracked in the project
-  roadmap, not done here. The mic's dictation locale is unaffected by this
-  setting too, for the same reason — it still always listens for Russian.
+  roadmap, not done here. The mic's dictation locale *does* follow this
+  setting (see above) — it's specifically expand mode that stays Russian-only.
   Switching target language away from Russian also hides the "more related
   phrases" bonus list under a translation result, since those phrases would
   be Russian regardless of what you just translated into.

@@ -1,0 +1,56 @@
+{
+  "task": "what_else",
+  "cases": [
+    {
+      "id": "bedtime_1",
+      "utterance": "спокойной ночи",
+      "activity": "bedtime routine",
+      "persona": "caregiver_infant",
+      "language": "ru",
+      "examples": ["brushing teeth", "turning off the light", "a goodnight hug"],
+      "note": "expects sibling routine steps, not paraphrases of the phrase"
+    },
+    {
+      "id": "bedtime_1_generic",
+      "utterance": "спокойной ночи",
+      "activity": "bedtime routine",
+      "persona": "caregiver_infant",
+      "language": "ru",
+      "note": "same case, no per-case examples hint — tests whether persona + rules alone generalize"
+    },
+    {
+      "id": "mealtime_1",
+      "utterance": "кушать",
+      "activity": "mealtime routine",
+      "persona": "caregiver_infant",
+      "language": "ru",
+      "examples": ["washing hands", "sitting down at the table", "saying thank you for the food"],
+      "note": "expects sibling routine steps"
+    },
+    {
+      "id": "mealtime_1_generic",
+      "utterance": "кушать",
+      "activity": "mealtime routine",
+      "persona": "caregiver_infant",
+      "language": "ru",
+      "note": "same case, no per-case examples hint — generic-vs-hinted A/B"
+    },
+    {
+      "id": "bathtime_1",
+      "utterance": "купаться",
+      "activity": "bathtime routine",
+      "persona": "caregiver_infant",
+      "language": "ru",
+      "examples": ["getting undressed", "testing the water", "washing hair", "drying off with a towel"],
+      "note": "expects sibling routine steps"
+    },
+    {
+      "id": "bathtime_1_generic",
+      "utterance": "купаться",
+      "activity": "bathtime routine",
+      "persona": "caregiver_infant",
+      "language": "ru",
+      "note": "same case, no per-case examples hint — generic-vs-hinted A/B"
+    }
+  ]
+}

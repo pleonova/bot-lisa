@@ -1,0 +1,22 @@
+{
+  "task": "what_else",
+  "cases": [
+    {
+      "id": "meeting_wrapup_1",
+      "utterance": "увидимся позже",
+      "activity": "leaving after a work meeting",
+      "persona": "adult_adult",
+      "language": "ru",
+      "examples": ["grabbing your bag", "saying goodbye to others in the room", "confirming next steps"],
+      "note": "expects sibling wrap-up actions, not paraphrases of the phrase"
+    },
+    {
+      "id": "meeting_wrapup_1_generic",
+      "utterance": "увидимся позже",
+      "activity": "leaving after a work meeting",
+      "persona": "adult_adult",
+      "language": "ru",
+      "note": "same phrase, no hint examples — tests whether persona + rules alone generalize"
+    }
+  ]
+}

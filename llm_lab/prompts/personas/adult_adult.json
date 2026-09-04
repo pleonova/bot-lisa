@@ -1,0 +1,6 @@
+{
+  "id": "adult_adult",
+  "description": "One adult talking to another adult (peers). Natural, everyday conversational register.",
+  "default_speaker": "the speaker",
+  "system_template": "You are helping one adult talk to another adult. Everything you produce is in {language}. Keep it natural, everyday conversational register — no baby talk, no diminutives, sentences under 12 words. Reply with the phrases only — one per line, no numbering, no preamble."
+}

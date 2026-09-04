@@ -38,12 +38,19 @@ llm_lab/
 ├── .gitignore              # keeps large GGUF files and raw outputs out of git
 ├── prompts/
 │   ├── personas/
-│   │   ├── caregiver_infant.json  # default: speaker / addressee / language / register
-│   │   └── adults.json            # example alt persona (two adults)
-│   ├── what_else.json        # "что ещё" trigger — cases + follow-up examples
-│   └── how_to_respond.json   # "как ответить" trigger — cases + reply examples
+│   │   ├── caregiver_infant.json  # id / description / default_speaker / system_template
+│   │   └── adult_adult.json       # alt persona (two adults, peer register)
+│   ├── examples/
+│   │   ├── what_else.ru.caregiver_infant.json  # bad/good contrastive pair, per lang+persona
+│   │   └── what_else.ru.adult_adult.json
+│   ├── compose_prompt.py     # what_else only: stitches template + persona + example + case
+│   ├── what_else.json        # "что ещё" trigger — task rules only (user_template), no cases
+│   └── how_to_respond.json   # "как ответить" trigger — task rules + cases (not yet split)
 ├── eval/
 │   ├── run_eval.py         # runs model sizes × prompt sets; --model/--set/--case to narrow
+│   ├── cases/
+│   │   ├── what_else_caregiver_infant.json  # bedtime/mealtime/bathtime + _generic twins
+│   │   └── what_else_adult_adult.json       # meeting wrap-up + _generic twin
 │   └── outputs/            # generated outputs land here for review (gitignored)
 └── models/                 # place downloaded .gguf files here (gitignored)
 ```
@@ -71,13 +78,19 @@ Overrides: `$LLAMA_SERVER` (binary path), `$LLM_LAB_PORT` (default 8080).
 > as Phase 2.
 
 ## Iterating on prompts
-Everything worth tweaking is plain text under `prompts/`:
+Everything worth tweaking is plain text under `prompts/` and `eval/cases/`.
+`what_else` and `how_to_respond` aren't structured the same way — `what_else`
+is fully split into template / persona / example / case; `how_to_respond`
+still keeps its cases (with inline examples, no persona split) directly in
+`prompts/how_to_respond.json`.
 
 | To change… | Edit |
 |---|---|
-| task wording / the utterance label | `instruction`, `utterance_label` in `what_else.json` / `how_to_respond.json` |
-| a test case or its examples | the `cases[]` entry — `utterance`, `activity` / `input_kind`, `examples`, optional `context` |
-| voice: who speaks, register, language | `prompts/personas/<name>.json` |
+| what_else task wording / rules | `user_template`, `utterance_label` in `prompts/what_else.json` |
+| a what_else case (utterance, activity, hint examples) | `eval/cases/what_else_<persona>.json` — each case carries its own `persona` + `language` |
+| the what_else contrastive bad/good example | `prompts/examples/what_else.<lang>.<persona>.json` |
+| how_to_respond task wording or a case | `instruction`, `utterance_label`, `cases[]` in `prompts/how_to_respond.json` |
+| voice: who speaks, register | `prompts/personas/<persona_id>.json` (`system_template`, `default_speaker`) |
 | sampling (temp, seed, max tokens) | `GEN_PARAMS` near the top of `eval/run_eval.py` |
 
 Then re-run a narrow slice instead of the full sweep — a one-case run is ~7s:
@@ -90,28 +103,49 @@ python3 llm_lab/eval/run_eval.py --set what_else --case bedtime_1 --dry-run
 python3 llm_lab/eval/run_eval.py --model 4b --set what_else --case bedtime_1 --print
 
 # try another audience
-python3 llm_lab/eval/run_eval.py --persona adults --set how_to_respond --print
+python3 llm_lab/eval/run_eval.py --persona adult_adult --set how_to_respond --print
+
+# generic-vs-hinted A/B: does the rule + bad/good contrast alone generalize,
+# without the case's own examples hint?
+python3 llm_lab/eval/run_eval.py --set what_else --case bedtime_1 --print
+python3 llm_lab/eval/run_eval.py --set what_else --case bedtime_1_generic --generic --print
 
 # full sweep once you're happy (both sizes, both sets, all cases)
 python3 llm_lab/eval/run_eval.py
 ```
 
+Each `what_else` case has a `_generic` twin (same utterance/activity, no
+`examples` hint) — pass `--generic` when running it so the per-case hint is
+actually dropped rather than just missing from that one case's JSON.
+
 `--case` is repeatable. Every non-dry run also writes
 `eval/outputs/<model>_<set>_<persona>_<timestamp>.json`. `--help` lists all flags.
 
 ## Personas
-The prompt sets carry the *task* (what to suggest, with concrete examples) but
-not the *voice*. Who is speaking, to whom, in what language and register lives in
-`prompts/personas/<name>.json` and is substituted into the system prompt and the
-`{speaker}` slot of each instruction. `run_eval.py` uses `caregiver_infant` by
-default; pick another with `--persona <name>` (or `$LLM_LAB_PERSONA`):
+The prompt sets carry the *task* (what to suggest, with concrete rules) but not
+the *voice*. Who is speaking and in what register lives in
+`prompts/personas/<persona_id>.json` (`system_template`, `default_speaker`).
+`run_eval.py` uses `caregiver_infant` by default; pick another with
+`--persona <persona_id>` (or `$LLM_LAB_PERSONA`):
 
 ```bash
-python3 llm_lab/eval/run_eval.py --persona adults
+python3 llm_lab/eval/run_eval.py --persona adult_adult
 ```
 
-Output filenames include the persona name (`<model>_<set>_<persona>_<ts>.json`),
-so caregiver and adult runs don't collide. Add a new `personas/*.json` to test
-another audience — no change to the prompt sets or the script.
+For `what_else`, `--persona` does double duty: it also selects which case
+file runs, `eval/cases/what_else_<persona_id>.json` — so each persona gets its
+own realistic scenario (bedtime/mealtime/bathtime for `caregiver_infant`;
+a work-meeting wrap-up for `adult_adult`) instead of forcing one persona's
+cases onto another's voice. `how_to_respond`'s cases aren't persona-specific;
+the same case set just gets re-voiced per persona.
+
+Adding a new persona means: a `personas/<id>.json`, a
+`examples/what_else.<lang>.<id>.json` bad/good pair, and (if you want
+what_else cases for it) an `eval/cases/what_else_<id>.json` — no edit to
+`prompts/what_else.json` or the other personas' files.
+
+Output filenames include the persona (`<model>_<set>_<persona>_<ts>.json`,
+or `..._<persona>_generic_<ts>.json` under `--generic`), so runs don't
+collide.
 
 Review `eval/outputs/` with the collaborator before deciding whether to proceed to Phase 3.
