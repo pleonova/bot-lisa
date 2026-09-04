@@ -20,7 +20,7 @@
     },
     {
       "id": "mealtime_1",
-      "utterance": "кушать",
+      "utterance": "Давай кушать",
       "activity": "mealtime routine",
       "persona": "caregiver_infant",
       "language": "ru",
@@ -29,7 +29,7 @@
     },
     {
       "id": "mealtime_1_generic",
-      "utterance": "кушать",
+      "utterance": "Давай кушать",
       "activity": "mealtime routine",
       "persona": "caregiver_infant",
       "language": "ru",
@@ -37,7 +37,7 @@
     },
     {
       "id": "bathtime_1",
-      "utterance": "купаться",
+      "utterance": "Залезай в ванночку.",
       "activity": "bathtime routine",
       "persona": "caregiver_infant",
       "language": "ru",
@@ -46,7 +46,7 @@
     },
     {
       "id": "bathtime_1_generic",
-      "utterance": "купаться",
+      "utterance": "Залезай в ванночку.",
       "activity": "bathtime routine",
       "persona": "caregiver_infant",
       "language": "ru",
