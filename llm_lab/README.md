@@ -117,12 +117,43 @@ python3 llm_lab/eval/run_eval.py --set how_to_respond --case question_1_generic 
 python3 llm_lab/eval/run_eval.py
 ```
 
-Every case has a `_generic` twin (same utterance/activity/input_kind, no
-`examples` hint) — pass `--generic` when running it so the per-case hint is
-actually dropped rather than just missing from that one case's JSON.
+### Flags
 
-`--case` is repeatable. Every non-dry run also writes
-`eval/outputs/<model>_<set>_<persona>_<timestamp>.json`. `--help` lists all flags.
+| Flag | Meaning |
+|---|---|
+| `--model {2b,4b,all}` | model size(s) to load (default: `all`) |
+| `--set {what_else,how_to_respond,all}` | task(s) to run (default: `all`) |
+| `--case ID` | only this case id; repeatable — e.g. `--case bedtime_1 --case mealtime_1` (default: every case in the set) |
+| `--persona NAME` | persona id for voice + case file, `eval/cases/<task>_<persona>.json` (default: `caregiver_infant`, or `$LLM_LAB_PERSONA`) |
+| `--generic` | drop each case's own `examples` hint before sending the prompt |
+| `--print` | echo id + model output to the terminal as results come back (on top of writing the output file) |
+| `--dry-run` | print the assembled system + user prompt and exit — no `llama-server`, no GGUF, no model call |
+
+`--help` shows the same list from the script itself.
+
+### Seeing a case's generic phrase
+
+Every case has a `_generic` twin (same utterance/activity/input_kind, no
+`examples` hint) — but the `_generic` suffix on the id is just a label. What
+actually strips the hint is the `--generic` flag; pass both together, or the
+"generic" case runs exactly as hinted (since it just has no hint of its own
+to strip):
+
+```bash
+# inspect the prompt only — instant, no server needed
+python3 llm_lab/eval/run_eval.py --set what_else --case bedtime_1_generic --generic --dry-run
+
+# actually run it and see what the model says
+python3 llm_lab/eval/run_eval.py --model 4b --set what_else --case bedtime_1_generic --generic --print
+
+# side by side against the hinted version, for the same phrase
+python3 llm_lab/eval/run_eval.py --model 4b --set what_else --case bedtime_1 --print
+python3 llm_lab/eval/run_eval.py --model 4b --set what_else --case bedtime_1_generic --generic --print
+```
+
+Every non-dry run also writes
+`eval/outputs/<model>_<set>_<persona>_<timestamp>.json` (or
+`..._<persona>_generic_<timestamp>.json` under `--generic`).
 
 ## Personas
 The prompt sets carry the *task* (what to suggest, with concrete rules) but not
@@ -147,9 +178,5 @@ Adding a new persona means: a `personas/<id>.json`, an
 `eval/cases/<task>_<id>.json` per task you want it to cover — no edit to
 `prompts/what_else.json`, `prompts/how_to_respond.json`, or the other
 personas' files.
-
-Output filenames include the persona (`<model>_<set>_<persona>_<ts>.json`,
-or `..._<persona>_generic_<ts>.json` under `--generic`), so runs don't
-collide.
 
 Review `eval/outputs/` with the collaborator before deciding whether to proceed to Phase 3.
