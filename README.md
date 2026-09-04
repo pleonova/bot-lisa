@@ -33,6 +33,48 @@ version meant to be expanded, not a mockup.
 | Terraform | **Scaffold** — documents intended resources, no provider wired up yet |
 | CI (GitHub Actions) | Real workflow, runs tests + eval on every push |
 
+## Language models
+
+| Model | Role | Status |
+|---|---|---|
+| Claude (`claude-sonnet-4-6` via the Anthropic API) | Generates the "как ответить"-style grounded phrase and translates English → baby-register Russian in `services/orchestration_service/llm_client.py` | **In the app.** Runs in mock mode (no API call, returns the top retrieved phrase verbatim) unless `ANTHROPIC_API_KEY` is set — see the status table above |
+| `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (via `fastembed`, ONNX, local) | Dense embeddings for hybrid BM25+embedding retrieval | **In the app** — `services/retrieval_service/embeddings.py` |
+| Qwen3.5, Q4_K_M (4B and 2B GGUF) | Candidate on-device model for two new features: "что ещё" (routine relations) and "как ответить" (response suggestions) | **Being evaluated**, not wired into the app — see `llm_lab/README.md`. Phase 1 (local quality check) is the current go/no-go gate |
+| Gemini Nano/AICore, Gemma 3n via LiteRT-LM, Kimi (Moonshot) | Alternatives considered for the on-device slot above | **Ruled out** — Gemini Nano needs a Pixel 8+ NPU and is closed-weight (against the project's open-source preference); Gemma 3n benchmarks worse than Qwen3.5 for its size class; Kimi's smallest release (48B) has no on-device-class model. Full reasoning in `llm_lab/README.md`'s "Candidate model" section |
+| A bigger model via cloud API / retrieval-only fallback | Fallback plan if Qwen3.5 fails llm_lab's Phase 1 quality gate | **Slated, contingent** — only pursued if the on-device quality check fails |
+| Self-hosted ASR with per-segment language ID (e.g. Whisper/faster-whisper) vs. a cloud multi-language STT API | Needed for the hands-free "Lisa Assistant" mode's continuous listening (`RecognizerIntent` has no built-in language auto-detect) | **Slated, undecided** — see [ROADMAP.md](ROADMAP.md)'s item #2; the open-source-vs-cloud tradeoff needs a decision before build starts |
+
+## Supported languages & translation
+
+The Android app supports multiple target languages, each with its own locale
+code and (mostly) its own default trigger phrases (`LanguageConfig.kt`,
+`TriggerPhraseConfig.kt`) — see those files for the current list, since it
+changes as languages are added.
+
+**Only one real translation direction exists: English → target language.**
+There's no target-language → target-language or target-language → English
+path, and the "expand mode" (related-phrase suggestions) only works for
+Russian, since it's tied to the Russian curated phrase library and the
+backend's mode-detection (`_has_cyrillic()` in
+`services/orchestration_service/main.py`) is Cyrillic-specific — it doesn't
+key off the app's selected target language at all.
+
+**Two separate translation mechanisms, split by language:**
+- **Russian** goes through the backend: a curated-phrase lookup first, then
+  Claude (`llm_client.py`) as a fallback, producing warm "baby-register"
+  Russian rather than textbook phrasing.
+- **Every other target language** is translated entirely on-device via
+  Google ML Kit (`OnDeviceTranslator.kt`) — plain/textbook phrasing, no
+  baby-register tuning, downloads a ~30MB model per language on first use
+  (offline after that). The backend has no parameter for "translate to
+  French/Hindi/etc." — it only distinguishes English vs. Russian.
+
+STT (speech-to-text) listens in whatever target language is selected
+(`SpeechAssistant.kt`'s `getDefaultLanguageCode()`), so dictation isn't
+Russian-only — but only Russian has a localized "как ответить"-style answer
+trigger; every other language falls back to the English-worded phrase for
+that trigger by default.
+
 ## Quickstart
 
 ```bash
