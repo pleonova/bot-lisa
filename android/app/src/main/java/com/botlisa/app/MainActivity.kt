@@ -2,6 +2,7 @@ package com.botlisa.app
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -503,16 +504,46 @@ fun LisaScreen(
             onError = { assistantError = it },
         )
     }
+    // Hands-free needs a foreground service running alongside SpeechAssistant
+    // -- since Android 9, a backgrounded process can't touch the microphone
+    // at all without one. See ListeningForegroundService.kt.
+    fun startHandsFree() {
+        assistantError = null
+        assistant.start()
+        ListeningForegroundService.start(context)
+    }
+    fun stopHandsFree() {
+        assistant.stop()
+        ListeningForegroundService.stop(context)
+    }
+
     DisposableEffect(Unit) {
-        onDispose { assistant.stop() }
+        onDispose { stopHandsFree() }
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* best-effort: hands-free works either way, this only affects whether
+          the background-listening notification is visible */ }
+
+    // Android 13+ requires this to show the foreground service's notification
+    // -- requested best-effort alongside mic permission; denying it doesn't
+    // block hands-free mode, the service and mic access still work.
+    fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     val assistantMicPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            assistantError = null
-            assistant.start()
+            requestNotificationPermissionIfNeeded()
+            startHandsFree()
         } else {
             assistantError = "Microphone permission is required for Lisa Assistant."
         }
@@ -520,15 +551,15 @@ fun LisaScreen(
 
     fun onToggleAssistant() {
         if (assistantState != SpeechAssistant.State.IDLE) {
-            assistant.stop()
+            stopHandsFree()
             return
         }
         val granted = ContextCompat.checkSelfPermission(
             context, Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
         if (granted) {
-            assistantError = null
-            assistant.start()
+            requestNotificationPermissionIfNeeded()
+            startHandsFree()
         } else {
             assistantMicPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
@@ -538,7 +569,7 @@ fun LisaScreen(
     // hands-free, clears the field/result/errors and any expanded panels.
     // Persistent settings (server, language, trigger phrases) are left alone.
     fun resetToStart() {
-        assistant.stop()
+        stopHandsFree()
         // Drop focus so the field isn't left selected -- a focused field
         // hides the "start typing" helper under the buttons.
         focusManager.clearFocus()
