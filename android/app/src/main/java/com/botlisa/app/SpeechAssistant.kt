@@ -263,8 +263,15 @@ class SpeechAssistant(
             // the recogniser -- the session ends on its own (short silence
             // timeout) or we nudge it with stopListening() after a beat;
             // either way onResults/onError then re-arms in English.
+            // Partials are rougher than final transcripts, so the default
+            // 0.75 fuzzy threshold often isn't cleared until the recognizer
+            // finalizes -- which means waiting on a silence timeout + full
+            // round trip before the beep fires. Loosen the bar here so the
+            // beep fires as early as possible; a stray false-positive just
+            // means an unwanted (recoverable) switch into LISTENING_FOR_WORD,
+            // which is an acceptable trade for a snappy trigger.
             if (!stoppedByUser && !switchingToWord && state == State.LISTENING_DEFAULT &&
-                TriggerPhraseDetector.matches(partial, getTranslateTriggerPhrase())
+                TriggerPhraseDetector.matches(partial, getTranslateTriggerPhrase(), threshold = 0.6)
             ) {
                 switchingToWord = true
                 state = State.LISTENING_FOR_WORD
