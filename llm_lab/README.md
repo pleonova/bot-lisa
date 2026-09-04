@@ -88,9 +88,9 @@ persona / example / case, stitched together by `prompts/compose_prompt.py`.
 
 | To change… | Edit |
 |---|---|
-| task wording / rules | `user_template`, `utterance_label` in `prompts/<task>.json` |
+| task wording / rules | `user_template` in `prompts/<task>.json` |
 | a case (utterance, `activity`/`input_kind`, hint examples) | `eval/cases/<task>_<persona>.json` — each case carries its own `persona` + `language` |
-| the contrastive bad/good example | `prompts/examples/<task>.<lang>.<persona>.json` |
+| the contrastive bad/good example(s) | `prompts/examples/<task>.<lang>.<persona>.json` — one `bad_example`, a `good_examples` list (as many as help) |
 | voice: who speaks, register | `prompts/personas/<persona_id>.json` (`system_template`, `default_speaker`) |
 | sampling (temp, seed, max tokens) | `GEN_PARAMS` near the top of `eval/run_eval.py` |
 

@@ -49,19 +49,23 @@ def compose_prompt(case: dict, task: str = "what_else", generic: bool = False) -
     hint_examples = None if generic else case.get("examples")
     hint_clause = f" (e.g. {', '.join(hint_examples)})" if hint_examples else ""
 
+    good_examples = "\n".join(f'- "{g}"' for g in examples["good_examples"])
+
     # Merge in this order so a case can't accidentally clobber the pieces
-    # that make the prompt make sense (speaker/hint_clause/examples/label),
-    # but still supplies whatever task-specific slot the template needs
+    # that make the prompt make sense (speaker/hint_clause/examples), but
+    # still supplies whatever task-specific slot the template needs
     # ({activity}, {input_kind}, ...) via **case.
     fields = {
         **case,
         "speaker": persona["default_speaker"],
         "hint_clause": hint_clause,
         "bad_example": examples["bad_example"],
-        "good_example": examples["good_example"],
-        "utterance_label": template["utterance_label"],
+        "good_examples": good_examples,
     }
-    user = template["user_template"].format(**fields)
+    # user_template is stored as a list of lines (not one long escaped
+    # string) so prompts/<task>.json stays readable/diffable.
+    user_template = "\n".join(template["user_template"])
+    user = user_template.format(**fields)
     return system, user
 
 

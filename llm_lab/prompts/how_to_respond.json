@@ -1,5 +1,17 @@
 {
   "task": "how_to_respond",
-  "utterance_label": "They said",
-  "user_template": "Suggest 3 short, natural replies {speaker} could say back to this {input_kind}.{hint_clause}\n\nRules:\n- Each reply is something {speaker} would actually say back, not a description of what to say.\n- Reply to the substance of what was said — no generic filler vague enough to answer anything.\n- Not paraphrases of each other — 3 genuinely different replies.\n\nWrong (generic filler, not a real reply): \"{bad_example}\"\nRight (concrete reply): \"{good_example}\"\n\n{utterance_label}: \"{utterance}\""
+  "user_template": [
+    "Suggest 3 short, natural replies {speaker} could say back to this {input_kind}.{hint_clause}",
+    "",
+    "Rules:",
+    "- Each reply is something {speaker} would actually say back, not a description of what to say.",
+    "- Reply to the substance of what was said — no generic filler vague enough to answer anything.",
+    "- Not paraphrases of each other — 3 genuinely different replies.",
+    "",
+    "Wrong (generic filler, not a real reply): \"{bad_example}\"",
+    "Right (concrete reply), for example:",
+    "{good_examples}",
+    "",
+    "Heard: \"{utterance}\""
+  ]
 }

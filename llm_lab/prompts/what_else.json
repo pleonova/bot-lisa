@@ -1,5 +1,18 @@
 {
   "task": "what_else",
-  "utterance_label": "Phrase",
-  "user_template": "Suggest 3 short things {speaker} might say or do right after this, still part of the same {activity}.{hint_clause}\n\nRules:\n- Each phrase names a concrete next action in the routine or exchange (a thing you do or say), not a description, feeling, or comparison.\n- Do not use similes or metaphors — state the action plainly.\n- Each phrase should work as something the speaker would actually say in the moment — short announcement, invitation, or request form, not decorative narration.\n- Not paraphrases of the original phrase, and not each other — 3 genuinely different steps.\n\nWrong (decorative, not an action): \"{bad_example}\"\nRight (concrete action): \"{good_example}\"\n\n{utterance_label}: \"{utterance}\""
+  "user_template": [
+    "Suggest 3 short things {speaker} might say or do right after this, still part of the same {activity}.{hint_clause}",
+    "",
+    "Rules:",
+    "- Each phrase names a concrete next action in the routine or exchange (a thing you do or say), not a description, feeling, or comparison.",
+    "- Do not use similes or metaphors — state the action plainly.",
+    "- Each phrase should work as something the speaker would actually say in the moment — short announcement, invitation, or request form, not decorative narration.",
+    "- Not paraphrases of the original phrase, and not each other — 3 genuinely different steps.",
+    "",
+    "Wrong (decorative, not an action): \"{bad_example}\"",
+    "Right (concrete action), for example:",
+    "{good_examples}",
+    "",
+    "Heard: \"{utterance}\""
+  ]
 }
