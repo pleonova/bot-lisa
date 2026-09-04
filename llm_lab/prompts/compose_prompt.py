@@ -36,6 +36,14 @@ def _load(path: Path) -> dict:
         return json.load(f)
 
 
+def _line(entry) -> str:
+    """Reassemble one logical line that may be word-wrapped in the JSON
+    source as a list of fragments (for editability); join with a space to
+    get back the original line. A plain string passes through unchanged, so
+    unwrapped fields keep working."""
+    return " ".join(entry) if isinstance(entry, list) else entry
+
+
 def compose_prompt(case: dict, task: str = "what_else", generic: bool = False) -> tuple[str, str]:
     """Returns (system_prompt, user_prompt) for a given case."""
     template = _load(PROMPTS_DIR / f"{task}.json")
@@ -44,7 +52,7 @@ def compose_prompt(case: dict, task: str = "what_else", generic: bool = False) -
         PROMPTS_DIR / "examples" / f"{task}.{case['language']}.{case['persona']}.json"
     )
 
-    system = persona["system_template"].format(language=examples["language_display"])
+    system = _line(persona["system_template"]).format(language=examples["language_display"])
 
     hint_examples = None if generic else case.get("examples")
     hint_clause = f" (e.g. {', '.join(hint_examples)})" if hint_examples else ""
@@ -57,7 +65,7 @@ def compose_prompt(case: dict, task: str = "what_else", generic: bool = False) -
     # simply ignored by str.format() for task templates with no
     # {persona_rules_clause} slot.
     persona_rules = persona.get("extra_rules") or []
-    persona_rules_clause = "".join(f"\n- {rule}" for rule in persona_rules)
+    persona_rules_clause = "".join(f"\n- {_line(rule)}" for rule in persona_rules)
 
     # Merge in this order so a case can't accidentally clobber the pieces
     # that make the prompt make sense (speaker/hint_clause/examples), but
@@ -72,13 +80,8 @@ def compose_prompt(case: dict, task: str = "what_else", generic: bool = False) -
         "persona_rules_clause": persona_rules_clause,
     }
     # user_template is stored as a list of lines (not one long escaped
-    # string) so prompts/<task>.json stays readable/diffable. A line that's
-    # itself a list is a single long line word-wrapped across several JSON
-    # array entries for editability; join its fragments with a space to
-    # get back the one logical line before joining lines with "\n".
-    def _line(entry):
-        return " ".join(entry) if isinstance(entry, list) else entry
-
+    # string) so prompts/<task>.json stays readable/diffable. Each entry is
+    # one logical line, itself optionally word-wrapped via _line().
     user_template = "\n".join(_line(entry) for entry in template["user_template"])
     user = user_template.format(**fields)
     return system, user

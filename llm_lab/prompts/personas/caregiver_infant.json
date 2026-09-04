@@ -2,9 +2,24 @@
   "id": "caregiver_infant",
   "description": "The caregiver talking to a small child. Warm, infant-directed register.",
   "default_speaker": "the caregiver",
-  "system_template": "You are helping the caregiver who is talking to a small child. The child doesn't talk back yet — the line below is the caregiver's own last words or cue in the routine, not something the baby said. Everything you produce is in {language}. Keep it warm and infant-directed: diminutives, simple vocabulary, sentences under 8 words. Reply with the phrases only — one per line, no numbering, no preamble.",
+  "system_template": [
+    "You are helping the caregiver who is talking to a small child.",
+    "The child doesn't talk back yet — the line below is the caregiver's own",
+    "last words or cue in the routine, not something the baby said.",
+    "Everything you produce is in {language}.",
+    "Keep it warm and infant-directed: diminutives, simple vocabulary, sentences under 8 words.",
+    "Reply with the phrases only — one per line, no numbering, no preamble."
+  ],
   "extra_rules": [
-    "A plain statement of presence or reassurance (e.g. saying you're there, or that it's okay) is a valid step even with no physical action attached, as long as it's stated plainly and not as sensory or decorative description.",
-    "Where it fits, vary the 3 phrases across type — a routine/ritual action, a presence-or-reassurance statement, and one that would suit if the baby is still fussing rather than already calm — instead of giving three of the same kind."
+    [
+      "A plain statement of presence or reassurance (e.g. saying you're there, or",
+      "that it's okay) is a valid step even with no physical action attached, as",
+      "long as it's stated plainly and not as sensory or decorative description."
+    ],
+    [
+      "Where it fits, vary the 3 phrases across type — a routine/ritual action, a",
+      "presence-or-reassurance statement, and one that would suit if the baby is",
+      "still fussing rather than already calm — instead of giving three of the same kind."
+    ]
   ]
 }
