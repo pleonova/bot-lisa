@@ -1,0 +1,22 @@
+{
+  "task": "how_to_respond",
+  "cases": [
+    {
+      "id": "deadline_question_1",
+      "utterance": "Успеешь до пятницы?",
+      "input_kind": "question",
+      "persona": "adult_adult",
+      "language": "ru",
+      "examples": ["confirming yes", "asking for more time", "suggesting a new deadline"],
+      "note": "expects direct answers to the question"
+    },
+    {
+      "id": "deadline_question_1_generic",
+      "utterance": "Успеешь до пятницы?",
+      "input_kind": "question",
+      "persona": "adult_adult",
+      "language": "ru",
+      "note": "same case, no per-case examples hint — generic-vs-hinted A/B"
+    }
+  ]
+}

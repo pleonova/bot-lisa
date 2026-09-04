@@ -1,6 +1,9 @@
 """
 Stitches together: task template + persona + language examples + case
-to produce a final (system, user) prompt pair.
+to produce a final (system, user) prompt pair. Task-agnostic — works for any
+task under prompts/ (what_else, how_to_respond, ...) as long as its files
+follow the layout below, whatever case fields that task's user_template
+references (what_else uses {activity}, how_to_respond uses {input_kind}).
 
 Layout this expects (relative to llm_lab/):
   prompts/<task>.json                                  -- language & persona agnostic
@@ -46,15 +49,19 @@ def compose_prompt(case: dict, task: str = "what_else", generic: bool = False) -
     hint_examples = None if generic else case.get("examples")
     hint_clause = f" (e.g. {', '.join(hint_examples)})" if hint_examples else ""
 
-    user = template["user_template"].format(
-        speaker=persona["default_speaker"],
-        activity=case["activity"],
-        hint_clause=hint_clause,
-        bad_example=examples["bad_example"],
-        good_example=examples["good_example"],
-        utterance_label=template["utterance_label"],
-        utterance=case["utterance"],
-    )
+    # Merge in this order so a case can't accidentally clobber the pieces
+    # that make the prompt make sense (speaker/hint_clause/examples/label),
+    # but still supplies whatever task-specific slot the template needs
+    # ({activity}, {input_kind}, ...) via **case.
+    fields = {
+        **case,
+        "speaker": persona["default_speaker"],
+        "hint_clause": hint_clause,
+        "bad_example": examples["bad_example"],
+        "good_example": examples["good_example"],
+        "utterance_label": template["utterance_label"],
+    }
+    user = template["user_template"].format(**fields)
     return system, user
 
 

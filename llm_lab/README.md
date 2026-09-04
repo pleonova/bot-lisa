@@ -40,17 +40,21 @@ llm_lab/
 │   ├── personas/
 │   │   ├── caregiver_infant.json  # id / description / default_speaker / system_template
 │   │   └── adult_adult.json       # alt persona (two adults, peer register)
-│   ├── examples/
-│   │   ├── what_else.ru.caregiver_infant.json  # bad/good contrastive pair, per lang+persona
-│   │   └── what_else.ru.adult_adult.json
-│   ├── compose_prompt.py     # what_else only: stitches template + persona + example + case
+│   ├── examples/            # bad/good contrastive pair, per <task>.<lang>.<persona>
+│   │   ├── what_else.ru.caregiver_infant.json
+│   │   ├── what_else.ru.adult_adult.json
+│   │   ├── how_to_respond.ru.caregiver_infant.json
+│   │   └── how_to_respond.ru.adult_adult.json
+│   ├── compose_prompt.py     # stitches template + persona + example + case for any task
 │   ├── what_else.json        # "что ещё" trigger — task rules only (user_template), no cases
-│   └── how_to_respond.json   # "как ответить" trigger — task rules + cases (not yet split)
+│   └── how_to_respond.json   # "как ответить" trigger — task rules only (user_template), no cases
 ├── eval/
 │   ├── run_eval.py         # runs model sizes × prompt sets; --model/--set/--case to narrow
-│   ├── cases/
-│   │   ├── what_else_caregiver_infant.json  # bedtime/mealtime/bathtime + _generic twins
-│   │   └── what_else_adult_adult.json       # meeting wrap-up + _generic twin
+│   ├── cases/               # eval cases, per <task>_<persona>, each self-describing persona+language
+│   │   ├── what_else_caregiver_infant.json       # bedtime/mealtime/bathtime + _generic twins
+│   │   ├── what_else_adult_adult.json            # meeting wrap-up + _generic twin
+│   │   ├── how_to_respond_caregiver_infant.json  # question/comment/greeting + _generic twins
+│   │   └── how_to_respond_adult_adult.json       # deadline question + _generic twin
 │   └── outputs/            # generated outputs land here for review (gitignored)
 └── models/                 # place downloaded .gguf files here (gitignored)
 ```
@@ -79,17 +83,14 @@ Overrides: `$LLAMA_SERVER` (binary path), `$LLM_LAB_PORT` (default 8080).
 
 ## Iterating on prompts
 Everything worth tweaking is plain text under `prompts/` and `eval/cases/`.
-`what_else` and `how_to_respond` aren't structured the same way — `what_else`
-is fully split into template / persona / example / case; `how_to_respond`
-still keeps its cases (with inline examples, no persona split) directly in
-`prompts/how_to_respond.json`.
+Both tasks (`what_else`, `how_to_respond`) use the same split: template /
+persona / example / case, stitched together by `prompts/compose_prompt.py`.
 
 | To change… | Edit |
 |---|---|
-| what_else task wording / rules | `user_template`, `utterance_label` in `prompts/what_else.json` |
-| a what_else case (utterance, activity, hint examples) | `eval/cases/what_else_<persona>.json` — each case carries its own `persona` + `language` |
-| the what_else contrastive bad/good example | `prompts/examples/what_else.<lang>.<persona>.json` |
-| how_to_respond task wording or a case | `instruction`, `utterance_label`, `cases[]` in `prompts/how_to_respond.json` |
+| task wording / rules | `user_template`, `utterance_label` in `prompts/<task>.json` |
+| a case (utterance, `activity`/`input_kind`, hint examples) | `eval/cases/<task>_<persona>.json` — each case carries its own `persona` + `language` |
+| the contrastive bad/good example | `prompts/examples/<task>.<lang>.<persona>.json` |
 | voice: who speaks, register | `prompts/personas/<persona_id>.json` (`system_template`, `default_speaker`) |
 | sampling (temp, seed, max tokens) | `GEN_PARAMS` near the top of `eval/run_eval.py` |
 
@@ -106,15 +107,17 @@ python3 llm_lab/eval/run_eval.py --model 4b --set what_else --case bedtime_1 --p
 python3 llm_lab/eval/run_eval.py --persona adult_adult --set how_to_respond --print
 
 # generic-vs-hinted A/B: does the rule + bad/good contrast alone generalize,
-# without the case's own examples hint?
+# without the case's own examples hint? (works for either task)
 python3 llm_lab/eval/run_eval.py --set what_else --case bedtime_1 --print
 python3 llm_lab/eval/run_eval.py --set what_else --case bedtime_1_generic --generic --print
+python3 llm_lab/eval/run_eval.py --set how_to_respond --case question_1 --print
+python3 llm_lab/eval/run_eval.py --set how_to_respond --case question_1_generic --generic --print
 
 # full sweep once you're happy (both sizes, both sets, all cases)
 python3 llm_lab/eval/run_eval.py
 ```
 
-Each `what_else` case has a `_generic` twin (same utterance/activity, no
+Every case has a `_generic` twin (same utterance/activity/input_kind, no
 `examples` hint) — pass `--generic` when running it so the per-case hint is
 actually dropped rather than just missing from that one case's JSON.
 
@@ -132,17 +135,18 @@ the *voice*. Who is speaking and in what register lives in
 python3 llm_lab/eval/run_eval.py --persona adult_adult
 ```
 
-For `what_else`, `--persona` does double duty: it also selects which case
-file runs, `eval/cases/what_else_<persona_id>.json` — so each persona gets its
-own realistic scenario (bedtime/mealtime/bathtime for `caregiver_infant`;
-a work-meeting wrap-up for `adult_adult`) instead of forcing one persona's
-cases onto another's voice. `how_to_respond`'s cases aren't persona-specific;
-the same case set just gets re-voiced per persona.
+`--persona` does double duty: for both tasks it also selects which case file
+runs, `eval/cases/<task>_<persona_id>.json` — so each persona gets its own
+realistic scenario instead of forcing one persona's cases onto another's
+voice (bedtime/mealtime/bathtime + a "Хочешь ещё?"-style Q&A for
+`caregiver_infant`; a work-meeting wrap-up + a deadline question for
+`adult_adult`).
 
-Adding a new persona means: a `personas/<id>.json`, a
-`examples/what_else.<lang>.<id>.json` bad/good pair, and (if you want
-what_else cases for it) an `eval/cases/what_else_<id>.json` — no edit to
-`prompts/what_else.json` or the other personas' files.
+Adding a new persona means: a `personas/<id>.json`, an
+`examples/<task>.<lang>.<id>.json` bad/good pair per task, and an
+`eval/cases/<task>_<id>.json` per task you want it to cover — no edit to
+`prompts/what_else.json`, `prompts/how_to_respond.json`, or the other
+personas' files.
 
 Output filenames include the persona (`<model>_<set>_<persona>_<ts>.json`,
 or `..._<persona>_generic_<ts>.json` under `--generic`), so runs don't
