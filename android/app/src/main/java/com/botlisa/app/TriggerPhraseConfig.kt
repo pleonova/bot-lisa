@@ -64,6 +64,7 @@ object TriggerPhraseConfig {
         SupportedLanguages.ROMANIAN.code to "cum se spune?",
         SupportedLanguages.UKRAINIAN.code to "як сказати?",
         SupportedLanguages.MANDARIN.code to "怎么说？",
+        SupportedLanguages.KOREAN.code to "어떻게 말해요?",
     )
     val DEFAULT_MEANING_TRIGGER_PHRASES = mapOf(
         SupportedLanguages.RUSSIAN.code to "что это значит?",
@@ -76,6 +77,7 @@ object TriggerPhraseConfig {
         SupportedLanguages.ROMANIAN.code to "ce înseamnă asta?",
         SupportedLanguages.UKRAINIAN.code to "що це означає?",
         SupportedLanguages.MANDARIN.code to "这是什么意思？",
+        SupportedLanguages.KOREAN.code to "그게 무슨 뜻이에요?",
     )
     val DEFAULT_NEXT_SUGGESTION_TRIGGER_PHRASES = mapOf(
         SupportedLanguages.RUSSIAN.code to "что ещё?",
@@ -88,6 +90,7 @@ object TriggerPhraseConfig {
         SupportedLanguages.ROMANIAN.code to "ce altceva?",
         SupportedLanguages.UKRAINIAN.code to "що ще?",
         SupportedLanguages.MANDARIN.code to "还有什么？",
+        SupportedLanguages.KOREAN.code to "또 뭐가 있어요?",
     )
     // Answer suggestions are Russian-only (curated library) for now.
     val DEFAULT_ANSWER_TRIGGER_PHRASES = mapOf(
