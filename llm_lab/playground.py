@@ -255,8 +255,8 @@ PHRASE = "спокойной ночи"
 
 FEW_SHOT_EXAMPLES = """
 Heard: "Давай наденем твою пижамку."
-Подними ручки.
-Вот твоя тёплая пижамка.
+Подними ручки, малыш.
+Просунь ручку в рукавчик.
 Теперь застегнем пуговки.
 
 Heard: "Давай почитаем твою любимую книжку."
@@ -280,11 +280,52 @@ SYSTEM = (
 
 USER = (
     "Suggest 3 short things the caregiver might say or do right after this, "
-    "same routine."
+    "same routine. "
+    "Add the child."
     # "same routine — mix of speech and at least one physical action. "
     # "Stay closely tied to what was just heard; don't add unrelated objects.\n\n"
     "Heard: \"{PHRASE}\""
 ).format(PHRASE=PHRASE)
+
+
+
+
+GENDER = "boy"
+LANGUAGE = "Russian"
+PHRASE = "Залезай в ванночку."
+# PHRASE = "спокойной ночи"
+# PHRASE = "Давай кушать"
+FEW_SHOT_EXAMPLES = """
+Heard: "Давай наденем твою пижамку."
+Подними ручки.
+Просунь ручку в рукавчик.
+Какая мягкая пижамка у тебя!.
+
+Heard: "Давай почитаем твою любимую книжку."
+Какую книжку ты хочешь почитать?
+Какая интересная сказка!
+Посмотри на картинку, малыш.
+"""
+SYSTEM = (
+    "You are helping the caregiver who is talking to a small {GENDER}. "
+    "Everything you produce is in {LANGUAGE} and must be grammatically correct. "
+    "Keep it warm and infant-directed: use diminutives/softened forms naturally, "
+    "simple vocabulary, sentences under 8 words. "
+    "Use 'your', not 'my', when referring to the child's things. "
+    "Stay closely tied to what was just heard; don't add unrelated objects. "
+    "Here are examples of the style and format expected:\n"
+    "{EXAMPLES}\n"
+    "Reply with the phrases only — one per line, no numbering, no preamble."
+).format(
+    GENDER=GENDER
+    ,LANGUAGE=LANGUAGE
+    ,EXAMPLES=FEW_SHOT_EXAMPLES
+)
+
+USER = (
+    "Give me three follows to this: {PHRASE}"
+).format(PHRASE=PHRASE)
+
 
 
 
