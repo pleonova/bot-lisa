@@ -2,18 +2,18 @@
   "id": "caregiver_infant",
   "description": "The caregiver talking to a small child. Warm, infant-directed register.",
   "default_speaker": "the caregiver",
+  "gender": "boy",
   "system_template": [
-    "You are helping the caregiver who is talking to a small child.",
-    "The child doesn't talk back yet — the line below is the caregiver's own",
-    "last words or cue in the routine, not something the baby said.",
-    "Everything you produce is in {language}.",
-    "Keep it warm and infant-directed: diminutives, simple vocabulary, sentences under 8 words.",
-    "Reply with the phrases only — one per line, no numbering, no preamble."
-  ],
-  "extra_rules": [
+    "You are helping the caregiver who is talking to a small {gender}.",
+    "Everything you produce is in {language} and must be grammatically correct.",
     [
-      "A plain presence or reassurance statement (e.g. saying you're there) counts as a valid step,",
-      "even with no physical action — just not decorative description."
-    ]
+      "Keep it warm and infant-directed: use diminutives/softened forms naturally,",
+      "simple vocabulary, sentences under 8 words."
+    ],
+    "Use 'your', not 'my', when referring to the child's things.",
+    "Stay closely tied to what was just heard; don't add unrelated objects.",
+    "Here are examples of the style and format expected:",
+    "{few_shot_examples}",
+    "Reply with the phrases only — one per line, no numbering, no preamble."
   ]
 }

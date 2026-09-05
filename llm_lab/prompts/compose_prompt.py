@@ -1,14 +1,16 @@
 """
-Stitches together: task template + persona + language examples + case
-to produce a final (system, user) prompt pair. Task-agnostic — works for any
-task under prompts/ (what_else, how_to_respond, ...) as long as its files
-follow the layout below, whatever case fields that task's user_template
-references (what_else uses {activity}, how_to_respond uses {input_kind}).
+Stitches together: persona + language examples + case + task template to
+produce a final (system, user) prompt pair. Task-agnostic and schema-flexible
+— a persona's system_template and a task's user_template can each reference
+whatever placeholders their own text needs ({gender}, {activity},
+{input_kind}, {few_shot_examples}, {bad_example}, ...); this module doesn't
+hardcode field names, it just merges persona + examples + case into one dict
+and lets str.format() pick out what each template actually references.
 
 Layout this expects (relative to llm_lab/):
   prompts/<task>.json                                  -- language & persona agnostic
   prompts/personas/<persona_id>.json                    -- tone/register, persona-only
-  prompts/examples/<task>.<lang>.<persona_id>.json      -- good/bad pair for this combo
+  prompts/examples/<task>.<lang>.<persona_id>.json      -- example data for this combo
 
 A "case" is one entry from an eval set file, e.g.:
   {
@@ -20,9 +22,17 @@ A "case" is one entry from an eval set file, e.g.:
     "examples": ["brushing teeth", "turning off the light", "a goodnight hug"]
   }
 
+Two example-file shapes are supported, chosen per persona/task by whichever
+placeholders that persona's system_template or the task's user_template
+reference:
+  - "bad_example" (str) + "good_examples" (list[str]) — a contrastive pair,
+    rendered as a "- \"...\"" bullet block.
+  - "few_shot_examples" (list of {"heard": str, "responses": [str, str, str]})
+    — full demonstrations, rendered as repeated "Heard: \"...\"" blocks.
+A single examples file can define both if two different templates need them.
+
 Set generic=True (or omit "examples" from the case) to test whether the
-persona + rules + good/bad pair alone generalize as well as the
-phrase-specific hints do.
+persona + rules alone generalize as well as the phrase-specific hints do.
 """
 
 import json
@@ -39,9 +49,32 @@ def _load(path: Path) -> dict:
 def _line(entry) -> str:
     """Reassemble one logical line that may be word-wrapped in the JSON
     source as a list of fragments (for editability); join with a space to
-    get back the original line. A plain string passes through unchanged, so
-    unwrapped fields keep working."""
+    get back the original line. A plain string passes through unchanged."""
     return " ".join(entry) if isinstance(entry, list) else entry
+
+
+def _render(template_lines) -> str:
+    """Reassemble a template field stored as a list of lines (JSON-friendly,
+    so prompts/<task>.json and personas/<id>.json stay readable/diffable)
+    back into one string, lines joined by "\n". Each line may itself be a
+    list of word-wrap fragments (see _line). A plain string passes through
+    unchanged, so a persona that wants one continuous paragraph can wrap its
+    fragments in a single extra list level."""
+    if isinstance(template_lines, str):
+        return template_lines
+    return "\n".join(_line(line) for line in template_lines)
+
+
+def _format_good_examples(items: list[str]) -> str:
+    return "\n".join(f'- "{g}"' for g in items)
+
+
+def _format_few_shot_examples(demos: list[dict]) -> str:
+    blocks = []
+    for demo in demos:
+        lines = [f'Heard: "{demo["heard"]}"', *demo["responses"]]
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
 
 
 def compose_prompt(case: dict, task: str = "what_else", generic: bool = False) -> tuple[str, str]:
@@ -52,38 +85,33 @@ def compose_prompt(case: dict, task: str = "what_else", generic: bool = False) -
         PROMPTS_DIR / "examples" / f"{task}.{case['language']}.{case['persona']}.json"
     )
 
-    system = _line(persona["system_template"]).format(language=examples["language_display"])
-
     hint_examples = None if generic else case.get("examples")
     hint_clause = f" (e.g. {', '.join(hint_examples)})" if hint_examples else ""
 
-    good_examples = "\n".join(f'- "{g}"' for g in examples["good_examples"])
-
-    # Optional persona-specific extra rules (e.g. caregiver_infant allows
-    # reassurance-only steps). Rendered as extra bullet lines appended after
-    # the task's own rules; empty for personas that don't define any, and
-    # simply ignored by str.format() for task templates with no
-    # {persona_rules_clause} slot.
-    persona_rules = persona.get("extra_rules") or []
-    persona_rules_clause = "".join(f"\n- {_line(rule)}" for rule in persona_rules)
+    # Pre-render whichever structured example data this file provides, so
+    # it's ready to drop straight into a template as a string.
+    formatted_examples = dict(examples)
+    if "good_examples" in formatted_examples:
+        formatted_examples["good_examples"] = _format_good_examples(examples["good_examples"])
+    if "few_shot_examples" in formatted_examples:
+        formatted_examples["few_shot_examples"] = _format_few_shot_examples(examples["few_shot_examples"])
 
     # Merge in this order so a case can't accidentally clobber the pieces
-    # that make the prompt make sense (speaker/hint_clause/examples), but
-    # still supplies whatever task-specific slot the template needs
-    # ({activity}, {input_kind}, ...) via **case.
+    # that make the prompt make sense (speaker/hint_clause/language), while
+    # still supplying whatever placeholder each template needs — {gender}
+    # from the persona, {activity}/{input_kind} from the case,
+    # {few_shot_examples}/{bad_example}/{good_examples} from the examples file.
     fields = {
+        **persona,
+        **formatted_examples,
         **case,
+        "language": examples["language_display"],
         "speaker": persona["default_speaker"],
         "hint_clause": hint_clause,
-        "bad_example": examples["bad_example"],
-        "good_examples": good_examples,
-        "persona_rules_clause": persona_rules_clause,
     }
-    # user_template is stored as a list of lines (not one long escaped
-    # string) so prompts/<task>.json stays readable/diffable. Each entry is
-    # one logical line, itself optionally word-wrapped via _line().
-    user_template = "\n".join(_line(entry) for entry in template["user_template"])
-    user = user_template.format(**fields)
+
+    system = _render(persona["system_template"]).format(**fields)
+    user = _render(template["user_template"]).format(**fields)
     return system, user
 
 

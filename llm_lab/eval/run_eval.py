@@ -6,15 +6,17 @@ how-to-respond prompt sets, and writes results to eval/outputs/ for the
 Russian-speaking collaborator to review for register and contextual relevance.
 
 Both prompt sets (what_else, how_to_respond) use the same fully-decoupled
-layout: prompts/<task>.json carries only the task rules (persona- and
-language-agnostic); voice comes from prompts/personas/<persona_id>.json; the
-contrastive bad/good example pair comes from
-prompts/examples/<task>.<lang>.<persona_id>.json; and the cases themselves
-live in eval/cases/<task>_<persona_id>.json, each case self-describing its
-own persona + language. prompts/compose_prompt.py stitches all four into the
-final prompt. `--persona` selects which case file to run; `--generic` drops
-each case's own examples hint to test whether persona + rules + bad/good
-contrast alone generalize.
+layout: prompts/<task>.json carries only the task wording (persona- and
+language-agnostic); voice comes from prompts/personas/<persona_id>.json; example
+data comes from prompts/examples/<task>.<lang>.<persona_id>.json (either a
+contrastive bad/good pair, or full few-shot "heard + 3 replies" demos —
+whichever a given persona's/task's template text actually references); and
+the cases themselves live in eval/cases/<task>_<persona_id>.json, each case
+self-describing its own persona + language. prompts/compose_prompt.py
+stitches it all into the final prompt. `--persona` selects which case file to
+run; `--generic` drops each case's own examples hint — this currently only
+changes anything for how_to_respond, since what_else's template no longer
+references that hint.
 
 This is a scratch evaluation script (speech_lab-style), not production code.
 Nothing here is wired into the app or backend.
@@ -212,8 +214,8 @@ def parse_args() -> argparse.Namespace:
                    help=f"persona id (default: {DEFAULT_PERSONA}) — also selects which "
                         f"eval/cases/<task>_<persona>.json case file runs")
     p.add_argument("--generic", action="store_true",
-                   help="drop each case's own examples hint — tests whether persona + "
-                        "rules + bad/good contrast generalize alone")
+                   help="drop each case's own examples hint (how_to_respond only right "
+                        "now — what_else's template doesn't reference the hint)")
     p.add_argument("--print", dest="do_print", action="store_true",
                    help="echo id + output to the terminal as results come back")
     p.add_argument("--dry-run", action="store_true",

@@ -40,11 +40,12 @@ llm_lab/
 │   ├── personas/
 │   │   ├── caregiver_infant.json  # id / description / default_speaker / system_template
 │   │   └── adult_adult.json       # alt persona (two adults, peer register)
-│   ├── examples/            # bad/good contrastive pair, per <task>.<lang>.<persona>
-│   │   ├── what_else.ru.caregiver_infant.json
-│   │   ├── what_else.ru.adult_adult.json
-│   │   ├── how_to_respond.ru.caregiver_infant.json
-│   │   └── how_to_respond.ru.adult_adult.json
+│   ├── examples/            # example data, per <task>.<lang>.<persona> — shape
+│   │   │                    # varies (see "Iterating on prompts" below)
+│   │   ├── what_else.ru.caregiver_infant.json    # few_shot_examples (heard + 3 replies)
+│   │   ├── what_else.ru.adult_adult.json         # just language_display — no examples needed
+│   │   ├── how_to_respond.ru.caregiver_infant.json  # bad/good pair + few_shot_examples
+│   │   └── how_to_respond.ru.adult_adult.json       # bad/good pair
 │   ├── compose_prompt.py     # stitches template + persona + example + case for any task
 │   ├── what_else.json        # "что ещё" trigger — task rules only (user_template), no cases
 │   └── how_to_respond.json   # "как ответить" trigger — task rules only (user_template), no cases
@@ -85,14 +86,30 @@ Overrides: `$LLAMA_SERVER` (binary path), `$LLM_LAB_PORT` (default 8080).
 Everything worth tweaking is plain text under `prompts/` and `eval/cases/`.
 Both tasks (`what_else`, `how_to_respond`) use the same split: template /
 persona / example / case, stitched together by `prompts/compose_prompt.py`.
+`compose_prompt.py` doesn't hardcode field names — it merges persona +
+example data + case into one dict and lets each template's own text pick out
+whatever placeholder it references. So a persona's `system_template` and a
+task's `user_template` are each free to use whatever slots they need
+(`{gender}`, `{activity}`, `{input_kind}`, `{few_shot_examples}`,
+`{bad_example}`, ...), and adding one doesn't require touching the others.
 
 | To change… | Edit |
 |---|---|
-| task wording / rules | `user_template` in `prompts/<task>.json` |
+| task wording | `user_template` in `prompts/<task>.json` |
 | a case (utterance, `activity`/`input_kind`, hint examples) | `eval/cases/<task>_<persona>.json` — each case carries its own `persona` + `language` |
-| the contrastive bad/good example(s) | `prompts/examples/<task>.<lang>.<persona>.json` — one `bad_example`, a `good_examples` list (as many as help) |
-| voice: who speaks, register | `prompts/personas/<persona_id>.json` (`system_template`, `default_speaker`) |
+| example data (see below) | `prompts/examples/<task>.<lang>.<persona>.json` |
+| voice: who speaks, register, and any persona-only slot like `gender` | `prompts/personas/<persona_id>.json` (`system_template`, `default_speaker`, ...) |
 | sampling (temp, seed, max tokens) | `GEN_PARAMS` near the top of `eval/run_eval.py` |
+
+An examples file can hold either (or both) of two shapes, matching whatever
+its persona's `system_template` / that task's `user_template` reference:
+- **contrastive pair** — `bad_example` (str) + `good_examples` (list) — used by `how_to_respond`'s Wrong/Right rules block
+- **few-shot demos** — `few_shot_examples`: a list of `{"heard": ..., "responses": [3 strings]}` — used by `caregiver_infant`'s system prompt (embedded as "here's the style and format expected," not tied to any one task's rules)
+
+`caregiver_infant`'s `system_template` references `{few_shot_examples}`
+unconditionally, so *every* task that persona covers needs an examples file
+with that key — that's why `how_to_respond.ru.caregiver_infant.json` carries
+both shapes at once.
 
 Then re-run a narrow slice instead of the full sweep — a one-case run is ~7s:
 
@@ -107,9 +124,7 @@ python3 llm_lab/eval/run_eval.py --model 4b --set what_else --case bedtime_1 --p
 python3 llm_lab/eval/run_eval.py --persona adult_adult --set how_to_respond --print
 
 # generic-vs-hinted A/B: does the rule + bad/good contrast alone generalize,
-# without the case's own examples hint? (works for either task)
-python3 llm_lab/eval/run_eval.py --set what_else --case bedtime_1 --print
-python3 llm_lab/eval/run_eval.py --set what_else --case bedtime_1_generic --generic --print
+# without the case's own examples hint? (how_to_respond only — see below)
 python3 llm_lab/eval/run_eval.py --set how_to_respond --case question_1 --print
 python3 llm_lab/eval/run_eval.py --set how_to_respond --case question_1_generic --generic --print
 
@@ -125,7 +140,7 @@ python3 llm_lab/eval/run_eval.py
 | `--set {what_else,how_to_respond,all}` | task(s) to run (default: `all`) |
 | `--case ID` | only this case id; repeatable — e.g. `--case bedtime_1 --case mealtime_1` (default: every case in the set) |
 | `--persona NAME` | persona id for voice + case file, `eval/cases/<task>_<persona>.json` (default: `caregiver_infant`, or `$LLM_LAB_PERSONA`) |
-| `--generic` | drop each case's own `examples` hint before sending the prompt |
+| `--generic` | drop each case's own `examples` hint before sending the prompt (currently only affects `how_to_respond` — see below) |
 | `--print` | echo id + model output to the terminal as results come back (on top of writing the output file) |
 | `--dry-run` | print the assembled system + user prompt and exit — no `llama-server`, no GGUF, no model call |
 
@@ -137,18 +152,25 @@ Every case has a `_generic` twin (same utterance/activity/input_kind, no
 `examples` hint) — but the `_generic` suffix on the id is just a label. What
 actually strips the hint is the `--generic` flag; pass both together, or the
 "generic" case runs exactly as hinted (since it just has no hint of its own
-to strip):
+to strip).
+
+**This currently only changes anything for `how_to_respond`** — its
+`user_template` has a `{hint_clause}` slot the flag controls.
+`what_else`'s `user_template` (`"Give me three follows to this: {utterance}"`)
+doesn't reference `{hint_clause}` at all, so `--generic` is a no-op there; the
+`_generic` what_else cases still exist (for whenever the template changes
+again) but currently render identically to their hinted twin.
 
 ```bash
 # inspect the prompt only — instant, no server needed
-python3 llm_lab/eval/run_eval.py --set what_else --case bedtime_1_generic --generic --dry-run
+python3 llm_lab/eval/run_eval.py --set how_to_respond --case question_1_generic --generic --dry-run
 
 # actually run it and see what the model says
-python3 llm_lab/eval/run_eval.py --model 4b --set what_else --case bedtime_1_generic --generic --print
+python3 llm_lab/eval/run_eval.py --model 4b --set how_to_respond --case question_1_generic --generic --print
 
 # side by side against the hinted version, for the same phrase
-python3 llm_lab/eval/run_eval.py --model 4b --set what_else --case bedtime_1 --print
-python3 llm_lab/eval/run_eval.py --model 4b --set what_else --case bedtime_1_generic --generic --print
+python3 llm_lab/eval/run_eval.py --model 4b --set how_to_respond --case question_1 --print
+python3 llm_lab/eval/run_eval.py --model 4b --set how_to_respond --case question_1_generic --generic --print
 ```
 
 Every non-dry run also writes
@@ -190,7 +212,7 @@ forced onto another's voice:
 Three files, one shared id, no edits anywhere else:
 
 1. `prompts/personas/<id>.json` — the voice
-2. `prompts/examples/<task>.<lang>.<id>.json` — a bad/good example, per task
+2. `prompts/examples/<task>.<lang>.<id>.json` — example data, per task (whichever shape that task/persona's templates reference — see "Iterating on prompts")
 3. `eval/cases/<task>_<id>.json` — cases, per task you want it to cover
 
 None of this touches `prompts/what_else.json`, `prompts/how_to_respond.json`,
