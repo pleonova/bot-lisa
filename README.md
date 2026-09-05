@@ -190,3 +190,13 @@ and this project doesn't have a domain/DNS set up yet.
 **TODO:** decide on a domain + DNS setup, add a DigitalOcean-managed cert to
 the `orchestration-service` LoadBalancer, and switch the Android app's
 server URL to `https://`.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Open an issue before starting a large
+feature, and keep PRs small and single-purpose.
+
+## License
+
+[PolyForm Noncommercial 1.0.0](LICENSE) — free to use, modify, and share for
+personal and non-commercial purposes. © 2026 Paula Leonova.
