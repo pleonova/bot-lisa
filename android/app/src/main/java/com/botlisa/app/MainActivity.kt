@@ -90,6 +90,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val context = androidx.compose.ui.platform.LocalContext.current
+            // TEMP Phase 2 debug scaffold, see DebugLlmSmoke.kt / ON_DEVICE_LLM_PLAN.md.
+            LaunchedEffect(Unit) {
+                try {
+                    runLlmSmokeTest(context)
+                } catch (e: Exception) {
+                    android.util.Log.e("OnDeviceLlmSmoke", "smoke test failed", e)
+                }
+            }
             // null override = follow the system setting; the Settings toggle
             // flips it to an explicit true/false (persisted in ThemeConfig).
             var darkOverride by remember { mutableStateOf(ThemeConfig.getDarkOverride(context)) }

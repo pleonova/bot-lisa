@@ -37,6 +37,19 @@ android {
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
     }
+
+    // The GGML_BACKEND_DL runtime dispatch in onDeviceLlm scans
+    // ApplicationInfo.nativeLibraryDir for backend .so files at startup
+    // (ggml_backend_load_all_from_path). Modern Android's default packaging
+    // never extracts .so files to that directory -- it mmaps them straight
+    // out of the APK instead, leaving the directory empty. Force legacy
+    // (extracted) packaging so that directory actually exists on disk.
+    // See ON_DEVICE_LLM_PLAN.md Phase 2.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
 
 dependencies {

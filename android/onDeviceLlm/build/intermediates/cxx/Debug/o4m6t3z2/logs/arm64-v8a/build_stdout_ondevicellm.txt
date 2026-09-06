@@ -1,2 +1,0 @@
-ninja: Entering directory `/Users/paulaleonova/repos/bot-lisa/android/onDeviceLlm/.cxx/Debug/o4m6t3z2/arm64-v8a'
-ninja: no work to do.

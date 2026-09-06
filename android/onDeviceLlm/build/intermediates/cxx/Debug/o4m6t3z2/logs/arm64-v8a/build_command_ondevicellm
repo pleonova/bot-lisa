@@ -1,4 +1,0 @@
-/Users/paulaleonova/Library/Android/sdk/cmake/3.22.1/bin/ninja \
-  -C \
-  /Users/paulaleonova/repos/bot-lisa/android/onDeviceLlm/.cxx/Debug/o4m6t3z2/arm64-v8a \
-  ondevicellm

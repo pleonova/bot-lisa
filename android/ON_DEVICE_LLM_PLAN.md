@@ -15,6 +15,17 @@ This only touches "что ещё" (what else). "как ответить" (how to
 6. **Build the real download** — fetch the ~2.7GB model over WiFi with a progress bar, and make it resumable if interrupted (not a full restart).
 7. **Flip it on for real** — "что ещё" honors whichever of the three modes is picked, always labeling the result "AI" or "Library". Remove the step-2 testing shortcut.
 
+## Cross-platform note (an iPhone version is a future goal — don't over-couple to Android)
+
+llama.cpp itself is portable C++ (it has its own iOS examples too) — the model file, and the prompt/persona/few-shot JSON design in `llm_lab/prompts/`, are already platform-agnostic and should stay that way. What's genuinely Android-only, and will need a from-scratch iOS equivalent later, is everything in this plan *around* llama.cpp:
+- The JNI bridge itself (Kotlin ↔ C++) — iOS would need its own Swift/Objective-C++ bridge to the same llama.cpp core, not a port of this Kotlin code.
+- `WorkManager`-based downloading (Phase 6) — iOS has no equivalent; it'd use `URLSession` background downloads instead.
+- `SharedPreferences`-based config (Phase 5) — iOS equivalent would be `UserDefaults`.
+
+Practically, this means: keep `OnDeviceLlm.kt`'s public shape (`generateWhatElse(heard) -> List<Phrase>`, the `Availability` states, the `WhatElseSource` modes) as the *contract* worth mirroring on iOS later, but don't let Android-specific plumbing (JNI details, WorkManager, SharedPreferences) leak into the parts meant to be shared — namely the prompt/persona/examples JSON files and the general "compose a prompt, run it, parse 3 lines" logic.
+
+**If vendoring the official Android JNI scaffold proves too painful**, a maintained community wrapper (e.g. `SmolChat-Android`'s `smollm` module) is a lower-effort fallback for Android specifically — noted here so we don't reinvent this decision mid-struggle. It doesn't change the iOS story either way, since iOS needs its own bridge regardless of which Android-side approach wins.
+
 ## Context
 
 `llm_lab/` (a scratch Python eval harness) has already validated that Qwen3.5-4B-Q4_K_M produces good-quality Russian caregiver-register suggestions for the "что ещё" (what else) feature, using a persona + few-shot-examples prompt design (`llm_lab/prompts/compose_prompt.py`). The user wants to skip the planned Termux CLI-only on-device check (Phase 3 of that harness's plan) and instead build the real thing directly in the Android app, testing there.
@@ -63,6 +74,22 @@ Pin `android.ndkVersion` explicitly in the new module (nothing pins one today �
 - Prefer a llama.cpp release tag already verified 16KB-page-size-safe (a forward-looking Play Store requirement), so the pinned tag doesn't need re-vendoring later for that alone.
 
 **Checkpoint**: on the physical Pixel 11, a hand-composed prompt round-trips through JNI; log wall-clock latency and peak RSS (`adb shell dumpsys meminfo`).
+
+### ✅ Phase 2 complete (done on the `Pixel_6` emulator, API 37, arm64-v8a — not yet on the physical Pixel 11)
+
+Real end-to-end generation confirmed: `"спокойной ночи"` in → 3 Russian follow-up lines out, in **3058 ms total** (load-to-first-response was already warm; system+user prompt processing + generation was ~2.4s of that). Peak memory: **~2.9GB PSS** (tracks with the 2.7GB mmap'd model + overhead, as expected). Full build (`:app:assembleDebug`, both ABIs) succeeds; **APK is 148MB** debug, mostly from `GGML_CPU_ALL_VARIANTS` bundling ~13-14 per-microarchitecture backend `.so` files per ABI — flagged below as a real ship-size concern, not solved yet.
+
+Adaptation details that mattered, beyond the plan's "check for" list:
+- **Pinned tag**: `ggml-org/llama.cpp` `v0.4.0` (latest release at the time). `examples/llama.android`'s own `com.arm.aichat` package, `lib` module.
+- **CMake version**: upstream's `cmake_minimum_required(VERSION 3.31.6)` isn't an SDK-packaged version Gradle can auto-install (`[CXX1300] CMake '3.31.6' was not found`), and it isn't a real llama.cpp requirement either — llama.cpp's own `CMakeLists.txt` only needs 3.14–3.28. Lowered to **3.22.1** (same version Phase 1 already proved auto-installs).
+- **`@FastNative` stripped** from every `external fun` in `InferenceEngineImpl.kt`, per the plan's risk flag — confirmed present in the vendored code exactly as expected.
+- **A second, more specific API-floor bug the plan didn't anticipate**: `logging.h`'s `ai_should_log()` called `__android_log_is_loggable()`, which requires **API 30**, not 33 — a hard *compile* error (`'__android_log_is_loggable' is unavailable: introduced in Android 30`) given our module's `minSdk 24`, not just a theoretical runtime risk. Fixed by making `ai_should_log()` always return true — loses Android's own per-tag runtime log filtering (`adb setprop log.tag.<TAG>`), keeps our own `LOG_MIN_LEVEL` compile-time verbosity gate. Lesson: "verify nothing needs an API-33+ symbol" wasn't specific enough — *any* symbol above our real floor (24) is a candidate, and the actual failure was at 30, a level nobody had reason to suspect in advance.
+- **The real blocker, not in the original risk list at all**: `ggml_backend_load_all_from_path()` (called from our `init()`) scans `ApplicationInfo.nativeLibraryDir` for backend `.so` files at runtime — but **modern Android's default packaging never extracts `.so` files to that directory**, it mmaps them straight out of the APK instead, leaving the directory empty. Symptom was `UnsupportedArchitectureException` with a misleading name (the actual native error was `llama_model_load_from_file_impl: no backends are loaded`, nothing to do with the model's architecture at all). Fixed with `packaging { jniLibs { useLegacyPackaging = true } }` in `app/build.gradle.kts`, forcing real extraction to disk.
+- **`n_ctx` shrunk** from upstream's 8192 to **2048** in `llama_bridge.cpp` (renamed from `ai_chat.cpp`) — our prompts are short single-turn, not multi-turn chat.
+- Confirmed via `<think>...</think>` appearing (empty) in the raw output: Qwen's reasoning mode isn't disabled server-side the way our Homebrew `llama-server` testing used `-rea off`. Empty this time, but `OnDeviceLlm.kt` (Phase 4) should strip `<think>...</think>` defensively, same as `llm_lab/eval/run_eval.py`'s `THINK_RE`.
+- `kleidiai` warning noted, not fixed: `no kernel for tensor type q6_K, not accelerated by KleidiAI (kernels available for Q4_0 and Q8_0)` — our Q4_K_M model has some tensors (likely embedding/output) in a format KleidiAI can't accelerate yet, falling back to a slower path for just those. Not a correctness issue, a possible future speed lever (re-quantizing to Q4_0 would trade some quality for full KleidiAI coverage) — not pursued now.
+- **New deferred item**: the 148MB APK (`GGML_CPU_ALL_VARIANTS` bundling every per-microarchitecture backend variant for both ABIs) is real ship-size bloat worth addressing before release — e.g. dropping `x86_64` from the shipped APK entirely (it's only useful for Intel-Mac/CI emulator testing, never a real phone) and/or pruning `GGML_CPU_ALL_VARIANTS` down to fewer variants once we know the real Pixel 11's exact core generation. Not solved in Phase 2 — added to "Deferred, tracked explicitly" below.
+- Still open, genuinely needs the physical Pixel 11 (the emulator only proves the pipeline works, not real hardware numbers): actual latency/memory on real Tensor G-series silicon, and the "что ещё while hands-free mic is active" contention test.
 
 ## Phase 3 — Kotlin port of `compose_prompt.py` (parallel, no device needed)
 
@@ -179,6 +206,9 @@ All changes confined to `MainActivity.kt`; `onSend()`, `ApiClient`, and translat
 - **`как ответить` on-device support** — blocked on generalizing `how_to_respond.json`'s `user_template` to drop its `{input_kind}` dependency (question/comment/greeting classification the app can't currently produce), mirroring the `{activity}` fix already done for `what_else`. Note this in `TriggerPhraseConfig.kt`'s doc comment near `ANSWER_KEY_PREFIX` so it isn't forgotten.
 - Empirical re-tuning of `n_ctx`/thread count based on real hands-free-active testing, once Phase 2 data exists.
 - `android/` build docs (README/deploy notes) should get the new NDK/CMake toolchain requirements once Phase 1 lands, so a fresh contributor machine can actually build this.
+- **APK size** — 148MB debug build, mostly `GGML_CPU_ALL_VARIANTS`' per-microarchitecture backend `.so` files × 2 ABIs. Before release: drop `x86_64` from the shipped APK (real phones never need it), and consider pruning `GGML_CPU_ALL_VARIANTS` once the real Pixel 11's core generation is known instead of shipping every variant.
+- `<think>...</think>` stripping in `OnDeviceLlm.kt` (Phase 4) — seen empty in Phase 2 testing but not guaranteed to stay empty; mirror `llm_lab/eval/run_eval.py`'s `THINK_RE` defensively.
+- KleidiAI doesn't accelerate our model's `q6_K` tensors (`Q4_0`/`Q8_0` only) — a possible future speed lever (re-quantize to `Q4_0`), not pursued now.
 
 ## Verification summary
 
