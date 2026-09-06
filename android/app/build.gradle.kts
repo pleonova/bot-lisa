@@ -40,6 +40,10 @@ android {
 }
 
 dependencies {
+    // On-device LLM (Qwen3.5 via llama.cpp/JNI), powering "что ещё"
+    // suggestions on capable hardware. See ON_DEVICE_LLM_PLAN.md.
+    implementation(project(":onDeviceLlm"))
+
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.1")

@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "bot-lisa-android"
 include(":app")
+include(":onDeviceLlm")

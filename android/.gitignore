@@ -1,3 +1,5 @@
 android/build/
 .gradle/
 app/build/
+**/.cxx/
+*.gguf
