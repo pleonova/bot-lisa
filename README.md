@@ -234,6 +234,11 @@ Lisa Assistant's remaining pieces — live in [ROADMAP.md](ROADMAP.md).
   Russian-only (curated library + `_has_cyrillic()` in
   `services/orchestration_service/main.py`); needs curated content for a
   second language and a script-aware detector. See ROADMAP.
+- **Distinct listening notification icon** — the ongoing foreground
+  notification while hands-free is running (`ListeningForegroundService.kt`)
+  currently uses the app launcher icon as its status-bar small icon. Give
+  it a dedicated **orange speech-bubble** icon so "Lisa is listening" is
+  recognizable at a glance in the Android status bar.
 
 ## Paused features
 
