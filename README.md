@@ -102,49 +102,138 @@ docker compose -f infra/docker-compose.yml up --build
 ## Directory map
 
 ```
-phrase_library/phrases.json       # seed content — expand this with your collaborator first
-services/
+phrase_library/phrases.json       # 15 seed phrases — Russian curated library (expand this)
+services/                         # Python backend — three independently runnable FastAPI services
   common/
     config.py                     # shared env/config
     events.py                     # PerceptionEvent schema + in-memory bus (Kafka/Redis swap point)
-  retrieval_service/               # owns BM25 + hybrid + LTR retrieval
+  retrieval_service/              # BM25 + hybrid + LTR retrieval, port 8001
     bm25_index.py
-    embeddings.py                 # <- swap in real embeddings here
+    embeddings.py                 # fastembed / ONNX dense embeddings (already real)
     hybrid.py
     reranker.py
-    main.py                       # FastAPI app, port 8001
-  orchestration_service/
+    main.py
+  orchestration_service/         # /assist (app) + /ask (paused), port 8002
     llm_client.py                 # mock mode / live Claude API
-    main.py                       # FastAPI app, port 8002
-  ingestion_service/
-    main.py                       # FastAPI app, port 8003 — voice/vision event entry point
+    main.py
+  ingestion_service/             # voice/vision event entry point, port 8003
+    main.py
 eval/
-  labeled_eval_set.json           # shared ground truth for reranker training + eval
+  labeled_eval_set.json           # 8 labeled queries — reranker training + retrieval eval ground truth
   run_eval.py                     # NDCG/MRR/precision@k across bm25_only / hybrid / ltr_reranked
+llm_lab/                          # prompt-engineering lab for the on-device "what else" / "how to answer" features
+  prompts/
+    compose_prompt.py             # persona + per-language examples + task template -> (system, user)
+    what_else.json, how_to_respond.json     # task templates
+    personas/                     # caregiver_infant, adult_adult — tone/register + {gender}
+    examples/                     # per-(task, lang, persona) few-shot data; *.by_language.json seeds every language
+  eval/                           # its own eval harness + cases, separate from eval/ above
+  playground.py                   # quick manual system/user prompt testing
+speech_lab/                       # offline STT + per-utterance language-ID experiments (Whisper/faster-whisper)
+  lang_id.py  transcribe.py  trigger_flow.py  trigger_phrase.py
 infra/
   Dockerfile
   docker-compose.yml
   k8s/                            # scaffold manifests, untested against a real cluster
-  terraform/                      # scaffold, no provider configured
-tests/
-  test_retrieval.py
-android/                          # minimal Kotlin/Compose front end, see android/README.md
-.github/workflows/ci.yml
+  terraform/main.tf              # scaffold, no provider configured
+tests/test_retrieval.py
+android/                          # Kotlin/Compose app — see android/README.md
+  app/                            # MainActivity + Compose UI, SpeechAssistant, TriggerPhraseConfig, PromptComposer, …
+    src/main/assets/llm_prompts/  # prompt JSON hand-copied from llm_lab/ (drift risk, noted in PromptComposer.kt)
+  onDeviceLlm/                    # vendored llama.cpp JNI module
+  ON_DEVICE_LLM_PLAN.md  PHONE_DEPLOY.md  UI_REDESIGN_PLAN.md
+ROADMAP.md                        # bigger multi-layer feature bets (hands-free Lisa Assistant)
 ```
 
 ## Suggested expansion order
 
-1. **Grow the phrase library** (15 → 75+ phrases per the original plan) with your collaborator.
-2. ~~Swap in real embeddings in `embeddings.py`~~ — done, see the status table above. Next highest-value step here: grow `eval/labeled_eval_set.json` past 8 examples so the similarity threshold and reranker have more to be tuned against.
-3. **Grow the labeled eval set** past 8 examples — the LTR reranker and eval numbers both get more trustworthy with more data.
-4. **Wire up live LLM mode** — set `ANTHROPIC_API_KEY` and sanity-check `services/orchestration_service/llm_client.py`'s system prompt against real generations.
-5. **Add a Java (or Scala) retrieval hot-path service** — the retrieval service's `/search` endpoint is the natural candidate, since it's the latency-sensitive piece.
-6. **Swap the HTTP calls between services for a real queue** (Kafka or Redis Streams) using the `EventBus` interface in `events.py`.
-7. **Try the k8s manifests against k3d/minikube**, then fill in `terraform/main.tf` once you pick a cloud.
+Active work is on the Android app, the on-device LLM (`llm_lab/` →
+`android/onDeviceLlm/`), and speech/language-ID (`speech_lab/`) — see
+**Ideas** below and [ROADMAP.md](ROADMAP.md). The steps here are
+backend/infra scaffold-completion, largely independent of that:
 
-For bigger, standalone feature bets beyond this scaffold-filling list — like
-the hands-free "Lisa Assistant" listening mode — see
-[ROADMAP.md](ROADMAP.md).
+1. **Grow the phrase library** — still 15; the original plan was 75+.
+2. **Grow the labeled eval set** — still 8. The similarity threshold, the
+   LTR reranker, and the eval numbers all get more trustworthy with more
+   data. (Real embeddings are already in — see the status table.)
+3. **Wire up live LLM mode** — set `ANTHROPIC_API_KEY` and sanity-check
+   `services/orchestration_service/llm_client.py`'s system prompt against
+   real generations.
+4. **Add a Java (or Scala) retrieval hot-path service** — the retrieval
+   service's `/search` endpoint is the latency-sensitive piece.
+5. **Swap the inter-service HTTP calls for a real queue** (Kafka or Redis
+   Streams) via the `EventBus` interface in `events.py`.
+6. **Try the k8s manifests against k3d/minikube**, then fill in
+   `terraform/main.tf` once you pick a cloud.
+
+## Done so far
+
+High-level, in rough build order — details live in the status tables above,
+`android/README.md`, and the git log.
+
+- **Caregiver-facing assist flow** over `POST /assist`: translate mode
+  (English → target language) and Russian "expand" mode (say a Russian
+  phrase, get related ones from the curated library).
+- **Two translation paths:** Russian goes through the backend (curated
+  lookup → Claude fallback, warm baby-register); every other language
+  translates on-device via Google ML Kit.
+- **Hands-free "Lisa Assistant" listening mode** — foreground service for
+  background mic, fuzzy trigger-phrase matching (`SpeechAssistant.kt`,
+  `TriggerPhraseDetector.kt`).
+- **Four voice commands**, editable in Settings (`TriggerPhraseConfig.kt`):
+  "how to say?" and "what does that mean?" localized for every language;
+  "what else?" and "how to answer?" for Russian only.
+- **11 target languages** selectable in Settings, including Spanish,
+  Mandarin, and Romanian (`SupportedLanguages.ALL`).
+- **Translation under the transcript** — small-print gloss with a play
+  button; command-reminder chips auto-hide when you type or use a command
+  and reappear on new input, and tapping a chip speaks it aloud for
+  pronunciation.
+- **Prompt pipeline** (`llm_lab/prompts/compose_prompt.py`: persona +
+  per-language examples + task template) ported to Kotlin `PromptComposer`,
+  with a JVM test checked against the Python reference.
+- **On-device LLM scaffold** — vendored llama.cpp JNI bridge for the
+  "what else" / "how to answer" features; being evaluated in `llm_lab/`,
+  not yet wired into the app.
+
+## Ideas
+
+Not started (or only half-wired). Bigger multi-layer bets — e.g. hands-free
+Lisa Assistant's remaining pieces — live in [ROADMAP.md](ROADMAP.md).
+
+**Prompt inputs, editable from Settings.** Nothing below is in the UI yet;
+`PromptComposer.kt` hardcodes the persona and the Russian examples file.
+
+- **Language in the on-device LLM prompt** — `PromptComposer` hardcodes
+  the Russian examples file, so the prompt's `{language}` /
+  `language_display` is always "Russian". Make it read the existing
+  Settings language dropdown (`LanguageConfig.getTargetLanguage()`) and
+  load the matching examples block. The dropdown already drives
+  translation, TTS, and STT — just not this.
+- **Pre-seed `FEW_SHOT_EXAMPLES` per supported language** —
+  `llm_lab/prompts/examples/few_shot_examples.caregiver_infant.by_language.json`
+  already carries the two demos for all 11 languages, but it's the *same
+  two scenarios* machine-translated (not native-tuned) and lives only in
+  `llm_lab/`. Copy it into the app assets and load the block for the
+  selected language, so every language has a working default users can
+  later improve.
+- **Gender** — `{gender}` already defaults to **boy** in
+  `personas/caregiver_infant.json`; add a Settings toggle for **girl**.
+- **Edit `FEW_SHOT_EXAMPLES` in Settings** — override the seed above: edit
+  both demos (each demo's "heard" phrase and its three responses),
+  persisted per language.
+- **Persona** — pick baby / child (by age) / adult, choosing which
+  `personas/*.json` the prompt uses (`caregiver_infant`, `adult_adult`
+  exist).
+
+**Other.**
+
+- **Swap primary ↔ secondary language** — flip the "from" and "to"; today
+  it's always English → target.
+- **Generalize expand mode past Russian** — related-phrase suggestions are
+  Russian-only (curated library + `_has_cyrillic()` in
+  `services/orchestration_service/main.py`); needs curated content for a
+  second language and a script-aware detector. See ROADMAP.
 
 ## Paused features
 
@@ -189,7 +278,11 @@ and this project doesn't have a domain/DNS set up yet.
 
 **TODO:** decide on a domain + DNS setup, add a DigitalOcean-managed cert to
 the `orchestration-service` LoadBalancer, and switch the Android app's
-server URL to `https://`.
+server URL to `https://`. Once that's done, also scope
+`android:usesCleartextTraffic="true"` in
+`android/app/src/main/AndroidManifest.xml` to debug builds only (or drop
+it) — shipping it lets the app be tricked into sending data over plain HTTP
+to any host, not just the dev machine.
 
 ## Contributing
 
