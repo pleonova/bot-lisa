@@ -71,7 +71,7 @@ Pin `android.ndkVersion` explicitly in the new module (nothing pins one today �
 - `Build.VERSION.SDK_INT >= 33` bounds the Java heap, not native memory — the mmap'd weights and KV cache are native allocations. Add a total-RAM check too (`ActivityManager.getMemoryInfo().totalMem`) — a sensible default (e.g. ≥6GB) is fine to start with and tune from real device testing.
 - Test "что ещё" latency **while hands-free/the mic is actively listening** — `SpeechRecognizer` runs continuously in this app; CPU contention with inference threads could degrade STT responsiveness. The scaffold's thread-count clamp was tuned for a standalone chat app, not this.
 - Shrink `n_ctx`/`n_batch` from the scaffold's chat-tuned defaults (8192/512) — this use case is one short prompt in, ~3 lines out; a much smaller context cuts KV-cache memory substantially. Tune empirically.
-- Prefer a llama.cpp release tag already verified 16KB-page-size-safe (a forward-looking Play Store requirement), so the pinned tag doesn't need re-vendoring later for that alone.
+- ~~Prefer a llama.cpp release tag already verified 16KB-page-size-safe~~ — turned out not to matter which tag; **fixed directly** instead (see below), since v0.4.0 itself needed the same treatment regardless of vendor-tag choice.
 
 **Checkpoint**: on the physical Pixel 11, a hand-composed prompt round-trips through JNI; log wall-clock latency and peak RSS (`adb shell dumpsys meminfo`).
 
@@ -90,6 +90,18 @@ Adaptation details that mattered, beyond the plan's "check for" list:
 - `kleidiai` warning noted, not fixed: `no kernel for tensor type q6_K, not accelerated by KleidiAI (kernels available for Q4_0 and Q8_0)` — our Q4_K_M model has some tensors (likely embedding/output) in a format KleidiAI can't accelerate yet, falling back to a slower path for just those. Not a correctness issue, a possible future speed lever (re-quantizing to Q4_0 would trade some quality for full KleidiAI coverage) — not pursued now.
 - **New deferred item**: the 148MB APK (`GGML_CPU_ALL_VARIANTS` bundling every per-microarchitecture backend variant for both ABIs) is real ship-size bloat worth addressing before release — e.g. dropping `x86_64` from the shipped APK entirely (it's only useful for Intel-Mac/CI emulator testing, never a real phone) and/or pruning `GGML_CPU_ALL_VARIANTS` down to fewer variants once we know the real Pixel 11's exact core generation. Not solved in Phase 2 — added to "Deferred, tracked explicitly" below.
 - Still open, genuinely needs the physical Pixel 11 (the emulator only proves the pipeline works, not real hardware numbers): actual latency/memory on real Tensor G-series silicon, and the "что ещё while hands-free mic is active" contention test.
+
+### ✅ 16 KB page size alignment fixed (found via Android Studio's device-compatibility check, not planned for originally)
+
+Android Studio flagged every native library in the app as failing its "LOAD segment alignment" check when deploying to the `Pixel_6` AVD — which, it turns out, is itself running a 16 KB-page-size system image (`google_apis_ps16k` in its `config.ini`, missed when first picking that AVD). Real devices (very plausibly including the Pixel 11) are moving to 16 KB pages too, and Google Play is moving toward requiring alignment for new/updated apps — this isn't emulator-only noise.
+
+**This is not a Pixel 6 vs. Pixel 11 tradeoff** — 16 KB-aligned libraries are backward compatible with ordinary 4 KB-page devices, so fixing it helps both, there was never a "pick one" choice to make.
+
+**The fix, and why it took two tries**: added `-Wl,-z,max-page-size=16384` as a linker flag. First attempt used `set(CMAKE_SHARED_LINKER_FLAGS ... CACHE STRING "" FORCE)` inside `CMakeLists.txt` — didn't work, verified via `llvm-readelf -l` showing every `.so` still at `0x1000` (4KB). Root cause: the NDK's Android toolchain file sets its own linker-flag defaults *during* `project()`, before any of our own `CMakeLists.txt` code runs, so a same-named `set()` afterward isn't reliably first. Moved to passing `-DCMAKE_SHARED_LINKER_FLAGS=...` as a Gradle `externalNativeBuild.cmake.arguments` entry instead (pre-seeds `CMakeCache.txt` before the toolchain file executes) — fixed `libondevicellm.so`, `libllama.so`, `libggml.so`, `libggml-base.so`, `libllama-common.so`, `libomp.so`, but **not** the 7 `libggml-cpu-android_*` per-CPU-microarchitecture backend libraries, which stayed 4KB-aligned.
+
+Second root cause, found by reading `ggml/src/CMakeLists.txt`: with `GGML_BACKEND_DL=ON` (which we use), `ggml_add_backend_library()` builds each CPU variant via `add_library(${backend} MODULE ${ARGN})` — a CMake **`MODULE`** library (meant for `dlopen`), not `SHARED`. `CMAKE_SHARED_LINKER_FLAGS` only applies to `SHARED` targets; `MODULE` targets read a separate `CMAKE_MODULE_LINKER_FLAGS` variable entirely. Added that too — confirmed via `llvm-readelf` that all 13 built libraries (our own + every vendored ggml/llama one) are now `0x4000` (16KB)-aligned.
+
+**Not fixed, out of our control**: ML Kit's own `libtranslate_jni.so` (from the `com.google.mlkit:translate` dependency, used by the pre-existing `OnDeviceTranslator.kt`) still fails the check — it's Google's prebuilt binary, not something we build. A pre-existing issue this work didn't introduce, surfaced by the same Studio dialog.
 
 ## Phase 3 — Kotlin port of `compose_prompt.py` (parallel, no device needed)
 
@@ -137,6 +149,31 @@ object OnDeviceLlm {
 **Model lifecycle**: unload after an idle timeout (e.g. 5 minutes, a named constant) rather than keeping ~2.7GB+ resident for the app's whole lifetime — "что ещё" is bursty/occasional, not continuous.
 
 **Checkpoint**: `OnDeviceLlm.generateWhatElse(context, "Давай наденем твою пижамку.")` from the Phase 2 debug scaffold returns a parsed `List<Phrase>` using the *composed* prompt.
+
+### ✅ Phase 4 core plumbing works — ⚠️ one real, unresolved quality issue found
+
+**The integration seam itself works**: `generateWhatElse` composing the prompt, lazily loading the model, running generation, and parsing the result into `List<Phrase>` was confirmed end-to-end on the `Pixel_6` emulator via the updated `DebugLlmSmoke.kt` (now calling `OnDeviceLlm.generateWhatElse` directly, not hand-rolled `InferenceEngine` calls).
+
+**One real platform-specific bug found and fixed**: `PromptComposer`'s regex `Regex("\\{(\\w+)}")` (unescaped closing brace) compiled fine in the Phase 3 JVM unit test (desktop `java.util.regex` tolerates a bare `}`) but **crashed at runtime on-device** (`PatternSyntaxException`) — Android's ICU-backed `Pattern` implementation is stricter. Fixed by escaping both braces. Lesson: a JVM unit test passing doesn't guarantee on-device correctness for anything touching platform-divergent APIs (regex syntax strictness, in this case) — worth remembering before trusting Phase 3-style tests as sufficient proof for code that will also run on-device.
+
+**One real, unresolved quality issue — not just a rare edge case**: Qwen's "thinking" mode isn't suppressed here (`ai_chat.cpp` formats messages with `use_jinja=false`, bypassing the model's own Jinja template where `enable_thinking` support would normally live). Observed across repeated runs of the *exact same prompt*:
+- Run 1 (before this was investigated): closed `</think>` immediately (empty), clean output, generated in **3 seconds**.
+- Run 2: thinking never closed within the (default 1024-token) budget — output was raw reasoning trace parsed as garbage "phrases", **74 seconds**.
+- Run 3 (after bounding `predictLength` to 256 and adding a safety net that returns an empty list rather than raw reasoning when `<think>` never closes): thinking still didn't finish in time — **35 seconds, 0 phrases returned**.
+- An experiment appending a literal `/no_think` to the user prompt (a convention some Qwen models honor even without full chat-template support) was **inconclusive** — the app process was OOM-killed before generation finished (further evidence the `LOW_RAM` gate matters: this `Pixel_6` AVD itself reports as `LOW_RAM` under our 6GB floor). Reverted rather than keep an unverified fix in place.
+
+**Net effect**: as shipped right now, "что ещё" will likely return **no suggestions at all** whenever thinking mode engages and doesn't finish in budget — which appears to be the *common* case for this prompt, not rare. This needs a real fix — disabling Qwen's thinking mode properly (likely requires either switching `ai_chat.cpp` to use the model's actual Jinja chat template with `enable_thinking: false`, or a different suppression mechanism) — before Phase 7 wiring should be considered done. Tracked below in "Deferred, tracked explicitly", but flagged here as **blocking for real use**, not a nice-to-have.
+
+### ✅ Confirmed on the physical Pixel 11 — real numbers, two more real bugs found
+
+First real-hardware run. Two environment/bugs had to be cleared first, both worth knowing about:
+
+1. **16 KB alignment dialog was a Studio-cache staleness issue, not a real problem** — a full `./gradlew clean` + fresh `assembleDebug` from the terminal, verified via `llvm-readelf -l` directly on the packaged APK's libraries (not trusting the IDE), showed all 14 native libraries (our own + every vendored ggml/llama one, **and** ML Kit's `libtranslate_jni.so`) at `0x4000` (16KB)-aligned. The Pixel 11 itself actually reports a **4096-byte (4KB) native page size** (`getconf PAGE_SIZE`) — only our `Pixel_6` emulator (`sdk_gphone16k_arm64`) is genuinely 16KB. The dialog Android Studio showed earlier was stale IDE-side build state, not a real per-device problem.
+2. **Pre-existing, unrelated crash on first launch**: `android.security.KeyStoreException: Signature/MAC verification failed`, from `ServerConfig`'s `EncryptedSharedPreferences`. Root cause: the app manifest has `android:allowBackup="true"`, so Android's auto-backup restored an old encrypted-preferences blob onto this fresh install, but the Keystore-hardware-bound decryption key can't be restored alongside it — the restored blob is undecryptable with the newly-generated key. Unblocked with `adb shell pm clear com.botlisa.app`. Not part of this plan's scope, but worth a real fix later (exclude that prefs file from auto-backup via a backup-rules XML) since any fresh Pixel 11 install will hit this.
+
+**A third, genuine bug found by real hardware alone**: `IllegalStateException: System prompt must be set ** RIGHT AFTER ** model loaded!` — `OnDeviceLlm.generateWhatElse` was calling `eng.setSystemPrompt()` **unconditionally on every call**, but `InferenceEngine.setSystemPrompt()` is a one-shot call the underlying engine only permits immediately after `loadModel()`; any later call throws. This never surfaced on the emulator because every emulator test was a fresh `force-stop`+`am start` cycle (always a true first call). The Pixel 11 run's window-transition logs suggest a same-process Activity recreation re-ran the `LaunchedEffect` with the model still warm from the first call — finally exercising the "reuse a warm model across multiple calls" path the idle-unload design was built around, and exposing that `setSystemPrompt` needed the same `if (!modelLoaded)` gate as `loadModel` itself. Fixed.
+
+**Real numbers, Pixel 11 (`cubs` hardware, 11.4GB RAM, `minSdk`-relevant `availability()` correctly returned `READY`, not `LOW_RAM` like the emulator)**: `"спокойной ночи"` in → *"Тихо-тихо спи, малыш. Сладких снов тебе, родной. Люблю тебя очень сильно."* — clean, sensible, on-topic output, no thinking-mode garbage this run. But **64 seconds** total, and **~4.3GB PSS** peak memory (vs. the emulator's best-case ~2.9GB) — real Tensor-class silicon is meaningfully slower than the Apple-Silicon-accelerated emulator for this workload, as expected, though 64s is still on the slow side for a voice-assistant "что ещё" response and reinforces that the thinking-mode issue above needs a real fix, plus likely `n_ctx`/thread-count tuning specifically against this chip once that's resolved.
 
 ## Phase 5 — `OnDeviceLlmConfig` + Settings UI
 
@@ -211,12 +248,13 @@ All changes confined to `MainActivity.kt`; `onSend()`, `ApiClient`, and translat
 
 ## Deferred, tracked explicitly
 
+- **🚫 BLOCKING for real use — Qwen thinking mode isn't suppressed.** Confirmed in Phase 4 testing: when thinking mode engages and doesn't close `</think>` within the predict-length budget (appears to be the *common* case for this prompt, not rare), `generateWhatElse` now correctly returns an empty list rather than garbage (a safety net, not a fix) — meaning "что ещё" would often produce **no suggestion at all**. Needs a real fix (likely switching `ai_chat.cpp`'s chat formatting off `use_jinja=false` and onto the model's actual Jinja template with `enable_thinking: false`, or some other suppression mechanism) before Phase 7's wiring should be considered done, not just before it looks good.
 - **`как ответить` on-device support** — blocked on generalizing `how_to_respond.json`'s `user_template` to drop its `{input_kind}` dependency (question/comment/greeting classification the app can't currently produce), mirroring the `{activity}` fix already done for `what_else`. Note this in `TriggerPhraseConfig.kt`'s doc comment near `ANSWER_KEY_PREFIX` so it isn't forgotten.
 - Empirical re-tuning of `n_ctx`/thread count based on real hands-free-active testing, once Phase 2 data exists.
 - `android/` build docs (README/deploy notes) should get the new NDK/CMake toolchain requirements once Phase 1 lands, so a fresh contributor machine can actually build this.
 - **APK size** — 148MB debug build, mostly `GGML_CPU_ALL_VARIANTS`' per-microarchitecture backend `.so` files × 2 ABIs. Before release: drop `x86_64` from the shipped APK (real phones never need it), and consider pruning `GGML_CPU_ALL_VARIANTS` once the real Pixel 11's core generation is known instead of shipping every variant.
-- `<think>...</think>` stripping in `OnDeviceLlm.kt` (Phase 4) — seen empty in Phase 2 testing but not guaranteed to stay empty; mirror `llm_lab/eval/run_eval.py`'s `THINK_RE` defensively.
 - KleidiAI doesn't accelerate our model's `q6_K` tensors (`Q4_0`/`Q8_0` only) — a possible future speed lever (re-quantize to `Q4_0`), not pursued now.
+- The `Pixel_6` emulator AVD used for Phases 2-4 testing reports as `LOW_RAM` (below our 6GB floor) and OOM-killed the app process during one test run — real evidence the RAM gate matters, but also means this AVD can't be trusted for realistic latency numbers going forward; prefer a higher-RAM AVD config or the physical Pixel 11 for further testing.
 
 ## Verification summary
 

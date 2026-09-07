@@ -26,6 +26,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED true)
 set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}"   CACHE STRING "" FORCE)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}" CACHE STRING "" FORCE)
 
+# 16 KB page size support: passed as a -DCMAKE_SHARED_LINKER_FLAGS command-
+# line define from onDeviceLlm/build.gradle.kts, not set here -- a set()
+# inside this file runs after project(), which is too late to reliably win
+# against the NDK toolchain file's own linker-flag defaults. See
+# ON_DEVICE_LLM_PLAN.md Phase 2/4.
+
 # --------------------------------------------------------------------------
 # On-device LLM library (llama.cpp JNI bridge)
 # --------------------------------------------------------------------------

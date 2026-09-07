@@ -25,7 +25,11 @@ object PromptComposer {
     private const val PERSONA_PATH = "llm_prompts/personas/caregiver_infant.json"
     private const val EXAMPLES_PATH = "llm_prompts/examples/what_else.ru.caregiver_infant.json"
 
-    private val PLACEHOLDER = Regex("\\{(\\w+)}")
+    // Both braces escaped -- desktop java.util.regex tolerates a bare "}",
+    // but Android's ICU-backed Pattern implementation rejects it as a
+    // syntax error at runtime. The JVM unit test alone wouldn't have caught
+    // this; only running on-device did. See ON_DEVICE_LLM_PLAN.md Phase 4.
+    private val PLACEHOLDER = Regex("\\{(\\w+)\\}")
 
     fun compose(context: Context, utterance: String): Prompt {
         val template = loadJson(context, TASK_PATH)

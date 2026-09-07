@@ -37,6 +37,28 @@ android {
                 arguments += "-DGGML_BACKEND_DL=ON"
                 arguments += "-DGGML_CPU_ALL_VARIANTS=ON"
                 arguments += "-DGGML_LLAMAFILE=OFF"
+
+                // 16 KB page size support. Passed as -D command-line
+                // defines (pre-seed CMakeCache.txt) rather than only
+                // set(...CACHE...FORCE) inside CMakeLists.txt -- the NDK's
+                // Android toolchain file runs its own linker-flag setup
+                // during project(), before any of our own CMakeLists.txt
+                // code executes, so a same-named cache variable set there
+                // could otherwise win. Backward compatible with 4KB-page
+                // devices; not a tradeoff between the Pixel 6 (emulator)
+                // and Pixel 11. See ON_DEVICE_LLM_PLAN.md Phase 2/4.
+                //
+                // Both SHARED and MODULE variables are needed: with
+                // GGML_BACKEND_DL=ON, ggml's ggml_add_backend_library()
+                // builds each per-CPU-microarchitecture variant as a CMake
+                // MODULE library (add_library(... MODULE ...), meant for
+                // dlopen), not SHARED -- CMAKE_SHARED_LINKER_FLAGS doesn't
+                // apply to MODULE targets at all, they read their own
+                // separate variable. Confirmed via llvm-readelf: without
+                // this, every libggml-cpu-*.so stayed 4KB-aligned while
+                // everything else picked up 16KB from the SHARED flag alone.
+                arguments += "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384"
+                arguments += "-DCMAKE_MODULE_LINKER_FLAGS=-Wl,-z,max-page-size=16384"
             }
         }
         ndk {
