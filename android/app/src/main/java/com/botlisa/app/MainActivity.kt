@@ -10,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
@@ -696,13 +698,22 @@ fun LisaScreen(
             // that. Anchor a plain Popup to the field's bottom edge instead,
             // which always opens downward regardless of available space.
             var languageFieldHeightPx by remember { mutableStateOf(0) }
+            var languageFieldWidthPx by remember { mutableStateOf(0) }
+            val density = LocalDensity.current
             Box {
+                // supportingText deliberately NOT used here (even though
+                // OutlinedTextField has that slot) -- it's measured as part
+                // of the field's own onGloballyPositioned height below,
+                // which would push the popup's anchor point below the
+                // explanation text instead of right under the bordered box.
+                // Confirmed live: this exact gap showed the explanation
+                // text sitting between the field and the dropdown list. The
+                // explanation renders as a plain Text after this Box instead.
                 OutlinedTextField(
                     value = targetLanguage.displayName,
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Target language") },
-                    supportingText = { Text("What English translates into, the voice that reads it back, and what Lisa Assistant listens for. Related-phrase suggestions still come from the Russian library for now.") },
                     trailingIcon = {
                         Icon(
                             Icons.Filled.ArrowDropDown,
@@ -712,8 +723,24 @@ fun LisaScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .onGloballyPositioned { languageFieldHeightPx = it.size.height }
-                        .clickable { languageMenuExpanded = !languageMenuExpanded },
+                        .onGloballyPositioned {
+                            languageFieldHeightPx = it.size.height
+                            languageFieldWidthPx = it.size.width
+                        },
+                )
+                // A readOnly OutlinedTextField still consumes taps for its own
+                // focus-request behavior, so a .clickable{} modifier on the
+                // field itself never fires -- confirmed live on a physical
+                // device: tapping focused the field (label/border turned
+                // purple) but the dropdown never opened. This transparent
+                // overlay sits on top and gets the tap first instead.
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { languageMenuExpanded = !languageMenuExpanded },
                 )
                 if (languageMenuExpanded) {
                     Popup(
@@ -724,14 +751,25 @@ fun LisaScreen(
                     ) {
                         Surface(
                             shape = MaterialTheme.shapes.extraSmall,
-                            tonalElevation = 3.dp,
+                            // tonalElevation deliberately 0 -- Material3
+                            // tints a Surface toward the primary color at
+                            // higher elevations, which on this app's purple
+                            // theme showed up as an unwanted lavender wash
+                            // behind the list. shadowElevation alone still
+                            // gives it a floating drop shadow.
+                            tonalElevation = 0.dp,
                             shadowElevation = 3.dp,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.width(with(density) { languageFieldWidthPx.toDp() }),
                         ) {
                             Column(modifier = Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
                                 SupportedLanguages.ALL.forEach { language ->
                                     DropdownMenuItem(
-                                        text = { Text(language.displayName) },
+                                        text = {
+                                            Text(
+                                                language.displayName,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                            )
+                                        },
                                         onClick = {
                                             targetLanguage = language
                                             LanguageConfig.setTargetLanguage(context, language)
@@ -744,6 +782,17 @@ fun LisaScreen(
                     }
                 }
             }
+            // Same text Material3's supportingText slot would have shown --
+            // moved out here (see the comment above the OutlinedTextField)
+            // so it doesn't get counted in the height the popup anchors to.
+            // Matches OutlinedTextField's own default supportingText padding
+            // (16dp start/end, 4dp top) and style so it looks unchanged.
+            Text(
+                "What English translates into, the voice that reads it back, and what Lisa Assistant listens for. Related-phrase suggestions still come from the Russian library for now.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp),
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
