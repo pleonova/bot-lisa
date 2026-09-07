@@ -240,6 +240,18 @@ Lisa Assistant's remaining pieces — live in [ROADMAP.md](ROADMAP.md).
   "Pre-seed", "Edit `FEW_SHOT_EXAMPLES`", and "Gender" items above live
   here).
 
+**Usage history & reports.** Builds on the logging/dashboard work already
+sketched for hands-free mode in [ROADMAP.md](ROADMAP.md) (#4–#6).
+
+- **Turn on history** — an opt-in toggle that stores every phrase said or
+  typed (with timestamp, language, and mode). Nothing is persisted today.
+- **Usage charts / tables** — over that history: frequency of individual
+  spoken terms, the proportion of each language the speaker uses, how
+  often each voice command is used, and vocabulary variety (distinct
+  words / type-token ratio over time).
+- **Speaker recognition** — tell speakers apart (voice-print or a
+  manual "who's talking" switch) and break the reports down per speaker.
+
 **Other.**
 
 - **Swap primary ↔ secondary language** — flip the "from" and "to"; today
