@@ -99,6 +99,14 @@ Adaptation details that mattered, beyond the plan's "check for" list:
 
 **Checkpoint**: for a sample utterance, the Kotlin-composed `(system, user)` pair matches `python3 llm_lab/prompts/compose_prompt.py`'s printed output exactly, including whitespace/line joins. A JVM unit test (`android/app/src/test/java/...`) is the cleanest way to pin this down if the project doesn't already avoid a `src/test/` setup — check first.
 
+### ✅ Phase 3 complete
+
+No `src/test/` existed at all (confirmed empty search) — added `PromptComposerTest.kt` plus `testImplementation("junit:junit:4.13.2")` and `testImplementation("org.json:json:20231013")` (Android's built-in `org.json` classes are stubs that throw in plain JVM unit tests; the standalone artifact provides real implementations of the same package, avoiding a Robolectric dependency just for this).
+
+One small deviation from the initial sketch: split `PromptComposer.compose()` into a `Context`-dependent wrapper (loads the 3 asset files) and a pure `compose(JSONObject, JSONObject, JSONObject, String)` core — the test calls the pure core directly (reading the same `assets/llm_prompts/` files from disk via plain `java.io`, not through `AssetManager`), so no Android framework faking was needed at all.
+
+**Result**: byte-for-byte match confirmed against the Python reference (`python3 -c "... compose_prompt(demo_case) ..."` for `caregiver_infant`/`ru`/`"спокойной ночи"`) — 1 test, 0 failures, including all whitespace and the blank line between few-shot demos.
+
 ## Phase 4 — `OnDeviceLlm.kt`: the integration seam
 
 **File**: `android/app/src/main/java/com/botlisa/app/OnDeviceLlm.kt` — singleton `object`, same shape as the existing `OnDeviceTranslator.kt` (suspend funs, lazy caching):

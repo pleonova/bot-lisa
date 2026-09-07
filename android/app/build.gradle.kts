@@ -82,4 +82,12 @@ dependencies {
     // cost. See OnDeviceTranslator.kt for why this is a fallback, not the
     // primary translation path.
     implementation("com.google.mlkit:translate:17.0.3")
+
+    // JUnit for PromptComposerTest. org.json:json specifically -- Android's
+    // built-in org.json classes are stubs in plain JVM unit tests (they
+    // throw at runtime); this standalone artifact provides real
+    // implementations of the same package so PromptComposer's JSON-parsing
+    // logic is testable without pulling in Robolectric.
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20231013")
 }
