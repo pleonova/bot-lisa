@@ -226,6 +226,20 @@ Lisa Assistant's remaining pieces — live in [ROADMAP.md](ROADMAP.md).
   `personas/*.json` the prompt uses (`caregiver_infant`, `adult_adult`
   exist).
 
+**Settings UI.** Today it's one flat inline panel (`showServerSettings` in
+`MainActivity.kt`).
+
+- **Dedicated Settings screen**, with related controls grouped into
+  sections (Appearance, Voice commands, Server, …) instead of one list.
+- **Appearance** — keep dark mode as a simple toggle, grouped here.
+- **Voice commands section** — all trigger phrases together, with defaults
+  that are proper, grammatical, capitalized translations ("How to say?",
+  "Как сказать?" — the current defaults are lowercase).
+- **"What Else" prompt section/page** — a separate screen where the
+  default few-shot examples and `{gender}` can be overridden (the
+  "Pre-seed", "Edit `FEW_SHOT_EXAMPLES`", and "Gender" items above live
+  here).
+
 **Other.**
 
 - **Swap primary ↔ secondary language** — flip the "from" and "to"; today
