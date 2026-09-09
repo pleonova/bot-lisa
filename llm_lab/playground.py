@@ -292,7 +292,9 @@ USER = (
 
 GENDER = "boy"
 LANGUAGE = "Russian"
-PHRASE = "Залезай в ванночку."
+# PHRASE = "Залезай в ванночку."
+PHRASE = "Oчень устал"
+
 # PHRASE = "спокойной ночи"
 # PHRASE = "Давай кушать"
 FEW_SHOT_EXAMPLES = """

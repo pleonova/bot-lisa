@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.core.content.ContextCompat
+import androidx.work.WorkManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -347,7 +348,47 @@ fun LisaScreen(
                 // cycling (see speakNextSuggestion()) should start from the top.
                 suggestionIndex = 0
             } catch (e: IOException) {
-                errorText = "Couldn't reach the server: ${e.message}"
+                // Server unreachable (wrong URL, backend down, phone off the
+                // dev LAN). The translate path -- English in -> selected
+                // language out -- needs no backend at all, so fall back to
+                // on-device ML Kit rather than blocking translation outright.
+                // Only attempt it when the input is Latin-script: non-Latin
+                // input means the caregiver is typing in the target language
+                // ("expand" mode), which genuinely needs the server.
+                val hasNonLatinLetters = input.any { it.isLetter() && it.code > 0x024F }
+                val offline = if (!hasNonLatinLetters) {
+                    try {
+                        val translated = OnDeviceTranslator.translate(input, targetLanguage)
+                        AssistResult(
+                            mode = "translate",
+                            source = "on_device",
+                            input = input,
+                            translation = Phrase(ru = translated, glossEn = input),
+                            related = emptyList(),
+                            latencyMs = 0.0,
+                        )
+                    } catch (_: Exception) {
+                        null
+                    }
+                } else {
+                    null
+                }
+                // 10.0.2.2 is the *emulator's* alias for the host machine; on
+                // a physical device it routes nowhere, so call that out
+                // explicitly -- it's the most common misconfiguration here.
+                val emulatorUrlHint = if ("10.0.2.2" in serverUrl) {
+                    " Server URL is set to the emulator address 10.0.2.2 -- on a physical device set it to http://<mac-lan-ip>:8002 in Settings."
+                } else {
+                    ""
+                }
+                if (offline != null) {
+                    offline.translation?.let { speaker?.speak(it.ru) }
+                    result = offline
+                    suggestionIndex = 0
+                    errorText = "Server unreachable -- translated on-device instead.$emulatorUrlHint"
+                } else {
+                    errorText = "Couldn't reach the server: ${e.message}.$emulatorUrlHint"
+                }
             } catch (e: Exception) {
                 errorText = "Something went wrong: ${e.message}"
             } finally {
@@ -841,6 +882,75 @@ fun LisaScreen(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                 )
+            }
+            // Visible only on capable hardware (API 33+, enough RAM) --
+            // matches how relatedPhrasesSupported above hides rather than
+            // disables controls on ineligible configurations. See
+            // ON_DEVICE_LLM_PLAN.md Phase 5.
+            if (OnDeviceLlm.isDeviceCapable(context)) {
+                var whatElseSource by remember {
+                    mutableStateOf(OnDeviceLlmConfig.getWhatElseSource(context))
+                }
+                val modelState = OnDeviceLlmConfig.getModelState(context)
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("\"Что ещё\" suggestions", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Your device can generate these on-device instead of (or alongside) the phrase library. Model: ${modelState.name}.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    listOf(
+                        OnDeviceLlmConfig.WhatElseSource.BOTH to "Both — AI, falling back to the library if it's not ready",
+                        OnDeviceLlmConfig.WhatElseSource.AI_ONLY to "AI only",
+                        OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY to "Library only",
+                    ).forEach { (source, label) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    whatElseSource = source
+                                    OnDeviceLlmConfig.setWhatElseSource(context, source)
+                                },
+                        ) {
+                            RadioButton(
+                                selected = whatElseSource == source,
+                                onClick = {
+                                    whatElseSource = source
+                                    OnDeviceLlmConfig.setWhatElseSource(context, source)
+                                },
+                            )
+                            Text(label, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                    // Live download progress, if a download is currently
+                    // running or queued -- WorkManager persists this across
+                    // process death, so this reflects reality even right
+                    // after the app relaunches mid-download. See
+                    // ON_DEVICE_LLM_PLAN.md Phase 6.
+                    val workInfos by remember(context) {
+                        WorkManager.getInstance(context)
+                            .getWorkInfosForUniqueWorkFlow(ModelDownloadWorker.UNIQUE_WORK_NAME)
+                    }.collectAsState(initial = emptyList())
+                    val activeWork = workInfos.firstOrNull { !it.state.isFinished }
+                    if (activeWork != null) {
+                        val progress = activeWork.progress.getInt(ModelDownloadWorker.KEY_PROGRESS, 0)
+                        Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                            Text("Downloading model... $progress%", style = MaterialTheme.typography.bodyMedium)
+                            LinearProgressIndicator(
+                                progress = { progress / 100f },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    } else if (modelState != OnDeviceLlmConfig.ModelState.READY) {
+                        Button(
+                            onClick = { ModelDownloadWorker.enqueue(context) },
+                            modifier = Modifier.padding(top = 8.dp),
+                        ) {
+                            Text("Download model (2.7GB, WiFi only)")
+                        }
+                    }
+                }
             }
             OutlinedTextField(
                 value = serverUrl,

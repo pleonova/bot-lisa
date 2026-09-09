@@ -12,7 +12,18 @@ import android.util.Log
 private const val TAG = "OnDeviceLlmSmoke"
 
 suspend fun runLlmSmokeTest(context: Context) {
-    Log.i(TAG, "availability: ${OnDeviceLlm.availability(context)}")
+    val availability = OnDeviceLlm.availability(context)
+    Log.i(TAG, "availability: $availability")
+    if (availability != OnDeviceLlm.Availability.READY) {
+        // Phase 6 added a real (in-progress or previously-attempted)
+        // download alongside this hand-pushed-model scaffold. Without this
+        // check, this unconditional-on-every-launch smoke test would hand
+        // an in-progress download's partial file straight to loadModel(),
+        // which fails to parse it and "corrects" the supposed corruption by
+        // deleting it -- destroying real download progress. Found via a
+        // real device test that lost a 1.2GB partial download this way.
+        return
+    }
 
     val start = System.currentTimeMillis()
     val phrases = OnDeviceLlm.generateWhatElse(context, "спокойной ночи")
