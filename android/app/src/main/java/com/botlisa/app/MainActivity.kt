@@ -93,14 +93,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val context = androidx.compose.ui.platform.LocalContext.current
-            // TEMP Phase 2 debug scaffold, see DebugLlmSmoke.kt / ON_DEVICE_LLM_PLAN.md.
-            LaunchedEffect(Unit) {
-                try {
-                    runLlmSmokeTest(context)
-                } catch (e: Exception) {
-                    android.util.Log.e("OnDeviceLlmSmoke", "smoke test failed", e)
-                }
-            }
             // null override = follow the system setting; the Settings toggle
             // flips it to an explicit true/false (persisted in ThemeConfig).
             var darkOverride by remember { mutableStateOf(ThemeConfig.getDarkOverride(context)) }
@@ -237,6 +229,15 @@ fun LisaScreen(
     // The last ordinary target-language utterance heard hands-free -- what
     // the "what does that mean?" / "how to answer?" commands act on.
     var lastUtterance by remember { mutableStateOf("") }
+
+    // On-device "что ещё" suggestions for lastUtterance, prefetched as soon
+    // as it's heard (see the LaunchedEffect below) so there's no dead air
+    // when the next-suggestion trigger actually fires. Null means "not
+    // fetched / not available this time" (device ineligible, model not
+    // ready, generation failed, or LIBRARY_ONLY mode skipped it entirely) --
+    // distinct from an empty list, which would mean the model genuinely
+    // produced zero phrases. See ON_DEVICE_LLM_PLAN.md Phase 7.
+    var onDeviceRelated by remember { mutableStateOf<List<Phrase>?>(null) }
 
     // TTS playback state. Drives the speaker-icon pulse in the result card,
     // and -- crucially -- mutes the mic (isMuted below) so the assistant
@@ -397,14 +398,39 @@ fun LisaScreen(
         }
     }
 
-    // Speaks the next related/suggested phrase from the most recent
-    // /assist result aloud, cycling through the list and wrapping back to
-    // the start once it runs out. Triggered by the next-suggestion voice
-    // command (see SpeechAssistant.kt) -- doesn't touch `input`/onSend() at
-    // all, since this reads existing suggestions rather than making a new
-    // request.
+    // The single source of truth for which related-phrase list is currently
+    // "showing" -- read by speakNextSuggestion(), speakRelated(), and the
+    // result-card rendering below, so what's spoken, what's labeled "AI" vs
+    // "Library", and what's displayed can never drift out of sync with each
+    // other. AI_ONLY never falls back to the library (an honest "nothing"
+    // beats silently swapping in the library after the caregiver explicitly
+    // chose AI-only); LIBRARY_ONLY never reads onDeviceRelated even if it
+    // happens to be populated. See ON_DEVICE_LLM_PLAN.md Phase 7.
+    //
+    // BOTH treats an empty (but non-null) onDeviceRelated the same as "not
+    // ready" and falls back to the library, not just a null one -- found via
+    // a real device test where the on-device model's still-unresolved
+    // thinking-mode issue (ON_DEVICE_LLM_PLAN.md Phase 4) produced zero
+    // parsed phrases for a real utterance. Without this, a plain `?:` only
+    // catches "AI hasn't answered yet", so a *bad* AI answer would silently
+    // blank out an already-good library result the card was already
+    // showing, rather than keeping it.
+    val usingAiSuggestions = OnDeviceLlmConfig.getWhatElseSource(context) != OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY &&
+        !onDeviceRelated.isNullOrEmpty()
+    val relatedForDisplay: List<Phrase> = when (OnDeviceLlmConfig.getWhatElseSource(context)) {
+        OnDeviceLlmConfig.WhatElseSource.AI_ONLY -> onDeviceRelated.orEmpty()
+        OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY -> result?.related.orEmpty()
+        OnDeviceLlmConfig.WhatElseSource.BOTH ->
+            if (usingAiSuggestions) onDeviceRelated.orEmpty() else result?.related.orEmpty()
+    }
+
+    // Speaks the next related/suggested phrase from relatedForDisplay aloud,
+    // cycling through the list and wrapping back to the start once it runs
+    // out. Triggered by the next-suggestion voice command (see
+    // SpeechAssistant.kt) -- doesn't touch `input`/onSend() at all, since
+    // this reads existing suggestions rather than making a new request.
     fun speakNextSuggestion() {
-        val related = result?.related.orEmpty()
+        val related = relatedForDisplay
         if (related.isEmpty()) return
         val index = suggestionIndex % related.size
         // Only claim the row / advance if TTS actually started, so a
@@ -417,9 +443,11 @@ fun LisaScreen(
 
     // Reads one specific related phrase aloud -- the trailing speaker button
     // on a result row. Sets suggestionIndex so a following next-suggestion
-    // trigger continues from the next one.
+    // trigger continues from the next one. Reads from relatedForDisplay (not
+    // result.related directly) so the index lines up with whichever list is
+    // actually rendered on screen right now.
     fun speakRelated(index: Int) {
-        val phrase = result?.related?.getOrNull(index) ?: return
+        val phrase = relatedForDisplay.getOrNull(index) ?: return
         if (phraseSpeaker?.speak(phrase.ru) == true) {
             speakingIndex = index
             suggestionIndex = index + 1
@@ -534,6 +562,29 @@ fun LisaScreen(
         }.getOrNull()
     }
 
+    // Prefetch on-device "что ещё" suggestions as soon as a new utterance is
+    // heard, rather than waiting for the next-suggestion trigger itself --
+    // generation takes real time, and starting it only once the caregiver
+    // has already asked would mean several seconds of dead air in a
+    // hands-free flow nobody's looking at the screen for. Compose's
+    // cancel-and-relaunch-on-key-change handles abandoning a stale
+    // in-flight generation when a newer utterance arrives, same as the
+    // transcriptGloss effect above. LIBRARY_ONLY mode skips the call
+    // entirely -- no point spending battery/time on a generation nothing
+    // will display. See ON_DEVICE_LLM_PLAN.md Phase 7.
+    LaunchedEffect(lastUtterance) {
+        onDeviceRelated = null
+        val source = OnDeviceLlmConfig.getWhatElseSource(context)
+        if (lastUtterance.isNotBlank() && relatedPhrasesSupported &&
+            source != OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY &&
+            OnDeviceLlm.availability(context) == OnDeviceLlm.Availability.READY
+        ) {
+            onDeviceRelated = runCatching {
+                OnDeviceLlm.generateWhatElse(context, lastUtterance)
+            }.getOrNull()
+        }
+    }
+
     // Live transcript from Lisa Assistant -> the shared input/search field.
     // Only while hands-free is running, so it never clobbers something the
     // caregiver is typing. Covers partials and the command phrases too
@@ -642,6 +693,7 @@ fun LisaScreen(
         focusManager.clearFocus()
         input = ""
         result = null
+        onDeviceRelated = null
         errorText = null
         assistantError = null
         suggestionIndex = 0
@@ -1141,9 +1193,29 @@ fun LisaScreen(
                             )
                             RelatedPhraseList(r.related, speakingIndex, ::speakRelated)
                         }
-                    } else if (r.related.isNotEmpty()) {
-                        Text("Related phrases:", style = MaterialTheme.typography.labelLarge)
-                        RelatedPhraseList(r.related, speakingIndex, ::speakRelated)
+                    } else if (relatedForDisplay.isNotEmpty()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text("Related phrases:", style = MaterialTheme.typography.labelLarge)
+                            // Deliberately plain-text, not a subtler icon --
+                            // the user explicitly wants it obvious which
+                            // source answered, not a detail you have to
+                            // notice. See ON_DEVICE_LLM_PLAN.md Phase 7.
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                            ) {
+                                Text(
+                                    if (usingAiSuggestions) "AI" else "Library",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                )
+                            }
+                        }
+                        RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
                     } else {
                         Text(
                             "No related phrases for \"${r.input}\".",
