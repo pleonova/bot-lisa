@@ -39,7 +39,7 @@ version meant to be expanded, not a mockup.
 |---|---|---|
 | Claude (`claude-sonnet-4-6` via the Anthropic API) | Generates the "как ответить"-style grounded phrase and translates English → baby-register Russian in `services/orchestration_service/llm_client.py` | **In the app.** Runs in mock mode (no API call, returns the top retrieved phrase verbatim) unless `ANTHROPIC_API_KEY` is set — see the status table above |
 | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (via `fastembed`, ONNX, local) | Dense embeddings for hybrid BM25+embedding retrieval | **In the app** — `services/retrieval_service/embeddings.py` |
-| Qwen3.5, Q4_K_M (4B and 2B GGUF) | Candidate on-device model for two new features: "что ещё" (routine relations) and "как ответить" (response suggestions) | **Being evaluated**, not wired into the app — see `llm_lab/README.md`. Phase 1 (local quality check) is the current go/no-go gate |
+| Qwen3.5, Q4_K_M (4B and 2B GGUF) | On-device generation for "что ещё" (routine relations); "как ответить" (response suggestions) still curated-library only | **In the app** for "что ещё" — runs via `OnDeviceLlm` behind a Settings toggle (`WhatElseSource`) + a model download, with curated-library fallback. See `llm_lab/README.md` and `android/ON_DEVICE_LLM_PLAN.md` |
 | Gemini Nano/AICore, Gemma 3n via LiteRT-LM, Kimi (Moonshot) | Alternatives considered for the on-device slot above | **Ruled out** — Gemini Nano needs a Pixel 8+ NPU and is closed-weight (against the project's open-source preference); Gemma 3n benchmarks worse than Qwen3.5 for its size class; Kimi's smallest release (48B) has no on-device-class model. Full reasoning in `llm_lab/README.md`'s "Candidate model" section |
 | A bigger model via cloud API / retrieval-only fallback | Fallback plan if Qwen3.5 fails llm_lab's Phase 1 quality gate | **Slated, contingent** — only pursued if the on-device quality check fails |
 | Self-hosted ASR with per-segment language ID (e.g. Whisper/faster-whisper) vs. a cloud multi-language STT API | Needed for the hands-free "Lisa Assistant" mode's continuous listening (`RecognizerIntent` has no built-in language auto-detect) | **Slated, undecided** — see [ROADMAP.md](ROADMAP.md)'s item #2; the open-source-vs-cloud tradeoff needs a decision before build starts |
@@ -192,9 +192,10 @@ High-level, in rough build order — details live in the status tables above,
 - **Prompt pipeline** (`llm_lab/prompts/compose_prompt.py`: persona +
   per-language examples + task template) ported to Kotlin `PromptComposer`,
   with a JVM test checked against the Python reference.
-- **On-device LLM scaffold** — vendored llama.cpp JNI bridge for the
-  "what else" / "how to answer" features; being evaluated in `llm_lab/`,
-  not yet wired into the app.
+- **On-device LLM** — vendored llama.cpp JNI bridge running Qwen for the
+  "what else" feature, wired into the app (`OnDeviceLlm`) behind a
+  Settings toggle (`WhatElseSource`) and a model download, with
+  curated-library fallback. Verified on-device.
 
 ## Ideas
 
@@ -251,6 +252,20 @@ sketched for hands-free mode in [ROADMAP.md](ROADMAP.md) (#4–#6).
   words / type-token ratio over time).
 - **Speaker recognition** — tell speakers apart (voice-print or a
   manual "who's talking" switch) and break the reports down per speaker.
+
+**Cost-aware generation cascade.** Today generation is on-device only:
+"what else" runs Qwen via `OnDeviceLlm` (default `WhatElseSource` is
+`BOTH` — AI once the model is downloaded, otherwise the curated Russian
+library); translate mode is a curated lookup or on-device ML Kit. The
+backend Claude path (`llm_client.py`) only runs if `ANTHROPIC_API_KEY` is
+set, which it isn't.
+
+- **Add a provider-API tier on top** — call a large hosted model for best
+  quality up to a configurable monthly spend cap; once it's hit, fall
+  back to on-device (Qwen / ML Kit), then to the curated library.
+- **Cache LLM results** — key on the input phrase (+ language + mode) so
+  repeats are free, and promote frequently-hit generations into the
+  curated library.
 
 **Other.**
 
