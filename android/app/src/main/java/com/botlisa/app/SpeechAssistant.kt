@@ -57,7 +57,7 @@ import android.speech.SpeechRecognizer
  * this device, or a permission problem the caller didn't head off) reports
  * itself once via [onError] and leaves the assistant idle rather than
  * looping forever on a state it can't recover from. It also stops itself
- * (via [onError]) after ten minutes with no speech detected at all -- see
+ * (via [onError]) after three minutes with no speech detected at all -- see
  * the silence watchdog below -- so hands-free mode doesn't listen to an
  * empty room indefinitely.
  */
@@ -102,7 +102,7 @@ class SpeechAssistant(
         // in ListeningForegroundService.kt) alive if nobody's said anything
         // at all in a long while -- auto-stop rather than drain battery
         // listening to an empty room.
-        private const val SILENCE_TIMEOUT_MS = 10 * 60 * 1000L
+        private const val SILENCE_TIMEOUT_MS = 3 * 60 * 1000L
     }
 
     private var recognizer: SpeechRecognizer? = null
