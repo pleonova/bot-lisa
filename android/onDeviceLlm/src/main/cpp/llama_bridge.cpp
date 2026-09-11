@@ -419,6 +419,24 @@ Java_com_botlisa_llm_internal_InferenceEngineImpl_processUserPrompt(
     const bool has_chat_template = common_chat_templates_was_explicit(g_chat_templates.get());
     if (has_chat_template) {
         formatted_user_prompt = chat_add_and_format(ROLE_USER, user_prompt);
+
+        // Suppress chain-of-thought for reasoning models. We format with the
+        // built-in (non-Jinja) template path, so a model's own
+        // "enable_thinking=false" switch -- which lives in its Jinja
+        // template -- never runs, and a reasoning model (e.g. Qwen3.x)
+        // spends the entire predict budget inside a <think> block and never
+        // emits the answer (observed on-device with Qwen3.5-4B). Do here
+        // exactly what enable_thinking=false does in those templates: prefill
+        // an already-closed, empty think block onto the assistant turn so
+        // generation continues straight into the answer. Gated on the
+        // template actually having a thinking mechanism so a plain
+        // instruct model is left untouched.
+        const std::string tmpl_src = common_chat_templates_source(g_chat_templates.get());
+        if (tmpl_src.find("enable_thinking") != std::string::npos ||
+            tmpl_src.find("<think>") != std::string::npos) {
+            formatted_user_prompt += "<think>\n\n</think>\n\n";
+            LOGi("%s: reasoning template detected; prefilled empty <think></think>", __func__);
+        }
     }
     env->ReleaseStringUTFChars(juser_prompt, user_prompt);
 

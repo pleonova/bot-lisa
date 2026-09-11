@@ -20,7 +20,17 @@ package com.botlisa.app
 object TriggerPhraseDetector {
 
     fun normalize(text: String): String =
-        text.lowercase().trim().filter { it.isLetterOrDigit() || it.isWhitespace() }
+        stripDiacritics(text.lowercase()).trim().filter { it.isLetterOrDigit() || it.isWhitespace() }
+
+    // ASR is inconsistent about accents -- "qué más" can come back as "que
+    // mas", or a trigger phrase may be typed without them -- so a match
+    // can't hinge on diacritics. NFD splits an accented letter into its
+    // base + a combining mark (Unicode category Mn); dropping those marks
+    // leaves the base letter. A no-op for CJK triggers; for Russian it also
+    // folds "ё" -> "е", which ASR tends to do anyway.
+    private fun stripDiacritics(text: String): String =
+        java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
 
     /**
      * True if [transcript] is (a fuzzy match for) [phrase], tolerant of

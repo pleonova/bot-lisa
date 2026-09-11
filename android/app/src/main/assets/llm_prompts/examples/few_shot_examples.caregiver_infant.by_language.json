@@ -1,0 +1,252 @@
+{
+  "_comment": [
+    "Seed FEW_SHOT_EXAMPLES for the caregiver_infant persona, one entry per",
+    "language code in android SupportedLanguages.ALL. Same shape as the",
+    "per-file examples under this directory: each language has a",
+    "`language_display` string and exactly two `few_shot_examples` demos,",
+    "each demo being a `heard` phrase plus three `responses`.",
+    "",
+    "Purpose: give every supported target language a working default so the",
+    "prompt isn't Russian-only, and give users something to override. The",
+    "planned Settings screen lets a user edit, per language, both demos'",
+    "`heard` phrase and their three `responses`; this file is what those",
+    "editors start from.",
+    "",
+    "Only the Russian block is battle-tested (it matches",
+    "what_else.ru.caregiver_infant.json). The rest are reasonable",
+    "translations of the same two scenarios (putting on pajamas / reading a",
+    "favorite book) in an infant-directed, diminutive-friendly register,",
+    "and are NOT verified by a native speaker yet."
+  ],
+  "ru-RU": {
+    "language_display": "Russian",
+    "few_shot_examples": [
+      {
+        "heard": "Давай наденем твою пижамку.",
+        "responses": [
+          "Подними ручки.",
+          "Просунь ручку в рукавчик.",
+          "Какая мягкая пижамка у тебя!"
+        ]
+      },
+      {
+        "heard": "Давай почитаем твою любимую книжку.",
+        "responses": [
+          "Какую книжку ты хочешь почитать?",
+          "Какая интересная сказка!",
+          "Посмотри на картинку, малыш."
+        ]
+      }
+    ]
+  },
+  "uk-UA": {
+    "language_display": "Ukrainian",
+    "few_shot_examples": [
+      {
+        "heard": "Давай одягнемо твою піжамку.",
+        "responses": [
+          "Підніми ручки.",
+          "Просунь ручку в рукавчик.",
+          "Яка м'яка в тебе піжамка!"
+        ]
+      },
+      {
+        "heard": "Давай почитаємо твою улюблену книжку.",
+        "responses": [
+          "Яку книжку ти хочеш почитати?",
+          "Яка цікава казка!",
+          "Подивись на малюнок, малюку."
+        ]
+      }
+    ]
+  },
+  "es-ES": {
+    "language_display": "Spanish",
+    "few_shot_examples": [
+      {
+        "heard": "Vamos a ponerte el pijama.",
+        "responses": [
+          "Levanta los bracitos.",
+          "Mete la manita en la manga.",
+          "¡Qué pijama tan suave tienes!"
+        ]
+      },
+      {
+        "heard": "Vamos a leer tu libro favorito.",
+        "responses": [
+          "¿Qué librito quieres leer?",
+          "¡Qué cuento tan bonito!",
+          "Mira el dibujo, mi amor."
+        ]
+      }
+    ]
+  },
+  "fr-FR": {
+    "language_display": "French",
+    "few_shot_examples": [
+      {
+        "heard": "On va mettre ton pyjama.",
+        "responses": [
+          "Lève les bras.",
+          "Passe ta main dans la manche.",
+          "Comme ton pyjama est doux !"
+        ]
+      },
+      {
+        "heard": "On va lire ton livre préféré.",
+        "responses": [
+          "Quel livre veux-tu lire ?",
+          "Quelle jolie histoire !",
+          "Regarde l'image, mon petit."
+        ]
+      }
+    ]
+  },
+  "de-DE": {
+    "language_display": "German",
+    "few_shot_examples": [
+      {
+        "heard": "Wir ziehen jetzt deinen Schlafanzug an.",
+        "responses": [
+          "Heb die Ärmchen hoch.",
+          "Steck das Händchen in den Ärmel.",
+          "Was für ein weicher Schlafanzug!"
+        ]
+      },
+      {
+        "heard": "Wir lesen jetzt dein Lieblingsbuch.",
+        "responses": [
+          "Welches Buch möchtest du lesen?",
+          "Was für eine schöne Geschichte!",
+          "Schau dir das Bild an, mein Kleiner."
+        ]
+      }
+    ]
+  },
+  "pt-PT": {
+    "language_display": "Portuguese",
+    "few_shot_examples": [
+      {
+        "heard": "Vamos vestir o teu pijama.",
+        "responses": [
+          "Levanta os bracinhos.",
+          "Põe a mãozinha na manga.",
+          "Que pijama macio que tu tens!"
+        ]
+      },
+      {
+        "heard": "Vamos ler o teu livro preferido.",
+        "responses": [
+          "Que livrinho queres ler?",
+          "Que história tão gira!",
+          "Olha para a imagem, meu amor."
+        ]
+      }
+    ]
+  },
+  "ro-RO": {
+    "language_display": "Romanian",
+    "few_shot_examples": [
+      {
+        "heard": "Hai să-ți punem pijamaua.",
+        "responses": [
+          "Ridică mânuțele.",
+          "Bagă mânuța pe mânecă.",
+          "Ce pijama moale ai!"
+        ]
+      },
+      {
+        "heard": "Hai să citim cartea ta preferată.",
+        "responses": [
+          "Ce cărticică vrei să citim?",
+          "Ce poveste frumoasă!",
+          "Uită-te la poză, puiule."
+        ]
+      }
+    ]
+  },
+  "hi-IN": {
+    "language_display": "Hindi",
+    "few_shot_examples": [
+      {
+        "heard": "चलो सोने वाले कपड़े पहनते हैं।",
+        "responses": [
+          "नन्हे हाथ ऊपर करो।",
+          "हाथ आस्तीन में डालो।",
+          "तुम्हारे कपड़े कितने मुलायम हैं!"
+        ]
+      },
+      {
+        "heard": "चलो तुम्हारी पसंदीदा किताब पढ़ते हैं।",
+        "responses": [
+          "कौन सी किताब पढ़नी है?",
+          "कितनी अच्छी कहानी है!",
+          "तस्वीर देखो, मेरे बच्चे।"
+        ]
+      }
+    ]
+  },
+  "mr-IN": {
+    "language_display": "Marathi",
+    "few_shot_examples": [
+      {
+        "heard": "चल, तुझा झोपायचा ड्रेस घालूया.",
+        "responses": [
+          "छोटे हात वर कर.",
+          "हात बाहीत घाल.",
+          "तुझा ड्रेस किती मऊ आहे!"
+        ]
+      },
+      {
+        "heard": "चल, तुझं आवडतं पुस्तक वाचूया.",
+        "responses": [
+          "कोणतं पुस्तक वाचायचं?",
+          "किती छान गोष्ट आहे!",
+          "चित्र बघ, बाळा."
+        ]
+      }
+    ]
+  },
+  "zh-CN": {
+    "language_display": "Mandarin",
+    "few_shot_examples": [
+      {
+        "heard": "我们来穿睡衣吧。",
+        "responses": [
+          "把小手举起来。",
+          "把手伸进袖子里。",
+          "你的睡衣好柔软呀！"
+        ]
+      },
+      {
+        "heard": "我们来读你最喜欢的书吧。",
+        "responses": [
+          "你想读哪本书呢？",
+          "这个故事真好听！",
+          "看看图画，宝宝。"
+        ]
+      }
+    ]
+  },
+  "ko-KR": {
+    "language_display": "Korean",
+    "few_shot_examples": [
+      {
+        "heard": "우리 잠옷 입자.",
+        "responses": [
+          "작은 손 위로 올려요.",
+          "손을 소매에 넣어요.",
+          "잠옷이 정말 부드럽네!"
+        ]
+      },
+      {
+        "heard": "우리 좋아하는 책 읽자.",
+        "responses": [
+          "어떤 책 읽고 싶어?",
+          "이야기가 참 재미있네!",
+          "그림 보자, 아가."
+        ]
+      }
+    ]
+  }
+}

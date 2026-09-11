@@ -17,7 +17,9 @@ import android.content.Context
  *     aloud. Works for any target language.
  *   - **Next-suggestion trigger** (Russian "что ещё?") -- say this to have
  *     the app read the next related/suggested phrase from the most recent
- *     lookup aloud, cycling through the list. Russian only.
+ *     lookup aloud, cycling through the list. Works for any target language
+ *     the device can run on-device generation for (Russian also falls back
+ *     to the curated library).
  *   - **Answer trigger** (Russian "как ответить?") -- say this to run a
  *     fresh related-phrases lookup on the previous utterance, surfacing
  *     things you could say back. Russian only.

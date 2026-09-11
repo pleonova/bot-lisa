@@ -23,7 +23,22 @@ object PromptComposer {
 
     private const val TASK_PATH = "llm_prompts/what_else.json"
     private const val PERSONA_PATH = "llm_prompts/personas/caregiver_infant.json"
-    private const val EXAMPLES_PATH = "llm_prompts/examples/what_else.ru.caregiver_infant.json"
+
+    // One file, one block per language code in SupportedLanguages.ALL. Each
+    // block has the same shape the old single-language example files used --
+    // a `language_display` string plus exactly two `few_shot_examples` demos
+    // -- so the composition below is unchanged; only which block gets picked
+    // is new. Hand-copied from llm_lab/prompts/examples/, same known drift
+    // risk as the other assets here.
+    private const val EXAMPLES_BY_LANGUAGE_PATH =
+        "llm_prompts/examples/few_shot_examples.caregiver_infant.by_language.json"
+
+    // The block every unknown language falls back to. ru-RU is the only
+    // native-tuned, battle-tested one (it matches
+    // what_else.ru.caregiver_infant.json and the Python reference); the rest
+    // are machine translations of the same two scenarios, good enough for a
+    // working default a user can later improve.
+    private const val FALLBACK_LANGUAGE_CODE = "ru-RU"
 
     // Both braces escaped -- desktop java.util.regex tolerates a bare "}",
     // but Android's ICU-backed Pattern implementation rejects it as a
@@ -31,12 +46,23 @@ object PromptComposer {
     // this; only running on-device did. See ON_DEVICE_LLM_PLAN.md Phase 4.
     private val PLACEHOLDER = Regex("\\{(\\w+)\\}")
 
-    fun compose(context: Context, utterance: String): Prompt {
+    fun compose(context: Context, utterance: String, languageCode: String): Prompt {
         val template = loadJson(context, TASK_PATH)
         val persona = loadJson(context, PERSONA_PATH)
-        val examples = loadJson(context, EXAMPLES_PATH)
+        val examples = resolveExamplesForLanguage(loadJson(context, EXAMPLES_BY_LANGUAGE_PATH), languageCode)
         return compose(template, persona, examples, utterance)
     }
+
+    /**
+     * Picks the few-shot block for [languageCode] out of the by-language
+     * examples file, falling back to [FALLBACK_LANGUAGE_CODE] when that
+     * language has no block yet (or the code just doesn't match). The
+     * returned object has the same `language_display` + `few_shot_examples`
+     * shape a single-language file had, so [compose] below doesn't care
+     * which path produced it.
+     */
+    fun resolveExamplesForLanguage(byLanguage: JSONObject, languageCode: String): JSONObject =
+        byLanguage.optJSONObject(languageCode) ?: byLanguage.getJSONObject(FALLBACK_LANGUAGE_CODE)
 
     /**
      * The actual composition logic, Context-free -- takes already-parsed

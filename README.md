@@ -181,8 +181,9 @@ High-level, in rough build order — details live in the status tables above,
   background mic, fuzzy trigger-phrase matching (`SpeechAssistant.kt`,
   `TriggerPhraseDetector.kt`).
 - **Four voice commands**, editable in Settings (`TriggerPhraseConfig.kt`):
-  "how to say?" and "what does that mean?" localized for every language;
-  "what else?" and "how to answer?" for Russian only.
+  "how to say?", "what does that mean?", and "what else?" localized for
+  every language ("what else?" needs a device that can run the on-device
+  model); "how to answer?" is Russian only (curated library).
 - **11 target languages** selectable in Settings, including Spanish,
   Mandarin, and Romanian (`SupportedLanguages.ALL`).
 - **Translation under the transcript** — small-print gloss with a play
@@ -196,6 +197,19 @@ High-level, in rough build order — details live in the status tables above,
   "what else" feature, wired into the app (`OnDeviceLlm`) behind a
   Settings toggle (`WhatElseSource`) and a model download, with
   curated-library fallback. Verified on-device.
+- **"What else?" in any target language** — `PromptComposer` reads the
+  Settings language dropdown and loads the matching few-shot block from
+  `assets/llm_prompts/examples/few_shot_examples.caregiver_infant.by_language.json`
+  (a seed for all 11 languages, same two scenarios as Russian; only the
+  Russian block is native-tuned, the rest are machine translations users
+  can improve). `OnDeviceLlm` reloads the model when the language changes;
+  a per-utterance card shows the AI suggestions (and a generating / empty
+  state) since only Russian gets a backend result card. The Russian
+  curated phrase library and "how to answer?" stay Russian-only.
+  Reasoning suppression: the bundled Qwen3.5-4B would otherwise spend the
+  whole token budget in a `<think>` block, so `llama_bridge.cpp` prefills
+  an empty `<think></think>` onto the assistant turn (what a Jinja
+  `enable_thinking=false` does) — verified on a Pixel 11.
 
 ## Ideas
 
@@ -203,26 +217,17 @@ Not started (or only half-wired). Bigger multi-layer bets — e.g. hands-free
 Lisa Assistant's remaining pieces — live in [ROADMAP.md](ROADMAP.md).
 
 **Prompt inputs, editable from Settings.** Nothing below is in the UI yet;
-`PromptComposer.kt` hardcodes the persona and the Russian examples file.
+`PromptComposer.kt` still hardcodes the persona and `{gender}` (the
+few-shot examples now follow the selected language — see "Done so far").
 
-- **Language in the on-device LLM prompt** — `PromptComposer` hardcodes
-  the Russian examples file, so the prompt's `{language}` /
-  `language_display` is always "Russian". Make it read the existing
-  Settings language dropdown (`LanguageConfig.getTargetLanguage()`) and
-  load the matching examples block. The dropdown already drives
-  translation, TTS, and STT — just not this.
-- **Pre-seed `FEW_SHOT_EXAMPLES` per supported language** —
-  `llm_lab/prompts/examples/few_shot_examples.caregiver_infant.by_language.json`
-  already carries the two demos for all 11 languages, but it's the *same
-  two scenarios* machine-translated (not native-tuned) and lives only in
-  `llm_lab/`. Copy it into the app assets and load the block for the
-  selected language, so every language has a working default users can
-  later improve.
 - **Gender** — `{gender}` already defaults to **boy** in
   `personas/caregiver_infant.json`; add a Settings toggle for **girl**.
-- **Edit `FEW_SHOT_EXAMPLES` in Settings** — override the seed above: edit
-  both demos (each demo's "heard" phrase and its three responses),
-  persisted per language.
+- **Edit `FEW_SHOT_EXAMPLES` in Settings** — override the per-language
+  seed in
+  `assets/llm_prompts/examples/few_shot_examples.caregiver_infant.by_language.json`:
+  edit both demos (each demo's "heard" phrase and its three responses),
+  persisted per language. Lets users hand-tune the machine-translated
+  blocks the seed ships with.
 - **Persona** — pick baby / child (by age) / adult, choosing which
   `personas/*.json` the prompt uses (`caregiver_infant`, `adult_adult`
   exist).
@@ -237,9 +242,8 @@ Lisa Assistant's remaining pieces — live in [ROADMAP.md](ROADMAP.md).
   that are proper, grammatical, capitalized translations ("How to say?",
   "Как сказать?" — the current defaults are lowercase).
 - **"What Else" prompt section/page** — a separate screen where the
-  default few-shot examples and `{gender}` can be overridden (the
-  "Pre-seed", "Edit `FEW_SHOT_EXAMPLES`", and "Gender" items above live
-  here).
+  per-language few-shot examples and `{gender}` can be overridden (the
+  "Edit `FEW_SHOT_EXAMPLES`" and "Gender" items above live here).
 
 **Usage history & reports.** Builds on the logging/dashboard work already
 sketched for hands-free mode in [ROADMAP.md](ROADMAP.md) (#4–#6).

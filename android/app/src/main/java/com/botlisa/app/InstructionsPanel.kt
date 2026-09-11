@@ -43,8 +43,9 @@ import androidx.compose.ui.unit.dp
  * Collapsible "How hands-free mode works" card. Tap the lavender header to
  * expand a numbered walkthrough; each command phrase is shown in its accent
  * colour, verbatim from Settings, and tapping a step speaks the phrase. The
- * two related-phrase steps (next suggestion, suggested reply) only appear
- * for Russian ([showNextSuggestionStep]).
+ * "next suggestion" step appears whenever "what else?" is available in the
+ * target language ([showNextSuggestionStep]); the "suggested reply" step is
+ * Russian-only ([showAnswerStep]).
  */
 @Composable
 fun InstructionsPanel(
@@ -61,6 +62,7 @@ fun InstructionsPanel(
     onSpeakAnswer: () -> Unit,
     modifier: Modifier = Modifier,
     showNextSuggestionStep: Boolean = true,
+    showAnswerStep: Boolean = true,
 ) {
     val chevronRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
@@ -111,7 +113,7 @@ fun InstructionsPanel(
                 onSpeakMeaning,
             ),
         )
-        if (showNextSuggestionStep) {
+        if (showAnswerStep) {
             add(
                 StepSpec(
                     Icons.Filled.QuestionAnswer, orange, "To hear a suggested reply in $spokenLanguage",

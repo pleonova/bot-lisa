@@ -54,14 +54,15 @@ import java.io.IOException
 /**
  * Single-screen caregiver-assist front end for bot-lisa.
  *
- * One text box, one behavior, auto-detected on the backend:
- * - Type/dictate an English word or phrase -> get its baby-register
- *   translation into the selected target language (Russian by default;
- *   curated phrase library first, on-device/LLM fallback otherwise).
- * - Type/dictate a Russian phrase -> get related phrases from the library.
- *   This "expand" mode is Russian-only for now (curated content + the
- *   backend's Cyrillic-based mode detection); for any other target language
- *   the next-suggestion command and its trigger are hidden.
+ * One text box, one behavior, chosen by the script of what you type:
+ * - Type/dictate an English (Latin-script) word or phrase -> on-device
+ *   ML Kit translates it into the selected target language (Russian by
+ *   default). No backend call -- faster and works offline. The server is
+ *   only used as a backup if the on-device model isn't downloaded yet.
+ * - Type/dictate a Russian (Cyrillic) phrase -> the server's "expand" mode
+ *   returns related phrases from the curated library. Russian-only for now
+ *   (curated content + Cyrillic-based detection); for any other target
+ *   language the next-suggestion command and its trigger are hidden.
  *
  * Networking config lives in ApiClient.kt / ServerConfig.kt. Server URL
  * defaults to http://10.0.2.2:8002 (orchestration-service, where /assist
@@ -188,11 +189,21 @@ fun LisaScreen(
     var targetLanguage by remember { mutableStateOf(LanguageConfig.getTargetLanguage(context)) }
     var languageMenuExpanded by remember { mutableStateOf(false) }
 
-    // Related-phrase / "next suggestion" support exists only for Russian
-    // (curated library + backend expand-mode detection). For any other
-    // target language, that command + its trigger + its instruction step are
-    // hidden until the backend can serve suggestions in that language.
-    val relatedPhrasesSupported = targetLanguage.code == SupportedLanguages.RUSSIAN.code
+    // The curated phrase library + the backend's "expand" mode are
+    // Russian-only: that's what powers a typed Russian phrase -> related
+    // phrases, and the "how to answer?" lookup.
+    val curatedRelatedSupported = targetLanguage.code == SupportedLanguages.RUSSIAN.code
+
+    // "What else?" now works for any target language: PromptComposer carries
+    // a per-language few-shot seed, so on-device generation produces
+    // suggestions in whatever language is selected. Gated only on the device
+    // being able to run the model at all and the user not having forced
+    // library-only mode (same "hide, don't disable" rule the Settings block
+    // below uses). Russian still gets it via curatedRelatedSupported even
+    // when the model isn't available, falling back to the library.
+    val aiWhatElseSupported = OnDeviceLlm.isDeviceCapable(context) &&
+        OnDeviceLlmConfig.getWhatElseSource(context) != OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY
+    val nextSuggestionSupported = curatedRelatedSupported || aiWhatElseSupported
 
     // Lisa Assistant's voice-command trigger phrases -- editable in Settings,
     // persisted per target-language via TriggerPhraseConfig.kt. Keyed on
@@ -264,16 +275,16 @@ fun LisaScreen(
         onDispose { current.shutdown() }
     }
 
-    // Speaker for reading related/suggested phrases aloud. Fixed to the
-    // Russian locale: related-phrase content only exists in Russian on the
-    // backend today, and the next-suggestion command is hidden for other
-    // target languages (see relatedPhrasesSupported). When a non-Russian
-    // curated set exists, switch this to targetLanguage.ttsLocale.
+    // Speaker for reading related/suggested phrases aloud. Follows the
+    // selected target language: the Russian curated library speaks Russian
+    // (target == Russian in that case anyway), and on-device "what else?"
+    // suggestions are in whatever language is selected. Rebuilt on language
+    // change like `speaker` above.
     var phraseSpeaker by remember { mutableStateOf<TranslationSpeaker?>(null) }
-    DisposableEffect(Unit) {
+    DisposableEffect(targetLanguage) {
         val current = TranslationSpeaker(
             context,
-            SupportedLanguages.RUSSIAN.ttsLocale,
+            targetLanguage.ttsLocale,
             onSpeakingChanged = { speaking ->
                 relatedSpeaking = speaking
                 if (!speaking) speakingIndex = null
@@ -315,18 +326,51 @@ fun LisaScreen(
         isLoading = true
         scope.launch {
             try {
+                // Translate mode -- English (Latin-script) word/phrase in,
+                // selected target language out -- needs no backend, and
+                // on-device ML Kit is faster and works offline, so do it
+                // straight away and skip the server round-trip entirely.
+                // Only non-Latin input (Cyrillic = Russian "expand" mode,
+                // which genuinely needs the curated library) falls through
+                // to the server below. See ON_DEVICE_LLM_PLAN / roadmap:
+                // on-device translation is textbook phrasing, not the
+                // curated baby-register tone.
+                val looksLikeExpand = input.any { it.isLetter() && it.code > 0x024F }
+                if (!looksLikeExpand) {
+                    val translated = try {
+                        OnDeviceTranslator.translate(input, targetLanguage)
+                    } catch (_: Exception) {
+                        // Model not downloaded yet (first use needs wifi), or
+                        // an ML Kit failure -- fall through to the server as a
+                        // backup rather than dead-ending. If that's also
+                        // unreachable the catch blocks below report it.
+                        null
+                    }
+                    if (translated != null) {
+                        val res = AssistResult(
+                            mode = "translate",
+                            source = "on_device",
+                            input = input,
+                            translation = Phrase(ru = translated, glossEn = input),
+                            related = emptyList(),
+                            latencyMs = 0.0,
+                        )
+                        res.translation?.let { speaker?.speak(it.ru) }
+                        result = res
+                        suggestionIndex = 0
+                        isLoading = false
+                        return@launch
+                    }
+                }
+
                 var assist = ApiClient.sendAssist(baseUrl = serverUrl, apiKey = apiKey, text = input)
                 if (assist.mode == "translate") {
-                    // The backend's curated-phrase match only ever checks against
-                    // the Russian library -- for any other target language it
-                    // can't be trusted (it could "match" a Russian phrase by word
-                    // overlap even though e.g. Hindi was requested). Trust the
-                    // backend's curated result only when the target language
-                    // actually is Russian; otherwise, and whenever the backend had
-                    // no match at all (source == "mock"), translate on-device into
-                    // whichever language is currently selected. NOTE: on-device
-                    // translation produces standard/textbook phrasing, not the
-                    // curated library's baby-register tone -- see the roadmap.
+                    // Backend translate result (the on-device path above was
+                    // skipped for non-Latin input, or its model wasn't
+                    // ready). Its curated-phrase match only checks the
+                    // Russian library, so for any other target language fall
+                    // back to on-device; likewise when the backend had no
+                    // match at all (source == "mock").
                     val needsOnDevice = assist.source == "mock" ||
                         targetLanguage.code != SupportedLanguages.RUSSIAN.code
                     if (needsOnDevice) {
@@ -415,12 +459,21 @@ fun LisaScreen(
     // catches "AI hasn't answered yet", so a *bad* AI answer would silently
     // blank out an already-good library result the card was already
     // showing, rather than keeping it.
-    val usingAiSuggestions = OnDeviceLlmConfig.getWhatElseSource(context) != OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY &&
-        !onDeviceRelated.isNullOrEmpty()
-    val relatedForDisplay: List<Phrase> = when (OnDeviceLlmConfig.getWhatElseSource(context)) {
-        OnDeviceLlmConfig.WhatElseSource.AI_ONLY -> onDeviceRelated.orEmpty()
-        OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY -> result?.related.orEmpty()
-        OnDeviceLlmConfig.WhatElseSource.BOTH ->
+    // onDeviceRelated is only ever populated by the AI path, so a non-empty
+    // one always means "showing AI".
+    val usingAiSuggestions = !onDeviceRelated.isNullOrEmpty()
+    // The phrase library (result.related) is Russian-only: for any other
+    // target language there is nothing to fall back to, so the AI result --
+    // or nothing -- is all there is, whatever the source setting says. Only
+    // when the target actually is Russian does the BOTH / LIBRARY_ONLY
+    // fallback to the library apply.
+    val relatedForDisplay: List<Phrase> = when {
+        !curatedRelatedSupported -> onDeviceRelated.orEmpty()
+        OnDeviceLlmConfig.getWhatElseSource(context) == OnDeviceLlmConfig.WhatElseSource.AI_ONLY ->
+            onDeviceRelated.orEmpty()
+        OnDeviceLlmConfig.getWhatElseSource(context) == OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY ->
+            result?.related.orEmpty()
+        else -> // BOTH
             if (usingAiSuggestions) onDeviceRelated.orEmpty() else result?.related.orEmpty()
     }
 
@@ -479,7 +532,7 @@ fun LisaScreen(
     // only (same backend limitation as the next-suggestion command).
     fun requestAnswerSuggestions() {
         val text = lastUtterance.ifBlank { input }
-        if (text.isBlank() || !relatedPhrasesSupported) return
+        if (text.isBlank() || !curatedRelatedSupported) return
         input = text
         commandsDismissed = false
         onSend()
@@ -504,10 +557,12 @@ fun LisaScreen(
             }
             // The English word after the translate trigger always runs a
             // lookup. A plain default-mode utterance only does for Russian --
-            // "expand" mode has nothing to return for other languages, and
-            // auto-translating a foreign phrase (+ speaking it) just feeds the
-            // mic its own output in a loop.
-            if (state == SpeechAssistant.State.LISTENING_FOR_WORD || relatedPhrasesSupported) {
+            // the backend "expand" mode has nothing to return for other
+            // languages, and auto-translating a foreign phrase (+ speaking
+            // it) just feeds the mic its own output in a loop. On-device
+            // "what else?" for other languages runs off lastUtterance (set
+            // above) via the prefetch effect below, not this lookup.
+            if (state == SpeechAssistant.State.LISTENING_FOR_WORD || curatedRelatedSupported) {
                 input = text
                 commandsDismissed = false // fresh utterance -> chips come back
                 onSend()
@@ -562,28 +617,30 @@ fun LisaScreen(
         }.getOrNull()
     }
 
-    // Prefetch on-device "что ещё" suggestions as soon as a new utterance is
-    // heard, rather than waiting for the next-suggestion trigger itself --
+    // Prefetch on-device "what else?" suggestions as soon as a new utterance
+    // is heard, rather than waiting for the next-suggestion trigger itself --
     // generation takes real time, and starting it only once the caregiver
     // has already asked would mean several seconds of dead air in a
     // hands-free flow nobody's looking at the screen for. Compose's
     // cancel-and-relaunch-on-key-change handles abandoning a stale
     // in-flight generation when a newer utterance arrives, same as the
-    // transcriptGloss effect above. LIBRARY_ONLY mode skips the call
-    // entirely -- no point spending battery/time on a generation nothing
-    // will display. See ON_DEVICE_LLM_PLAN.md Phase 7.
-    LaunchedEffect(lastUtterance) {
+    // transcriptGloss effect above. Runs for any target language (the
+    // few-shot seed is per-language now); LIBRARY_ONLY mode and a
+    // not-ready model skip the call -- no point spending battery/time on a
+    // generation nothing will display. See ON_DEVICE_LLM_PLAN.md Phase 7.
+    LaunchedEffect(lastUtterance, targetLanguage) {
         onDeviceRelated = null
         val source = OnDeviceLlmConfig.getWhatElseSource(context)
-        if (lastUtterance.isNotBlank() && relatedPhrasesSupported &&
+        if (lastUtterance.isNotBlank() &&
             source != OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY &&
-            OnDeviceLlm.availability(context) == OnDeviceLlm.Availability.READY
+            OnDeviceLlm.canGenerate(context)
         ) {
             onDeviceRelated = runCatching {
-                OnDeviceLlm.generateWhatElse(context, lastUtterance)
+                OnDeviceLlm.generateWhatElse(context, lastUtterance, targetLanguage.code)
             }.getOrNull()
         }
     }
+
 
     // Live transcript from Lisa Assistant -> the shared input/search field.
     // Only while hands-free is running, so it never clobbers something the
@@ -917,7 +974,7 @@ fun LisaScreen(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
-            if (relatedPhrasesSupported) {
+            if (nextSuggestionSupported) {
                 OutlinedTextField(
                     value = nextSuggestionTriggerPhrase,
                     onValueChange = { onNextSuggestionTriggerPhraseChange(it) },
@@ -926,6 +983,8 @@ fun LisaScreen(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                 )
+            }
+            if (curatedRelatedSupported) {
                 OutlinedTextField(
                     value = answerTriggerPhrase,
                     onValueChange = { onAnswerTriggerPhraseChange(it) },
@@ -936,18 +995,17 @@ fun LisaScreen(
                 )
             }
             // Visible only on capable hardware (API 33+, enough RAM) --
-            // matches how relatedPhrasesSupported above hides rather than
-            // disables controls on ineligible configurations. See
-            // ON_DEVICE_LLM_PLAN.md Phase 5.
+            // hides rather than disables controls on ineligible
+            // configurations. See ON_DEVICE_LLM_PLAN.md Phase 5.
             if (OnDeviceLlm.isDeviceCapable(context)) {
                 var whatElseSource by remember {
                     mutableStateOf(OnDeviceLlmConfig.getWhatElseSource(context))
                 }
                 val modelState = OnDeviceLlmConfig.getModelState(context)
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    Text("\"Что ещё\" suggestions", style = MaterialTheme.typography.bodyLarge)
+                    Text("\"What else?\" suggestions", style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        "Your device can generate these on-device instead of (or alongside) the phrase library. Model: ${modelState.name}.",
+                        "Your device can generate these on-device, in the selected target language, instead of (or alongside) the Russian phrase library. Model: ${modelState.name}.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1062,7 +1120,12 @@ fun LisaScreen(
                     )
                 }
             },
-            singleLine = true,
+            // Not singleLine: a long spoken transcript should push the field
+            // taller so the caregiver can read all of it, up to a few lines
+            // before it starts to scroll internally.
+            singleLine = false,
+            minLines = 1,
+            maxLines = 6,
             shape = RoundedCornerShape(28.dp),
             textStyle = if (assistantOwnsField) {
                 LocalTextStyle.current.copy(
@@ -1080,13 +1143,23 @@ fun LisaScreen(
         )
 
         transcriptGloss?.let { gloss ->
-            Text(
-                gloss,
-                style = MaterialTheme.typography.bodySmall,
-                fontStyle = FontStyle.Italic,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 16.dp, top = 2.dp),
-            )
+            // Purple box directly beneath the search bar. Grows with the text
+            // so a long gloss stays fully visible.
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+            ) {
+                Text(
+                    gloss,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontStyle = FontStyle.Italic,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            }
         }
 
         if (isLoading) {
@@ -1105,7 +1178,8 @@ fun LisaScreen(
             onSpeakMeaning = { speakTriggerPhrase(meaningTriggerPhrase) },
             onSpeakNext = { speakTriggerPhrase(nextSuggestionTriggerPhrase) },
             onSpeakAnswer = { speakTriggerPhrase(answerTriggerPhrase) },
-            showNextSuggestionStep = relatedPhrasesSupported,
+            showNextSuggestionStep = nextSuggestionSupported,
+            showAnswerStep = curatedRelatedSupported,
         )
 
         CommandChips(
@@ -1127,13 +1201,15 @@ fun LisaScreen(
                         TriggerPhraseConfig.MEANING_TRIGGER_EN,
                     ) { speakTriggerPhrase(meaningTriggerPhrase) },
                 )
-                if (relatedPhrasesSupported) {
+                if (nextSuggestionSupported) {
                     add(
                         CommandChipSpec(
                             CommandKind.NEXT_SUGGESTION, nextSuggestionTriggerPhrase,
                             TriggerPhraseConfig.NEXT_SUGGESTION_TRIGGER_EN,
                         ) { speakTriggerPhrase(nextSuggestionTriggerPhrase) },
                     )
+                }
+                if (curatedRelatedSupported) {
                     add(
                         CommandChipSpec(
                             CommandKind.ANSWER, answerTriggerPhrase,
@@ -1222,6 +1298,55 @@ fun LisaScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                }
+            }
+        }
+
+        // Non-Russian targets have no backend `result`, so the on-device
+        // "what else?" suggestions (heard aloud on the trigger) get their own
+        // card -- otherwise there's nothing on screen to show they worked,
+        // or that they're still generating.
+        if (result == null && !curatedRelatedSupported && lastUtterance.isNotBlank() &&
+            (relatedForDisplay.isNotEmpty() || OnDeviceLlm.canGenerate(context))
+        ) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("Related phrases:", style = MaterialTheme.typography.labelLarge)
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                        ) {
+                            Text(
+                                "AI",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
+                    when {
+                        relatedForDisplay.isNotEmpty() ->
+                            RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
+                        onDeviceRelated == null ->
+                            Text(
+                                "Generating suggestions for “$lastUtterance”…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        else ->
+                            Text(
+                                "No suggestions for “$lastUtterance”.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                     }
                 }
             }

@@ -3,17 +3,20 @@ package com.botlisa.app
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.QuestionAnswer
 import androidx.compose.material.icons.filled.Translate
@@ -46,7 +49,9 @@ data class CommandChipSpec(
  * The voice-command reminders on the home screen -- an icon + the coloured
  * trigger phrase + its English caption. Read-only mnemonics; tapping one
  * speaks its phrase aloud (`onSpeak`). MainActivity builds the [items] list
- * (2 for non-Russian targets, 4 for Russian) and controls [visible].
+ * (2 base commands, plus "what else?" when on-device suggestions are
+ * available for the target language, plus "how to answer?" for Russian) and
+ * controls [visible].
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -65,6 +70,14 @@ fun CommandChips(
             items.forEach { spec ->
                 CommandItem(spec, modifier = Modifier.weight(1f))
             }
+            // Keep every chip half-width: with an odd count the last chip
+            // would otherwise stretch across the whole row and its icon
+            // would sit centre-screen instead of lining up with the column
+            // above it. A spacer fills the empty half so "what else?" lands
+            // in the same spot whether or not "how to answer?" follows it.
+            if (items.size % 2 == 1) {
+                Spacer(Modifier.weight(1f))
+            }
         }
     }
 }
@@ -81,6 +94,9 @@ private fun CommandItem(spec: CommandChipSpec, modifier: Modifier = Modifier) {
         CommandKind.NEXT_SUGGESTION -> Icons.Filled.Lightbulb
         CommandKind.ANSWER -> Icons.Filled.QuestionAnswer
     }
+    // "What else?" / "How to answer?" get an orange sparkle badge -- these are
+    // the AI-powered suggestion commands, so flag them the way the tagline does.
+    val sparkle = spec.kind == CommandKind.NEXT_SUGGESTION || spec.kind == CommandKind.ANSWER
     Column(
         // Tap to hear the phrase spoken.
         modifier = modifier
@@ -89,7 +105,20 @@ private fun CommandItem(spec: CommandChipSpec, modifier: Modifier = Modifier) {
             .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(42.dp))
+        Box {
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(42.dp))
+            if (sparkle) {
+                Icon(
+                    Icons.Filled.AutoAwesome,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 6.dp, y = (-4).dp)
+                        .size(16.dp),
+                )
+            }
+        }
         Spacer(Modifier.height(6.dp))
         Text(
             formatCommand(spec.phrase),

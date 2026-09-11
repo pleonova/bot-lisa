@@ -55,4 +55,46 @@ class PromptComposerTest {
         assertEquals(expectedSystem, prompt.system)
         assertEquals(expectedUser, prompt.user)
     }
+
+    @Test
+    fun `by-language file's ru-RU block matches the standalone Russian file`() {
+        val template = loadAsset("what_else.json")
+        val persona = loadAsset("personas/caregiver_infant.json")
+        val standalone = loadAsset("examples/what_else.ru.caregiver_infant.json")
+        val byLanguage = loadAsset("examples/few_shot_examples.caregiver_infant.by_language.json")
+
+        val fromStandalone = PromptComposer.compose(template, persona, standalone, "спокойной ночи")
+        val fromByLanguage = PromptComposer.compose(
+            template, persona,
+            PromptComposer.resolveExamplesForLanguage(byLanguage, "ru-RU"),
+            "спокойной ночи",
+        )
+
+        assertEquals(fromStandalone.system, fromByLanguage.system)
+        assertEquals(fromStandalone.user, fromByLanguage.user)
+    }
+
+    @Test
+    fun `a non-Russian language composes in that language`() {
+        val template = loadAsset("what_else.json")
+        val persona = loadAsset("personas/caregiver_infant.json")
+        val byLanguage = loadAsset("examples/few_shot_examples.caregiver_infant.by_language.json")
+
+        val prompt = PromptComposer.compose(
+            template, persona,
+            PromptComposer.resolveExamplesForLanguage(byLanguage, "es-ES"),
+            "buenas noches",
+        )
+
+        assert(prompt.system.contains("Everything you produce is in Spanish")) { prompt.system }
+        assert(prompt.system.contains("Vamos a ponerte el pijama.")) { prompt.system }
+        assertEquals("Give me three follows to this: buenas noches", prompt.user)
+    }
+
+    @Test
+    fun `an unknown language code falls back to the Russian block`() {
+        val byLanguage = loadAsset("examples/few_shot_examples.caregiver_infant.by_language.json")
+        val resolved = PromptComposer.resolveExamplesForLanguage(byLanguage, "xx-XX")
+        assertEquals("Russian", resolved.getString("language_display"))
+    }
 }
