@@ -477,6 +477,19 @@ fun LisaScreen(
             if (usingAiSuggestions) onDeviceRelated.orEmpty() else result?.related.orEmpty()
     }
 
+    // True while an on-device generation for lastUtterance is expected but
+    // hasn't landed yet (onDeviceRelated is reset to null the moment a new
+    // utterance comes in -- see the prefetch LaunchedEffect below). Without
+    // this, the result card had no way to distinguish "still generating" --
+    // which the on-device model can easily take 30-60s for, longest on the
+    // very first call that also has to load the model -- from a genuine "no
+    // suggestions", so it showed the latter immediately and then silently
+    // swapped in AI phrases up to a minute later with no indication anything
+    // was happening in between. Found via a real device test.
+    val aiPending = onDeviceRelated == null && lastUtterance.isNotBlank() &&
+        OnDeviceLlmConfig.getWhatElseSource(context) != OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY &&
+        OnDeviceLlm.canGenerate(context)
+
     // Speaks the next related/suggested phrase from relatedForDisplay aloud,
     // cycling through the list and wrapping back to the start once it runs
     // out. Triggered by the next-suggestion voice command (see
@@ -1292,6 +1305,8 @@ fun LisaScreen(
                             }
                         }
                         RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
+                    } else if (aiPending) {
+                        GeneratingRow("Generating AI suggestions for \"${r.input}\"…")
                     } else {
                         Text(
                             "No related phrases for \"${r.input}\".",
@@ -1335,12 +1350,7 @@ fun LisaScreen(
                     when {
                         relatedForDisplay.isNotEmpty() ->
                             RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
-                        onDeviceRelated == null ->
-                            Text(
-                                "Generating suggestions for “$lastUtterance”…",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                        aiPending -> GeneratingRow("Generating suggestions for “$lastUtterance”…")
                         else ->
                             Text(
                                 "No suggestions for “$lastUtterance”.",
@@ -1351,6 +1361,23 @@ fun LisaScreen(
                 }
             }
         }
+    }
+}
+
+/** A small spinner + label -- the "AI is still generating" state, so a slow
+ * on-device model reads as "working" rather than "broken" or "empty". */
+@Composable
+private fun GeneratingRow(label: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(16.dp),
+            strokeWidth = 2.dp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
