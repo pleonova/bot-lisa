@@ -146,63 +146,7 @@ object OnDeviceLlm {
         lastError = null
         try {
             val prompt = PromptComposer.compose(context, heard, languageCode)
-            val eng = engine ?: LlmEngine.getInferenceEngine(context).also { engine = it }
-
-            // A warm model still carries the previous call's system prompt.
-            // If the caregiver switched target language since then, drop and
-            // reload it -- setSystemPrompt() can't be called a second time.
-            if (modelLoaded && prompt.system != loadedSystemPrompt) {
-                Log.i(TAG, "System prompt changed (language switch); reloading model")
-                // cleanUp() unloads synchronously (runBlocking on its own
-                // dispatcher) -- keep it off whatever thread called us.
-                withContext(Dispatchers.IO) { eng.cleanUp() }
-                modelLoaded = false
-                loadedSystemPrompt = null
-            }
-
-            eng.state.filter { it == InferenceEngine.State.Initialized || it.isModelLoaded }.first()
-
-            if (!modelLoaded) {
-                try {
-                    eng.loadModel(OnDeviceLlmConfig.modelFilePath(context))
-                } catch (e: IllegalStateException) {
-                    // The engine just wasn't in a loadable state -- a prior
-                    // generation hadn't fully settled, or an Activity
-                    // recreation raced this. Nothing is wrong with the
-                    // downloaded file. Reset the engine so it's not stuck in
-                    // Error, and let the next call retry. Do NOT touch the
-                    // download. See ON_DEVICE_LLM_PLAN.md Phase 4.
-                    runCatching { withContext(Dispatchers.IO) { eng.cleanUp() } }
-                    throw e
-                } catch (e: Exception) {
-                    // The file itself won't load -- a truncated/corrupt
-                    // download, or a model architecture this llama.cpp build
-                    // doesn't support. Reset the engine out of its Error
-                    // state and mark the model FAILED so availability() stops
-                    // handing it back and the prefetch stops retrying -- but
-                    // KEEP the ~2.7GB on disk. Re-downloading from Settings
-                    // resumes/repairs via HTTP Range instead of pulling the
-                    // whole model again, and a one-off failure never throws
-                    // away a good file. See ON_DEVICE_LLM_PLAN.md Phase 6.
-                    runCatching { withContext(Dispatchers.IO) { eng.cleanUp() } }
-                    OnDeviceLlmConfig.setModelState(context, OnDeviceLlmConfig.ModelState.FAILED)
-                    throw e
-                }
-                // InferenceEngine.setSystemPrompt() is a one-shot call only
-                // valid right after loadModel() (it throws
-                // IllegalStateException on any later call) -- so it's gated
-                // to the load path here, not called per generateWhatElse
-                // call. The system prompt is now per-language, so a
-                // still-warm model carrying a stale one is force-reloaded
-                // above (loadedSystemPrompt tracks what's baked in). The
-                // load-path gating also matters for a same-process Activity
-                // recreation re-running this with the model still warm --
-                // found via a real crash on the physical Pixel 11. See
-                // ON_DEVICE_LLM_PLAN.md Phase 4.
-                eng.setSystemPrompt(prompt.system)
-                loadedSystemPrompt = prompt.system
-                modelLoaded = true
-            }
+            val eng = ensureModelReady(context, prompt.system)
 
             val sb = StringBuilder()
             eng.sendUserPrompt(prompt.user, predictLength = PREDICT_LENGTH).collect { token -> sb.append(token) }
@@ -242,6 +186,105 @@ object OnDeviceLlm {
             throw e
         } finally {
             isGenerating = false
+        }
+    }
+
+    /**
+     * Loads the model and processes [systemPrompt] if that isn't already
+     * done -- shared by [generateWhatElse] and [warmUp] so there is exactly
+     * one place that knows how to get from "engine exists" to "ready for a
+     * user prompt". Caller must hold [mutex]. Returns the ready engine.
+     */
+    private suspend fun ensureModelReady(context: Context, systemPrompt: String): InferenceEngine {
+        val eng = engine ?: LlmEngine.getInferenceEngine(context).also { engine = it }
+
+        // A warm model still carries the previous call's system prompt. If
+        // the caregiver switched target language since then, drop and
+        // reload it -- setSystemPrompt() can't be called a second time.
+        if (modelLoaded && systemPrompt != loadedSystemPrompt) {
+            Log.i(TAG, "System prompt changed (language switch); reloading model")
+            // cleanUp() unloads synchronously (runBlocking on its own
+            // dispatcher) -- keep it off whatever thread called us.
+            withContext(Dispatchers.IO) { eng.cleanUp() }
+            modelLoaded = false
+            loadedSystemPrompt = null
+        }
+
+        eng.state.filter { it == InferenceEngine.State.Initialized || it.isModelLoaded }.first()
+
+        if (!modelLoaded) {
+            try {
+                eng.loadModel(OnDeviceLlmConfig.modelFilePath(context))
+            } catch (e: IllegalStateException) {
+                // The engine just wasn't in a loadable state -- a prior
+                // generation hadn't fully settled, or an Activity
+                // recreation raced this. Nothing is wrong with the
+                // downloaded file. Reset the engine so it's not stuck in
+                // Error, and let the next call retry. Do NOT touch the
+                // download. See ON_DEVICE_LLM_PLAN.md Phase 4.
+                runCatching { withContext(Dispatchers.IO) { eng.cleanUp() } }
+                throw e
+            } catch (e: Exception) {
+                // The file itself won't load -- a truncated/corrupt
+                // download, or a model architecture this llama.cpp build
+                // doesn't support. Reset the engine out of its Error
+                // state and mark the model FAILED so availability() stops
+                // handing it back and the prefetch stops retrying -- but
+                // KEEP the ~2.7GB on disk. Re-downloading from Settings
+                // resumes/repairs via HTTP Range instead of pulling the
+                // whole model again, and a one-off failure never throws
+                // away a good file. See ON_DEVICE_LLM_PLAN.md Phase 6.
+                runCatching { withContext(Dispatchers.IO) { eng.cleanUp() } }
+                OnDeviceLlmConfig.setModelState(context, OnDeviceLlmConfig.ModelState.FAILED)
+                throw e
+            }
+            // InferenceEngine.setSystemPrompt() is a one-shot call only
+            // valid right after loadModel() (it throws IllegalStateException
+            // on any later call) -- so it's gated to the load path here, not
+            // called per generateWhatElse call. The system prompt is now
+            // per-language, so a still-warm model carrying a stale one is
+            // force-reloaded above (loadedSystemPrompt tracks what's baked
+            // in). The load-path gating also matters for a same-process
+            // Activity recreation re-running this with the model still warm
+            // -- found via a real crash on the physical Pixel 11. See
+            // ON_DEVICE_LLM_PLAN.md Phase 4.
+            eng.setSystemPrompt(systemPrompt)
+            loadedSystemPrompt = systemPrompt
+            modelLoaded = true
+        }
+        return eng
+    }
+
+    /**
+     * Pre-loads the model and processes [languageCode]'s system prompt
+     * without generating anything. Model load (~5s) + system-prompt
+     * processing (~5s on a Pixel 11, since the persona + few-shot examples
+     * are a few hundred tokens) together dominate the *first* "what else?"
+     * request's latency far more than actual generation does (~2s) -- call
+     * this as soon as it's plausible the caregiver will ask (e.g. when
+     * hands-free listening starts) so that cost is paid while they're still
+     * getting the mic going, not after they've already spoken and are
+     * waiting on the result card. A no-op if the device/model isn't ready,
+     * or if a warm model already carries this language's system prompt.
+     * Never throws -- a failed warm-up just means the next real
+     * [generateWhatElse] call pays the cost (and reports it) instead.
+     */
+    suspend fun warmUp(context: Context, languageCode: String) {
+        if (availability(context) != Availability.READY) return
+        mutex.withLock {
+            idleUnloadJob?.cancel()
+            try {
+                val systemPrompt = PromptComposer.compose(context, "", languageCode).system
+                if (modelLoaded && systemPrompt == loadedSystemPrompt) return@withLock
+                ensureModelReady(context, systemPrompt)
+                scheduleIdleUnload()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Deliberately not lastError -- a failed warm-up shouldn't
+                // pre-emptively disable the real request that follows it.
+                Log.e(TAG, "warmUp failed", e)
+            }
         }
     }
 

@@ -250,6 +250,16 @@ fun LisaScreen(
     // produced zero phrases. See ON_DEVICE_LLM_PLAN.md Phase 7.
     var onDeviceRelated by remember { mutableStateOf<List<Phrase>?>(null) }
 
+    // True exactly while the prefetch below is actually running a
+    // generateWhatElse call for lastUtterance -- drives the "still
+    // generating" spinner. Deliberately a plain flag we set ourselves
+    // rather than reading OnDeviceLlm.availability(): that reports LOADING
+    // (not READY) for the same span, which would make a canGenerate()-based
+    // check read as "not eligible" during the exact window it's eligible
+    // and running. Found via a real device test where the spinner never
+    // showed and "No related phrases" sat there for the whole generation.
+    var onDeviceGenerating by remember { mutableStateOf(false) }
+
     // TTS playback state. Drives the speaker-icon pulse in the result card,
     // and -- crucially -- mutes the mic (isMuted below) so the assistant
     // reading a suggestion aloud isn't transcribed back as a user utterance.
@@ -477,18 +487,18 @@ fun LisaScreen(
             if (usingAiSuggestions) onDeviceRelated.orEmpty() else result?.related.orEmpty()
     }
 
-    // True while an on-device generation for lastUtterance is expected but
-    // hasn't landed yet (onDeviceRelated is reset to null the moment a new
-    // utterance comes in -- see the prefetch LaunchedEffect below). Without
-    // this, the result card had no way to distinguish "still generating" --
-    // which the on-device model can easily take 30-60s for, longest on the
-    // very first call that also has to load the model -- from a genuine "no
-    // suggestions", so it showed the latter immediately and then silently
-    // swapped in AI phrases up to a minute later with no indication anything
-    // was happening in between. Found via a real device test.
-    val aiPending = onDeviceRelated == null && lastUtterance.isNotBlank() &&
-        OnDeviceLlmConfig.getWhatElseSource(context) != OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY &&
-        OnDeviceLlm.canGenerate(context)
+    // True while the result card should show the "still generating" spinner
+    // rather than a premature "no suggestions" -- see onDeviceGenerating's
+    // own comment for why this is a plain flag rather than derived from
+    // OnDeviceLlm.canGenerate().
+    val aiPending = onDeviceGenerating
+    // True once an on-device attempt has started or finished for
+    // lastUtterance -- used to decide whether the standalone AI card (for
+    // non-Russian targets, which have no backend `result`) should appear at
+    // all. False when AI "what else" was never in play (LIBRARY_ONLY mode,
+    // an incapable/not-ready device), so no empty placeholder card shows for
+    // a mode that was never going to answer.
+    val aiAttempted = onDeviceGenerating || onDeviceRelated != null
 
     // Speaks the next related/suggested phrase from relatedForDisplay aloud,
     // cycling through the list and wrapping back to the start once it runs
@@ -643,14 +653,17 @@ fun LisaScreen(
     // generation nothing will display. See ON_DEVICE_LLM_PLAN.md Phase 7.
     LaunchedEffect(lastUtterance, targetLanguage) {
         onDeviceRelated = null
+        onDeviceGenerating = false
         val source = OnDeviceLlmConfig.getWhatElseSource(context)
         if (lastUtterance.isNotBlank() &&
             source != OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY &&
             OnDeviceLlm.canGenerate(context)
         ) {
+            onDeviceGenerating = true
             onDeviceRelated = runCatching {
                 OnDeviceLlm.generateWhatElse(context, lastUtterance, targetLanguage.code)
             }.getOrNull()
+            onDeviceGenerating = false
         }
     }
 
@@ -699,6 +712,17 @@ fun LisaScreen(
         assistantError = null
         assistant.start()
         ListeningForegroundService.start(context)
+        // Pre-load the on-device model + system prompt now, while the
+        // caregiver is still settling into hands-free mode, rather than
+        // lazily on their first utterance -- model load + system-prompt
+        // processing (~10s combined on a Pixel 11) otherwise dominate the
+        // latency of the very first "what else?" of a session. Fire-and-
+        // forget: a skipped/failed warm-up just means generateWhatElse pays
+        // the cost itself later. Skipped entirely in LIBRARY_ONLY mode --
+        // no point loading ~2.7GB nothing will use.
+        if (OnDeviceLlmConfig.getWhatElseSource(context) != OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY) {
+            scope.launch { OnDeviceLlm.warmUp(context, targetLanguage.code) }
+        }
     }
     fun stopHandsFree() {
         assistant.stop()
@@ -1321,10 +1345,10 @@ fun LisaScreen(
         // Non-Russian targets have no backend `result`, so the on-device
         // "what else?" suggestions (heard aloud on the trigger) get their own
         // card -- otherwise there's nothing on screen to show they worked,
-        // or that they're still generating.
-        if (result == null && !curatedRelatedSupported && lastUtterance.isNotBlank() &&
-            (relatedForDisplay.isNotEmpty() || OnDeviceLlm.canGenerate(context))
-        ) {
+        // or that they're still generating. Gated on aiAttempted rather than
+        // re-checking eligibility here, so the card doesn't flicker away
+        // mid-generation (see onDeviceGenerating's comment).
+        if (result == null && !curatedRelatedSupported && lastUtterance.isNotBlank() && aiAttempted) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp),
