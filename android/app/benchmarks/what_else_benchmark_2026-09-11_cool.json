@@ -1,0 +1,135 @@
+{
+  "timestamp": "2026-09-11T08:39:35-06:00",
+  "device": "Pixel 11",
+  "sdkInt": 37,
+  "languageCode": "ru-RU",
+  "interCallDelayMs": 4000,
+  "sampleCount": 20,
+  "meanMs": 4537.78180335,
+  "stdDevMs": 1327.5207014242599,
+  "minMs": 2937.450951,
+  "maxMs": 7728.146619,
+  "maxThermalStatus": 0,
+  "samples": [
+    {
+      "phrase": "Пойдём кушать!",
+      "elapsedMs": 6813.499809,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    },
+    {
+      "phrase": "Открой ротик.",
+      "elapsedMs": 3420.813351,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    },
+    {
+      "phrase": "Вкусно?",
+      "elapsedMs": 2937.450951,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    },
+    {
+      "phrase": "Пора спать, малыш.",
+      "elapsedMs": 3638.786568,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    },
+    {
+      "phrase": "Закрывай глазки.",
+      "elapsedMs": 3644.259631,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    },
+    {
+      "phrase": "Спокойной ночи.",
+      "elapsedMs": 4089.443959,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    },
+    {
+      "phrase": "Давай мыть ручки.",
+      "elapsedMs": 4093.446431,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    },
+    {
+      "phrase": "Тёплая водичка, да?",
+      "elapsedMs": 3687.734172,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    },
+    {
+      "phrase": "Молодец!",
+      "elapsedMs": 3292.031651,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    },
+    {
+      "phrase": "Умница какой!",
+      "elapsedMs": 3598.644667,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    },
+    {
+      "phrase": "Пойдём гулять.",
+      "elapsedMs": 4536.643077,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    },
+    {
+      "phrase": "Какая красивая машинка!",
+      "elapsedMs": 5888.614701,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    },
+    {
+      "phrase": "Дай мне ручку.",
+      "elapsedMs": 4791.277908,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    },
+    {
+      "phrase": "Смотри, киса!",
+      "elapsedMs": 4173.837379,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    },
+    {
+      "phrase": "Ты хочешь пить?",
+      "elapsedMs": 7728.146619,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    },
+    {
+      "phrase": "Давай кушать",
+      "elapsedMs": 5280.028525,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    },
+    {
+      "phrase": "Залезай в ванночку.",
+      "elapsedMs": 4361.586152,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    },
+    {
+      "phrase": "Давай наденем твою пижамку.",
+      "elapsedMs": 6926.624703,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    },
+    {
+      "phrase": "Давай почитаем твою любимую книжку.",
+      "elapsedMs": 4148.664479,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    },
+    {
+      "phrase": "Хочешь ещё?",
+      "elapsedMs": 3704.101334,
+      "phraseCount": 3,
+      "thermalStatus": 0
+    }
+  ]
+}

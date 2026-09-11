@@ -209,7 +209,15 @@ High-level, in rough build order — details live in the status tables above,
   Reasoning suppression: the bundled Qwen3.5-4B would otherwise spend the
   whole token budget in a `<think>` block, so `llama_bridge.cpp` prefills
   an empty `<think></think>` onto the assistant turn (what a Jinja
-  `enable_thinking=false` does) — verified on a Pixel 11.
+  `enable_thinking=false` does) — verified on a Pixel 11. `OnDeviceLlm.warmUp`
+  pre-loads the model + system prompt when hands-free starts, so that ~10s
+  one-time cost lands before the caregiver's first utterance instead of
+  after it.
+- **"What else?" latency benchmark** — `WhatElseBenchmarkTest`
+  (`android/app/src/androidTest/`) times `generateWhatElse` over 20 real
+  phrases on-device and reports mean/std/min/max; baselines live in
+  `android/app/benchmarks/README.md` for checking whether a future change
+  actually helps.
 
 ## Ideas
 
