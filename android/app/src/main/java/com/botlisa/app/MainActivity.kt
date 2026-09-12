@@ -1465,8 +1465,9 @@ fun LisaScreen(
                         }
                     } else if (relatedForDisplay.isNotEmpty()) {
                         Row(
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Text("Related phrases for:", style = MaterialTheme.typography.labelLarge)
                             // Deliberately plain-text, not a subtler icon --
@@ -1524,8 +1525,9 @@ fun LisaScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Text("Related phrases for:", style = MaterialTheme.typography.labelLarge)
                         Surface(
