@@ -1485,6 +1485,12 @@ fun LisaScreen(
                                 )
                             }
                         }
+                        Text(
+                            "\"${r.input}\"",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontStyle = FontStyle.Italic,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
                     } else if (aiPending) {
                         GeneratingRow("Generating AI suggestions for \"${r.input}\"…")
@@ -1535,8 +1541,15 @@ fun LisaScreen(
                         }
                     }
                     when {
-                        relatedForDisplay.isNotEmpty() ->
+                        relatedForDisplay.isNotEmpty() -> {
+                            Text(
+                                "“$lastUtterance”",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontStyle = FontStyle.Italic,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                             RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
+                        }
                         aiPending -> GeneratingRow("Generating suggestions for “$lastUtterance”…")
                         else ->
                             Text(
