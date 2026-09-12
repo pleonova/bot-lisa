@@ -3,6 +3,7 @@ package com.botlisa.app
 import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
+import android.os.PowerManager
 import android.util.Log
 import com.botlisa.llm.InferenceEngine
 import com.botlisa.llm.LlmEngine
@@ -78,6 +79,22 @@ object OnDeviceLlm {
 
     fun isDeviceCapable(context: Context): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && hasEnoughRam(context)
+
+    /**
+     * True once [PowerManager.getCurrentThermalStatus] is above NONE --
+     * i.e. the device is already running warm. Used to make EAGER prefetch
+     * back off rather than pile more heat-generating inference onto a
+     * device that's already elevated (measured directly: 20 back-to-back
+     * "what else?" calls pushed a Pixel 11 from NONE to LIGHT in under two
+     * minutes -- see android/app/benchmarks/README.md). API 29+; below
+     * that this can't be observed and reports false (not elevated) --
+     * moot in practice since [isDeviceCapable] already requires API 33+.
+     */
+    fun isThermallyElevated(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        return powerManager.currentThermalStatus > PowerManager.THERMAL_STATUS_NONE
+    }
 
     private fun hasEnoughRam(context: Context): Boolean {
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager

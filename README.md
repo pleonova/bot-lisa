@@ -213,6 +213,13 @@ High-level, in rough build order — details live in the status tables above,
   pre-loads the model + system prompt when hands-free starts, so that ~10s
   one-time cost lands before the caregiver's first utterance instead of
   after it.
+- **Suggestion timing setting** — generating on-device suggestions for
+  *every* hands-free phrase (not just when "what else?" is actually asked)
+  measurably heats the device and costs battery (see the benchmark below).
+  Settings → "Suggestion timing" lets the caregiver pick **Eager**
+  (default: instant answers, but runs after every phrase and auto-backs-off
+  once `OnDeviceLlm.isThermallyElevated`) or **On-demand** (only generates
+  when asked, at the cost of a short pause). `OnDeviceLlmConfig.PrefetchMode`.
 - **"What else?" latency benchmark** — `WhatElseBenchmarkTest`
   (`android/app/src/androidTest/`) times `generateWhatElse` over 20 real
   phrases on-device and reports mean/std/min/max; baselines live in

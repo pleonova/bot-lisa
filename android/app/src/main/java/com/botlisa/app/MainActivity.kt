@@ -260,6 +260,13 @@ fun LisaScreen(
     // showed and "No related phrases" sat there for the whole generation.
     var onDeviceGenerating by remember { mutableStateOf(false) }
 
+    // True when the caregiver asked "what else?" while a generation was
+    // already in flight (PrefetchMode.EAGER started it, or a prior
+    // on-demand request did) -- speaks the result the moment that
+    // in-flight call lands instead of starting a redundant second one.
+    // Cleared once consumed.
+    var speakWhenReady by remember { mutableStateOf(false) }
+
     // TTS playback state. Drives the speaker-icon pulse in the result card,
     // and -- crucially -- mutes the mic (isMuted below) so the assistant
     // reading a suggestion aloud isn't transcribed back as a user utterance.
@@ -517,6 +524,46 @@ fun LisaScreen(
         }
     }
 
+    // Handles the "what else?" command end to end, covering both
+    // PrefetchMode settings:
+    //   - EAGER, already prefetched -> speak immediately (fast path, same
+    //     as before this existed).
+    //   - EAGER, still generating (e.g. asked right after a new utterance)
+    //     -> don't start a second generation; just remember to speak once
+    //     the in-flight one lands (see the prefetch LaunchedEffect below).
+    //   - ON_DEMAND (or EAGER skipped this utterance because the device was
+    //     thermally elevated) -> nothing has been generated yet, so kick
+    //     off a generation now and speak when it finishes. This is the
+    //     "few seconds of wait" trade-off for not pre-generating on every
+    //     phrase -- see OnDeviceLlmConfig.PrefetchMode's own doc comment.
+    fun requestWhatElse() {
+        if (relatedForDisplay.isNotEmpty()) {
+            speakNextSuggestion()
+            return
+        }
+        if (onDeviceGenerating) {
+            speakWhenReady = true
+            return
+        }
+        val source = OnDeviceLlmConfig.getWhatElseSource(context)
+        if (lastUtterance.isBlank() ||
+            source == OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY ||
+            !OnDeviceLlm.canGenerate(context)
+        ) {
+            return // nothing to generate and nothing prefetched -- no-op, same as before
+        }
+        val utterance = lastUtterance
+        val language = targetLanguage
+        scope.launch {
+            onDeviceGenerating = true
+            onDeviceRelated = runCatching {
+                OnDeviceLlm.generateWhatElse(context, utterance, language.code)
+            }.getOrNull()
+            onDeviceGenerating = false
+            speakNextSuggestion()
+        }
+    }
+
     // Reads one specific related phrase aloud -- the trailing speaker button
     // on a result row. Sets suggestionIndex so a following next-suggestion
     // trigger continues from the next one. Reads from relatedForDisplay (not
@@ -594,7 +641,7 @@ fun LisaScreen(
     val handleMeaningRequest = rememberUpdatedState { speakMeaningOfLast() }
     val handleAnswerRequest = rememberUpdatedState { requestAnswerSuggestions() }
     val handleNextSuggestionRequest = rememberUpdatedState {
-        speakNextSuggestion()
+        requestWhatElse()
         commandsDismissed = true // spoken "что ещё?" -> hide the chips
     }
 
@@ -647,15 +694,23 @@ fun LisaScreen(
     // hands-free flow nobody's looking at the screen for. Compose's
     // cancel-and-relaunch-on-key-change handles abandoning a stale
     // in-flight generation when a newer utterance arrives, same as the
-    // transcriptGloss effect above. Runs for any target language (the
-    // few-shot seed is per-language now); LIBRARY_ONLY mode and a
-    // not-ready model skip the call -- no point spending battery/time on a
-    // generation nothing will display. See ON_DEVICE_LLM_PLAN.md Phase 7.
+    // transcriptGloss effect above. Only runs in PrefetchMode.EAGER, and
+    // even then backs off once the device is thermally elevated -- every
+    // phrase triggering a multi-second, multi-core inference measurably
+    // heats the device (see OnDeviceLlmConfig.PrefetchMode's doc comment
+    // and android/app/benchmarks/README.md). ON_DEMAND mode, or an EAGER
+    // request skipped for heat, generates only when requestWhatElse() is
+    // actually called. LIBRARY_ONLY mode and a not-ready model skip the
+    // call either way -- no point spending battery/time on a generation
+    // nothing will display. See ON_DEVICE_LLM_PLAN.md Phase 7.
     LaunchedEffect(lastUtterance, targetLanguage) {
         onDeviceRelated = null
         onDeviceGenerating = false
         val source = OnDeviceLlmConfig.getWhatElseSource(context)
-        if (lastUtterance.isNotBlank() &&
+        val eager = OnDeviceLlmConfig.getPrefetchMode(context) == OnDeviceLlmConfig.PrefetchMode.EAGER &&
+            !OnDeviceLlm.isThermallyElevated(context)
+        if (eager &&
+            lastUtterance.isNotBlank() &&
             source != OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY &&
             OnDeviceLlm.canGenerate(context)
         ) {
@@ -664,6 +719,10 @@ fun LisaScreen(
                 OnDeviceLlm.generateWhatElse(context, lastUtterance, targetLanguage.code)
             }.getOrNull()
             onDeviceGenerating = false
+            if (speakWhenReady) {
+                speakWhenReady = false
+                speakNextSuggestion()
+            }
         }
     }
 
@@ -1068,6 +1127,47 @@ fun LisaScreen(
                                 },
                             )
                             Text(label, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+
+                    var prefetchMode by remember {
+                        mutableStateOf(OnDeviceLlmConfig.getPrefetchMode(context))
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text("Suggestion timing", style = MaterialTheme.typography.bodyLarge)
+                    listOf(
+                        OnDeviceLlmConfig.PrefetchMode.EAGER to
+                            ("Eager — generate after every phrase, so \"what else?\" answers instantly" to
+                                "Uses more battery and can heat up your device faster, since it runs on-device AI whether or not you end up asking. Backs off automatically once your device is already warm."),
+                        OnDeviceLlmConfig.PrefetchMode.ON_DEMAND to
+                            ("On-demand — only generate when you say \"what else?\"" to
+                                "Uses less battery. You'll hear a short pause the first time you ask about each phrase."),
+                    ).forEach { (mode, labelAndCaption) ->
+                        val (label, caption) = labelAndCaption
+                        Row(
+                            verticalAlignment = Alignment.Top,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    prefetchMode = mode
+                                    OnDeviceLlmConfig.setPrefetchMode(context, mode)
+                                },
+                        ) {
+                            RadioButton(
+                                selected = prefetchMode == mode,
+                                onClick = {
+                                    prefetchMode = mode
+                                    OnDeviceLlmConfig.setPrefetchMode(context, mode)
+                                },
+                            )
+                            Column(modifier = Modifier.padding(top = 12.dp)) {
+                                Text(label, style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    caption,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                     // Live download progress, if a download is currently
