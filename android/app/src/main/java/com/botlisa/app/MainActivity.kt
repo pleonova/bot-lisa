@@ -260,6 +260,15 @@ fun LisaScreen(
     // showed and "No related phrases" sat there for the whole generation.
     var onDeviceGenerating by remember { mutableStateOf(false) }
 
+    // True once the caregiver has explicitly asked "what else?" for
+    // lastUtterance (spoken trigger, or tapping its chip/button) --
+    // separate from onDeviceGenerating/onDeviceRelated so background
+    // EAGER prefetch can quietly get a head start without the result card
+    // popping up before anyone actually asked for it. Reset to false
+    // whenever lastUtterance changes (see the prefetch LaunchedEffect
+    // below); set true at the top of requestWhatElse().
+    var whatElseRequested by remember { mutableStateOf(false) }
+
     // True when the caregiver asked "what else?" while a generation was
     // already in flight (PrefetchMode.EAGER started it, or a prior
     // on-demand request did) -- speaks the result the moment that
@@ -537,10 +546,27 @@ fun LisaScreen(
     //     "few seconds of wait" trade-off for not pre-generating on every
     //     phrase -- see OnDeviceLlmConfig.PrefetchMode's own doc comment.
     fun requestWhatElse() {
+        // Marks that the trigger has actually been used for lastUtterance --
+        // the AI result card (see below) stays hidden until this is true,
+        // even if EAGER prefetch already has (or is still generating)
+        // suggestions in the background.
+        whatElseRequested = true
         if (relatedForDisplay.isNotEmpty()) {
             speakNextSuggestion()
             return
         }
+        // Only dedup against a call *this screen* already tracks (the
+        // prefetch effect, or a previous requestWhatElse()) -- not against
+        // OnDeviceLlm.canGenerate()'s LOADING check, which also reports
+        // "not eligible" while OnDeviceLlm.warmUp() (kicked off from
+        // startHandsFree(), untracked by onDeviceGenerating) is mid-load.
+        // That's not a reason to give up: generateWhatElse()'s own mutex
+        // already serializes behind whatever's using the engine, so a
+        // request placed while warmUp() is still loading just waits a
+        // couple more seconds and then runs -- it doesn't collide with
+        // anything. Using canGenerate() here made requestWhatElse() give up
+        // silently in exactly that window, found as "what else?" going
+        // silent right after starting hands-free instead of just slower.
         if (onDeviceGenerating) {
             speakWhenReady = true
             return
@@ -548,9 +574,10 @@ fun LisaScreen(
         val source = OnDeviceLlmConfig.getWhatElseSource(context)
         if (lastUtterance.isBlank() ||
             source == OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY ||
-            !OnDeviceLlm.canGenerate(context)
+            !OnDeviceLlm.isDeviceCapable(context) ||
+            OnDeviceLlmConfig.getModelState(context) != OnDeviceLlmConfig.ModelState.READY
         ) {
-            return // nothing to generate and nothing prefetched -- no-op, same as before
+            return // genuinely nothing to generate (no utterance, library-only, or model not downloaded) -- no-op
         }
         val utterance = lastUtterance
         val language = targetLanguage
@@ -620,21 +647,26 @@ fun LisaScreen(
     // here.)
     val handleAssistantUtterance =
         rememberUpdatedState<(String, SpeechAssistant.State) -> Unit> { text, state ->
-            // Remember the last plain utterance for the meaning / answer
-            // commands to act on.
+            // Remember the last plain utterance for the meaning / what-else /
+            // answer commands to act on, and bring the chips back regardless
+            // of whether this utterance runs a lookup below.
             if (state == SpeechAssistant.State.LISTENING_DEFAULT && text.isNotBlank()) {
                 lastUtterance = text
+                commandsDismissed = false // fresh utterance -> chips come back
             }
             // The English word after the translate trigger always runs a
-            // lookup. A plain default-mode utterance only does for Russian --
-            // the backend "expand" mode has nothing to return for other
-            // languages, and auto-translating a foreign phrase (+ speaking
-            // it) just feeds the mic its own output in a loop. On-device
-            // "what else?" for other languages runs off lastUtterance (set
-            // above) via the prefetch effect below, not this lookup.
-            if (state == SpeechAssistant.State.LISTENING_FOR_WORD || curatedRelatedSupported) {
+            // lookup immediately -- that word IS the command. A plain
+            // default-mode utterance no longer auto-runs the Russian
+            // backend "expand" lookup: it used to, on *every* utterance,
+            // which meant a result card (or its "No related phrases" empty
+            // state) popped up whether or not the caregiver actually wanted
+            // it. That lookup, and on-device "what else?", now only run via
+            // the explicit "what else?" / "how to answer?" triggers
+            // (requestWhatElse() / requestAnswerSuggestions()) or their
+            // on-screen buttons -- see CommandChips' onClick handlers below.
+            if (state == SpeechAssistant.State.LISTENING_FOR_WORD) {
                 input = text
-                commandsDismissed = false // fresh utterance -> chips come back
+                commandsDismissed = false
                 onSend()
             }
         }
@@ -706,6 +738,7 @@ fun LisaScreen(
     LaunchedEffect(lastUtterance, targetLanguage) {
         onDeviceRelated = null
         onDeviceGenerating = false
+        whatElseRequested = false // fresh utterance -> hasn't been asked about yet
         val source = OnDeviceLlmConfig.getWhatElseSource(context)
         val eager = OnDeviceLlmConfig.getPrefetchMode(context) == OnDeviceLlmConfig.PrefetchMode.EAGER &&
             !OnDeviceLlm.isThermallyElevated(context)
@@ -1321,12 +1354,22 @@ fun LisaScreen(
 
         CommandChips(
             // Hands-free: shown until a command is used (commandsDismissed).
-            // Text mode (IDLE): shown only while the field is empty -- once
-            // you type, the keyboard's Search key does the same job.
+            // Stopping hands-free alone should NOT hide these -- the field
+            // still holding the last transcript (assistantState flips to
+            // IDLE, but the text isn't cleared) used to read as "you're
+            // typing now" and hide the chips out from under you the moment
+            // you tapped the mic to stop. Gated on inputFocused instead:
+            // true text mode (IDLE + the field actually focused, i.e. you
+            // tapped in to type) still hides them once there's text, since
+            // the keyboard's Search key does the same job then.
             visible = !commandsDismissed &&
-                (assistantState != SpeechAssistant.State.IDLE || input.isBlank()),
+                (assistantState != SpeechAssistant.State.IDLE || !inputFocused || input.isBlank()),
             items = buildList {
                 add(
+                    // Always just speaks the phrase, in both modes -- unlike
+                    // the other three, "translate" has no tap-to-invoke
+                    // equivalent: the real command needs an English word
+                    // *after* it, which a single tap has no way to supply.
                     CommandChipSpec(
                         CommandKind.TRANSLATE, translateTriggerPhrase,
                         TriggerPhraseConfig.TRANSLATE_TRIGGER_EN,
@@ -1336,14 +1379,25 @@ fun LisaScreen(
                     CommandChipSpec(
                         CommandKind.MEANING, meaningTriggerPhrase,
                         TriggerPhraseConfig.MEANING_TRIGGER_EN,
-                    ) { speakTriggerPhrase(meaningTriggerPhrase) },
+                    ) {
+                        // Hands-free: tapping just demonstrates how to say the
+                        // trigger phrase, same as every other chip -- you'd
+                        // speak it yourself to actually invoke it. Not
+                        // listening: there's no mic to speak the trigger to,
+                        // so the tap IS the command.
+                        if (assistantState == SpeechAssistant.State.IDLE) speakMeaningOfLast()
+                        else speakTriggerPhrase(meaningTriggerPhrase)
+                    },
                 )
                 if (nextSuggestionSupported) {
                     add(
                         CommandChipSpec(
                             CommandKind.NEXT_SUGGESTION, nextSuggestionTriggerPhrase,
                             TriggerPhraseConfig.NEXT_SUGGESTION_TRIGGER_EN,
-                        ) { speakTriggerPhrase(nextSuggestionTriggerPhrase) },
+                        ) {
+                            if (assistantState == SpeechAssistant.State.IDLE) requestWhatElse()
+                            else speakTriggerPhrase(nextSuggestionTriggerPhrase)
+                        },
                     )
                 }
                 if (curatedRelatedSupported) {
@@ -1351,7 +1405,10 @@ fun LisaScreen(
                         CommandChipSpec(
                             CommandKind.ANSWER, answerTriggerPhrase,
                             TriggerPhraseConfig.ANSWER_TRIGGER_EN,
-                        ) { speakTriggerPhrase(answerTriggerPhrase) },
+                        ) {
+                            if (assistantState == SpeechAssistant.State.IDLE) requestAnswerSuggestions()
+                            else speakTriggerPhrase(answerTriggerPhrase)
+                        },
                     )
                 }
             },
@@ -1442,13 +1499,19 @@ fun LisaScreen(
             }
         }
 
-        // Non-Russian targets have no backend `result`, so the on-device
-        // "what else?" suggestions (heard aloud on the trigger) get their own
-        // card -- otherwise there's nothing on screen to show they worked,
-        // or that they're still generating. Gated on aiAttempted rather than
-        // re-checking eligibility here, so the card doesn't flicker away
-        // mid-generation (see onDeviceGenerating's comment).
-        if (result == null && !curatedRelatedSupported && lastUtterance.isNotBlank() && aiAttempted) {
+        // The on-device "what else?" suggestions get their own card
+        // whenever there's no backend `result` to show them inside (true
+        // for every non-Russian target always, and now true for Russian
+        // too since a plain utterance no longer auto-runs the backend
+        // "expand" lookup -- see handleAssistantUtterance). Gated on
+        // whatElseRequested, not just aiAttempted: EAGER prefetch may
+        // already be running (or done) in the background, but this card --
+        // and its "No related phrases" / "Generating..." states -- stays
+        // hidden until the caregiver actually asks, per their explicit
+        // request. aiAttempted still decides *which* state to show once it
+        // is visible (see below), and also keeps the card from flickering
+        // away mid-generation (see onDeviceGenerating's comment).
+        if (result == null && whatElseRequested && lastUtterance.isNotBlank() && aiAttempted) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp),
