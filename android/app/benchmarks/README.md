@@ -62,6 +62,43 @@ phrases, 0 failures. The spread here (2.9s-7.7s) is real call-to-call
 variance even on a cool, unthrottled device -- some phrases legitimately
 produce more tokens than others -- not measurement noise to explain away.
 
+**Stale as of the on-device English gloss addition** (`generateWhatElse` now
+also runs 3 sequential `OnDeviceTranslator.translateToEnglish` calls per
+request) -- this table predates that and needs a re-run to include it. Not
+re-run yet here because a full 20-call pass reliably hits the memory issue
+below.
+
+## Memory: the LLM alone already runs at the device's ceiling
+
+`checkMemoryFootprint` in the same test class measures PSS (proportional
+set size) around one `generateWhatElse` call. On the same Pixel 11:
+
+| Point | PSS |
+|---|---|
+| Idle | 147MB |
+| Right after LLM generation (before any gloss translation) | **3004MB** |
+| After translating all 3 glosses | 3091MB |
+
+The LLM *by itself* already sits at ~3004MB -- essentially at this device's
+`memory.high` cgroup ceiling (`memHigh=3221225472` bytes = 3072MB, read from
+`MemoryLimiter` logcat lines). Gloss translation adds ~90MB on top, which
+isn't fatal for one request (`memory.high` is a soft/throttling signal,
+not an instant kill) but is exactly the kind of margin that turns into one:
+running the 20-phrase `benchmarkGenerateWhatElse` benchmark with gloss
+translation included got the app process **killed outright** by the OS
+(`MemoryLimiter: killing process ...`) after `anon+swap` stayed over the
+3GB line for about 90 seconds straight.
+
+This is a pre-existing fragility in the LLM's own footprint (Qwen3.5-4B at
+this quantization + its 2048-token context, per `llama_bridge.cpp`), not
+something the gloss translation invented -- it just spends down margin that
+was already almost gone. `OnDeviceLlmConfig.PrefetchMode.ON_DEMAND` reduces
+how often this window gets hit in real usage (generation only on an actual
+"what else?" ask, not after every phrase); it doesn't remove the ceiling.
+Reducing the LLM's own footprint (shorter context, a smaller model) is the
+real fix if this proves fatal in practice -- see `checkMemoryFootprint`'s
+doc comment and `OnDeviceLlm.generateWhatElse`'s own "MEMORY" comment.
+
 Levers worth trying against this baseline before assuming a change helped:
 - Shorten the persona/few-shot system prompt (`personas/caregiver_infant.json`,
   `examples/few_shot_examples.caregiver_infant.by_language.json`) -- less to

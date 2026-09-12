@@ -152,7 +152,9 @@ object OnDeviceLlm {
      * PromptComposer. Loads the model on first call (or after an idle
      * unload), reuses it while it stays warm -- but reloads it when
      * [languageCode] changes, since its system prompt can only be set once
-     * per load. Throws on failure -- callers (Phase 7) are expected to catch
+     * per load. Each returned [Phrase.glossEn] is an on-device English
+     * translation of that suggestion (best-effort; empty if translation
+     * fails). Throws on failure -- callers (Phase 7) are expected to catch
      * and fall back to the network path, not surface this directly.
      */
     suspend fun generateWhatElse(context: Context, heard: String, languageCode: String): List<Phrase> = mutex.withLock {
@@ -179,13 +181,47 @@ object OnDeviceLlm {
                 thinkTag.replace(raw, "")
             }
 
-            val phrases = cleaned
+            // English gloss for each suggestion, same on-device ML Kit path
+            // as the hands-free transcript gloss (OnDeviceTranslator.kt) --
+            // reused, not reimplemented, so it shares that model's one-time
+            // download and caching. Sequential rather than concurrent: all
+            // three share one cached Translator instance for this language
+            // pair, and ML Kit's Translator isn't documented as safe for
+            // concurrent translate() calls. Degrades to "" per-phrase on
+            // failure (e.g. model not downloaded yet, no wifi) rather than
+            // failing the whole request -- the phrase itself is the part
+            // that matters; the gloss is a nice-to-have, same reasoning as
+            // the transcript gloss's own "fails silently" doc comment.
+            //
+            // MEMORY -- measured directly on a Pixel 11: the LLM alone
+            // already sits at ~3004MB PSS right here, essentially at the
+            // device's ~3072MB (3GB) memory.high cgroup ceiling, and these
+            // translate() calls add another ~90MB on top. A single request
+            // isn't fatal (memory.high is a soft/throttling signal), but
+            // *sustained* excess is -- 20 back-to-back generateWhatElse
+            // calls got this process killed outright by the OS's
+            // MemoryLimiter after ~90s over the line. PrefetchMode.ON_DEMAND
+            // (OnDeviceLlmConfig.kt) is the mitigation available today;
+            // shrinking the LLM's own footprint (smaller context, a smaller
+            // model) is the real fix if this proves fatal in practice.
+            val targetLanguage = SupportedLanguages.byCode(languageCode)
+            // Materialized to a concrete List first, then mapped separately
+            // -- Sequence's map/filter/take are lazy, so their transform
+            // lambdas run inside a hidden iterator class rather than being
+            // inlined into this function, which the compiler won't let call
+            // a suspend function (translateToEnglish below) from.
+            val phraseTexts = cleaned
                 .lineSequence()
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
                 .take(3)
-                .map { Phrase(ru = it, glossEn = "") }
                 .toList()
+            val phrases = phraseTexts.map { text ->
+                val gloss = runCatching {
+                    OnDeviceTranslator.translateToEnglish(text, targetLanguage)
+                }.getOrDefault("")
+                Phrase(ru = text, glossEn = gloss)
+            }
 
             lastError = null
             scheduleIdleUnload()

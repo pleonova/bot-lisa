@@ -220,11 +220,17 @@ High-level, in rough build order — details live in the status tables above,
   (default: instant answers, but runs after every phrase and auto-backs-off
   once `OnDeviceLlm.isThermallyElevated`) or **On-demand** (only generates
   when asked, at the cost of a short pause). `OnDeviceLlmConfig.PrefetchMode`.
-- **"What else?" latency benchmark** — `WhatElseBenchmarkTest`
+- **English glosses on AI suggestions** — `generateWhatElse` translates each
+  on-device suggestion to English via the same on-device ML Kit path as the
+  transcript gloss (`OnDeviceTranslator`), so AI phrases show a gloss the
+  same way curated-library ones already did. Degrades to no gloss on
+  failure rather than failing the whole request.
+- **"What else?" latency + memory benchmarks** — `WhatElseBenchmarkTest`
   (`android/app/src/androidTest/`) times `generateWhatElse` over 20 real
-  phrases on-device and reports mean/std/min/max; baselines live in
-  `android/app/benchmarks/README.md` for checking whether a future change
-  actually helps.
+  phrases on-device and reports mean/std/min/max, plus a `checkMemoryFootprint`
+  test; baselines and a real finding — the LLM alone already runs at this
+  device's ~3GB memory ceiling, and sustained eager usage can get the app
+  killed by the OS — live in `android/app/benchmarks/README.md`.
 
 ## Ideas
 

@@ -2,6 +2,7 @@ package com.botlisa.app
 
 import android.content.Context
 import android.os.Build
+import android.os.Debug
 import android.os.PowerManager
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -92,6 +93,39 @@ class WhatElseBenchmarkTest {
     )
 
     private val languageCode = SupportedLanguages.RUSSIAN.code
+
+    /**
+     * Single-call PSS footprint of [OnDeviceLlm.generateWhatElse] -- found
+     * (2026-09-11, Pixel 11) that the LLM alone already runs at ~3GB, right
+     * at the device's own memory.high cgroup ceiling, before this test's
+     * on-device gloss translation adds anything: idle ~147MB -> ~3004MB
+     * right after LLM generation -> ~3091MB after translating all three
+     * glosses. A single call isn't fatal (memory.high is a soft/throttling
+     * signal, not an instant kill), but [benchmarkGenerateWhatElse]'s 20
+     * back-to-back calls got this process killed outright by the OS after
+     * staying over that line for ~90s. See android/app/benchmarks/README.md
+     * and OnDeviceLlm.generateWhatElse's own "MEMORY" doc comment.
+     */
+    @Test
+    fun checkMemoryFootprint() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        assumeTrue(
+            "Skipping: on-device model not downloaded/ready on this device.",
+            OnDeviceLlm.canGenerate(context),
+        )
+
+        fun pssMb() = Debug.getPss() / 1024
+
+        val beforeMb = pssMb()
+        val phrases = OnDeviceLlm.generateWhatElse(context, samplePhrases.first(), languageCode)
+        val afterMb = pssMb()
+
+        val summary = "PSS before=${beforeMb}MB after=${afterMb}MB (delta=${afterMb - beforeMb}MB), " +
+            "${phrases.size} phrases generated"
+        Log.i(TAG, summary)
+        println(summary)
+        phrases.forEach { Log.i(TAG, "ru=\"${it.ru}\" glossEn=\"${it.glossEn}\"") }
+    }
 
     @Test
     fun benchmarkGenerateWhatElse() = runBlocking {
