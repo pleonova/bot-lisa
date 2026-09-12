@@ -1468,7 +1468,7 @@ fun LisaScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Text("Related phrases:", style = MaterialTheme.typography.labelLarge)
+                            Text("Related phrases for:", style = MaterialTheme.typography.labelLarge)
                             // Deliberately plain-text, not a subtler icon --
                             // the user explicitly wants it obvious which
                             // source answered, not a detail you have to
@@ -1486,10 +1486,10 @@ fun LisaScreen(
                             }
                         }
                         Text(
-                            "\"${r.input}\"",
-                            style = MaterialTheme.typography.bodySmall,
+                            r.input,
+                            style = MaterialTheme.typography.titleMedium,
                             fontStyle = FontStyle.Italic,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = MaterialTheme.colorScheme.primary,
                         )
                         RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
                     } else if (aiPending) {
@@ -1527,7 +1527,7 @@ fun LisaScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text("Related phrases:", style = MaterialTheme.typography.labelLarge)
+                        Text("Related phrases for:", style = MaterialTheme.typography.labelLarge)
                         Surface(
                             shape = RoundedCornerShape(6.dp),
                             color = MaterialTheme.colorScheme.secondaryContainer,
@@ -1543,10 +1543,10 @@ fun LisaScreen(
                     when {
                         relatedForDisplay.isNotEmpty() -> {
                             Text(
-                                "“$lastUtterance”",
-                                style = MaterialTheme.typography.bodySmall,
+                                lastUtterance,
+                                style = MaterialTheme.typography.titleMedium,
                                 fontStyle = FontStyle.Italic,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = MaterialTheme.colorScheme.primary,
                             )
                             RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
                         }
