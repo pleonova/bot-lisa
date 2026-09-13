@@ -164,6 +164,10 @@ fun LisaScreen(
     var transcriptGloss by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var errorText by rememberSaveable { mutableStateOf<String?>(null) }
+    // True when errorText is a ModelDownloadRequiredException surfaced from
+    // a wifi-only attempt -- offers the caregiver a retry that allows the
+    // one-time model download over cellular data instead of waiting for wifi.
+    var offerCellularDownloadRetry by rememberSaveable { mutableStateOf(false) }
     var result by rememberSaveable { mutableStateOf<AssistResult?>(null) }
 
     // Which related/suggested phrase the next-suggestion trigger should
@@ -343,14 +347,29 @@ fun LisaScreen(
         ServerConfig.setApiKey(context, newKey)
     }
 
-    fun onSend() {
+    // fun onSend(allowCellularDownload: Boolean = false) below: true only
+    // when replaying a lookup after the caregiver tapped "Download over
+    // cellular data" on a ModelDownloadRequiredException -- see
+    // offerCellularDownloadRetry. Not persisted past this one call, so a
+    // later lookup for a *different* not-yet-downloaded language still asks
+    // first rather than silently spending cellular data every time.
+    fun onSend(allowCellularDownload: Boolean = false) {
         if (input.isBlank()) return
         errorText = null
+        offerCellularDownloadRetry = false
         // Drop the previous card straight away so a new lookup (typed or
         // spoken) doesn't sit under a stale result until the response lands.
         result = null
         isLoading = true
         scope.launch {
+            // Set when an on-device translate attempt below fails specifically
+            // because its model hasn't downloaded yet -- kept aside rather than
+            // written to errorText immediately, since a later attempt (backend,
+            // or the offline fallback) may still succeed and make it moot. Only
+            // surfaced if nothing else in this lookup pans out, so the
+            // caregiver gets the actionable "connect to wifi" reason instead of
+            // a generic "couldn't reach the server" that hides the real cause.
+            var modelDownloadError: String? = null
             try {
                 // Translate mode -- English (Latin-script) word/phrase in,
                 // selected target language out -- needs no backend, and
@@ -364,12 +383,15 @@ fun LisaScreen(
                 val looksLikeExpand = input.any { it.isLetter() && it.code > 0x024F }
                 if (!looksLikeExpand) {
                     val translated = try {
-                        OnDeviceTranslator.translate(input, targetLanguage)
+                        OnDeviceTranslator.translate(input, targetLanguage, allowCellularDownload)
+                    } catch (e: ModelDownloadRequiredException) {
+                        modelDownloadError = e.message
+                        null
                     } catch (_: Exception) {
-                        // Model not downloaded yet (first use needs wifi), or
-                        // an ML Kit failure -- fall through to the server as a
-                        // backup rather than dead-ending. If that's also
-                        // unreachable the catch blocks below report it.
+                        // Some other ML Kit failure -- fall through to the
+                        // server as a backup rather than dead-ending. If
+                        // that's also unreachable the catch blocks below
+                        // report it.
                         null
                     }
                     if (translated != null) {
@@ -401,13 +423,16 @@ fun LisaScreen(
                         targetLanguage.code != SupportedLanguages.RUSSIAN.code
                     if (needsOnDevice) {
                         try {
-                            val translated = OnDeviceTranslator.translate(input, targetLanguage)
+                            val translated = OnDeviceTranslator.translate(input, targetLanguage, allowCellularDownload)
                             assist = assist.copy(
                                 source = "on_device",
                                 translation = Phrase(ru = translated, glossEn = input),
                             )
+                        } catch (e: ModelDownloadRequiredException) {
+                            errorText = "${e.message} Showing the placeholder instead."
+                            offerCellularDownloadRetry = !allowCellularDownload
                         } catch (e: Exception) {
-                            errorText = "On-device translation failed (${e.message}) -- showing the placeholder instead. First use needs wifi to download the translation model."
+                            errorText = "On-device translation failed (${e.message}) -- showing the placeholder instead."
                         }
                     }
                     // Read the translation back aloud -- the "one earbud in, talking
@@ -429,7 +454,7 @@ fun LisaScreen(
                 val hasNonLatinLetters = input.any { it.isLetter() && it.code > 0x024F }
                 val offline = if (!hasNonLatinLetters) {
                     try {
-                        val translated = OnDeviceTranslator.translate(input, targetLanguage)
+                        val translated = OnDeviceTranslator.translate(input, targetLanguage, allowCellularDownload)
                         AssistResult(
                             mode = "translate",
                             source = "on_device",
@@ -438,6 +463,9 @@ fun LisaScreen(
                             related = emptyList(),
                             latencyMs = 0.0,
                         )
+                    } catch (e: ModelDownloadRequiredException) {
+                        modelDownloadError = e.message
+                        null
                     } catch (_: Exception) {
                         null
                     }
@@ -457,6 +485,14 @@ fun LisaScreen(
                     result = offline
                     suggestionIndex = 0
                     errorText = "Server unreachable -- translated on-device instead.$emulatorUrlHint"
+                } else if (modelDownloadError != null) {
+                    // Neither the server nor on-device translation came
+                    // through -- lead with the actionable wifi reason rather
+                    // than the generic "server unreachable", since that's
+                    // almost certainly the real blocker here (this is the
+                    // first use of this language and there's no wifi).
+                    errorText = "$modelDownloadError Also couldn't reach the server: ${e.message}.$emulatorUrlHint"
+                    offerCellularDownloadRetry = !allowCellularDownload
                 } else {
                     errorText = "Couldn't reach the server: ${e.message}.$emulatorUrlHint"
                 }
@@ -1415,7 +1451,17 @@ fun LisaScreen(
         )
 
         errorText?.let {
-            Text(it, color = MaterialTheme.colorScheme.error)
+            Column {
+                Text(it, color = MaterialTheme.colorScheme.error)
+                if (offerCellularDownloadRetry) {
+                    TextButton(
+                        onClick = { onSend(allowCellularDownload = true) },
+                        contentPadding = PaddingValues(0.dp),
+                    ) {
+                        Text("Download over cellular data")
+                    }
+                }
+            }
         }
 
         result?.let { r ->

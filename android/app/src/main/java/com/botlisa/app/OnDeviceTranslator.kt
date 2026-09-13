@@ -6,9 +6,23 @@ import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.Translator
 import com.google.mlkit.nl.translate.TranslatorOptions
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+
+/**
+ * Thrown when the on-device model still hasn't downloaded after
+ * [OnDeviceTranslator]'s timeout -- almost always because the device isn't
+ * on wifi yet (ML Kit's requireWifi() gate) and this is the first time
+ * [languageName] has been used. Distinct from other ML Kit failures so
+ * callers can show the caregiver a specific, actionable reason instead of a
+ * generic "translation failed".
+ */
+class ModelDownloadRequiredException(languageName: String) : Exception(
+    "The $languageName translation model hasn't downloaded yet -- connect to wifi, or allow downloading over cellular data."
+)
 
 /**
  * On-device Google ML Kit translation, both directions:
@@ -50,20 +64,47 @@ object OnDeviceTranslator {
     // language is its own one-time ~30MB download, not worth burning
     // someone's cellular data plan on automatically. Once downloaded it's
     // cached on-device and every later call (wifi or not) is instant.
-    private val downloadConditions = DownloadConditions.Builder()
+    // Callers can pass allowCellular = true (after the caregiver explicitly
+    // opts in, see MainActivity.kt's "Download over cellular data" retry) to
+    // use [cellularAllowedConditions] instead.
+    private val wifiOnlyConditions = DownloadConditions.Builder()
         .requireWifi()
         .build()
+    private val cellularAllowedConditions = DownloadConditions.Builder().build()
+
+    private fun downloadConditionsFor(allowCellular: Boolean) =
+        if (allowCellular) cellularAllowedConditions else wifiOnlyConditions
+
+    // ML Kit's downloadModelIfNeeded() task only completes once its network
+    // condition is satisfied -- if that condition (wifi, by default) is
+    // never met, it never fails, it just never resolves. Without a timeout
+    // that leaves the caller's coroutine (and isLoading, in
+    // MainActivity.kt's onSend()) suspended forever instead of falling back
+    // or showing an error, which is exactly what happened for a language
+    // whose model hadn't been downloaded yet (e.g. Mandarin on a
+    // cellular-only device) while other, already-cached languages kept
+    // working. Generous enough to cover a full ~30MB download over slow
+    // cellular, not just a wifi wait.
+    private const val DOWNLOAD_TIMEOUT_MS = 45_000L
 
     /**
      * Downloads the on-device model for [target] if needed, then translates
-     * [text] into it. Throws on failure (e.g. model not yet downloaded and
-     * no wifi available right now) -- caller is responsible for catching
-     * this and showing a friendly message, see MainActivity.kt's onSend().
+     * [text] into it. Requires wifi for that download unless [allowCellular]
+     * is true. Throws [ModelDownloadRequiredException] if the model still
+     * isn't ready after the timeout, or a plain [Exception] on any other ML
+     * Kit failure -- caller is responsible for catching this and showing a
+     * friendly message, see MainActivity.kt's onSend().
      */
-    suspend fun translate(text: String, target: TargetLanguage): String {
+    suspend fun translate(text: String, target: TargetLanguage, allowCellular: Boolean = false): String {
         val translator = translatorFor(TranslateLanguage.ENGLISH, target.mlKitLanguage)
-        translator.downloadModelIfNeeded(downloadConditions).await()
-        return translator.translate(text).await()
+        try {
+            return withTimeout(DOWNLOAD_TIMEOUT_MS) {
+                translator.downloadModelIfNeeded(downloadConditionsFor(allowCellular)).await()
+                translator.translate(text).await()
+            }
+        } catch (_: TimeoutCancellationException) {
+            throw ModelDownloadRequiredException(target.displayName)
+        }
     }
 
     /**
@@ -71,11 +112,17 @@ object OnDeviceTranslator {
      * language) into English -- used for the small-print gloss under the
      * transcript. Own one-time per-language model download, same conditions.
      */
-    suspend fun translateToEnglish(text: String, from: TargetLanguage): String {
+    suspend fun translateToEnglish(text: String, from: TargetLanguage, allowCellular: Boolean = false): String {
         if (from.mlKitLanguage == TranslateLanguage.ENGLISH) return text
         val translator = translatorFor(from.mlKitLanguage, TranslateLanguage.ENGLISH)
-        translator.downloadModelIfNeeded(downloadConditions).await()
-        return translator.translate(text).await()
+        try {
+            return withTimeout(DOWNLOAD_TIMEOUT_MS) {
+                translator.downloadModelIfNeeded(downloadConditionsFor(allowCellular)).await()
+                translator.translate(text).await()
+            }
+        } catch (_: TimeoutCancellationException) {
+            throw ModelDownloadRequiredException(from.displayName)
+        }
     }
 
     // Intentionally never called from an Activity lifecycle method (e.g.
