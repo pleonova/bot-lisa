@@ -92,7 +92,7 @@ object PromptComposer {
         val blocks = (0 until demos.length()).map { i ->
             val demo = demos.getJSONObject(i)
             val responses = demo.getJSONArray("responses")
-            val lines = mutableListOf("Give me three follows to this: \"${demo.getString("heard")}\"")
+            val lines = mutableListOf("Heard: \"${demo.getString("heard")}\"")
             lines += (0 until responses.length()).map { responses.getString(it) }
             lines.joinToString("\n")
         }

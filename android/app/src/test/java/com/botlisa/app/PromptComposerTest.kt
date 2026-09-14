@@ -40,17 +40,17 @@ class PromptComposerTest {
             "Use 'your', not 'my', when referring to the child's things.\n" +
             "Stay closely tied to what was just heard; don't add unrelated objects.\n" +
             "Here are examples of the style and format expected:\n" +
-            "Give me three follows to this: \"Давай наденем твою пижамку.\"\n" +
+            "Heard: \"Давай наденем твою пижамку.\"\n" +
             "Подними ручки.\n" +
             "Просунь ручку в рукавчик.\n" +
             "Какая мягкая пижамка у тебя!\n" +
             "\n" +
-            "Give me three follows to this: \"Давай почитаем твою любимую книжку.\"\n" +
+            "Heard: \"Давай почитаем твою любимую книжку.\"\n" +
             "Какую книжку ты хочешь почитать?\n" +
             "Какая интересная сказка!\n" +
             "Посмотри на картинку, малыш.\n" +
             "Reply with the phrases only — one per line, no numbering, no preamble."
-        val expectedUser = "Give me three follows to this: \"спокойной ночи\""
+        val expectedUser = "Give me three follows to this: спокойной ночи"
 
         assertEquals(expectedSystem, prompt.system)
         assertEquals(expectedUser, prompt.user)
@@ -88,7 +88,7 @@ class PromptComposerTest {
 
         assert(prompt.system.contains("Everything you produce is in Spanish")) { prompt.system }
         assert(prompt.system.contains("Vamos a ponerte el pijama.")) { prompt.system }
-        assertEquals("Give me three follows to this: \"buenas noches\"", prompt.user)
+        assertEquals("Give me three follows to this: buenas noches", prompt.user)
     }
 
     @Test

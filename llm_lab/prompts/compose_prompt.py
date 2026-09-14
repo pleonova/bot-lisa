@@ -28,8 +28,7 @@ reference:
   - "bad_example" (str) + "good_examples" (list[str]) — a contrastive pair,
     rendered as a "- \"...\"" bullet block.
   - "few_shot_examples" (list of {"heard": str, "responses": [str, str, str]})
-    — full demonstrations, rendered as repeated "Give me three follows to
-    this: \"...\"" blocks.
+    — full demonstrations, rendered as repeated "Heard: \"...\"" blocks.
 A single examples file can define both if two different templates need them.
 
 Set generic=True (or omit "examples" from the case) to test whether the
@@ -73,7 +72,7 @@ def _format_good_examples(items: list[str]) -> str:
 def _format_few_shot_examples(demos: list[dict]) -> str:
     blocks = []
     for demo in demos:
-        lines = [f'Give me three follows to this: "{demo["heard"]}"', *demo["responses"]]
+        lines = [f'Heard: "{demo["heard"]}"', *demo["responses"]]
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
 
