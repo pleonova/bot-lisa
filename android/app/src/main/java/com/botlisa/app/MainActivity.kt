@@ -685,9 +685,19 @@ fun LisaScreen(
         rememberUpdatedState<(String, SpeechAssistant.State) -> Unit> { text, state ->
             // Remember the last plain utterance for the meaning / what-else /
             // answer commands to act on, and bring the chips back regardless
-            // of whether this utterance runs a lookup below.
+            // of whether this utterance runs a lookup below. Also drop any
+            // stale `result` from a previous utterance's explicit "how to
+            // answer?" (or typed search) -- onSend() itself used to do this
+            // on *every* utterance back when it ran automatically; now that
+            // it only runs on an explicit request, nothing else clears it,
+            // so a leftover non-null `result` would keep the old answer's
+            // card showing (with the wrong phrase) AND suppress the
+            // standalone AI card below for every later utterance, since that
+            // card only renders when `result == null`. Found as "eager mode
+            // doesn't seem to work" after using "как ответить?" even once.
             if (state == SpeechAssistant.State.LISTENING_DEFAULT && text.isNotBlank()) {
                 lastUtterance = text
+                result = null
                 commandsDismissed = false // fresh utterance -> chips come back
             }
             // The English word after the translate trigger always runs a
