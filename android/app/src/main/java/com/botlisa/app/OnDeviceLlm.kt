@@ -210,10 +210,23 @@ object OnDeviceLlm {
             // lambdas run inside a hidden iterator class rather than being
             // inlined into this function, which the compiler won't let call
             // a suspend function (translateToEnglish below) from.
+            // Despite the persona's explicit "no preamble" instruction, the
+            // model occasionally opens with a meta-commentary line instead
+            // of (or as well as) the three phrases -- e.g. "Here are three
+            // options for answering the phrase 'X':" -- which would
+            // otherwise eat one of the three slots below. Not a prompt or
+            // parsing bug; a genuine small-model instruction-adherence slip,
+            // confirmed by grepping every prompt asset for that exact
+            // sentence and finding it nowhere. Every real response phrase in
+            // the few-shot examples ends in ".", "!", or "?"; a line ending
+            // in a colon is a strong, safe signal it's an intro line instead
+            // -- filtering it out is a heuristic backstop, not a guarantee
+            // (a preamble that doesn't end in a colon would still slip
+            // through).
             val phraseTexts = cleaned
                 .lineSequence()
                 .map { it.trim() }
-                .filter { it.isNotEmpty() }
+                .filter { it.isNotEmpty() && !it.endsWith(":") && !it.endsWith("：") }
                 .take(3)
                 .toList()
             val phrases = phraseTexts.map { text ->
