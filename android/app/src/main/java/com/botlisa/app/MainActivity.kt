@@ -873,6 +873,12 @@ fun LisaScreen(
     // at all without one. See ListeningForegroundService.kt.
     fun startHandsFree() {
         assistantError = null
+        // Drop focus from the input field if switching straight from typing
+        // mode -- handleTranscript guards writes on !inputFocused (so live
+        // transcript updates never clobber active typing), and that focus
+        // otherwise lingers across the switch, silently freezing the
+        // transcript for the entire hands-free session.
+        focusManager.clearFocus()
         assistant.start()
         ListeningForegroundService.start(context)
         // Pre-load the on-device model + system prompt now, while the
