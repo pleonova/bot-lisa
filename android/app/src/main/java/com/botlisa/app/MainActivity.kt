@@ -370,6 +370,13 @@ fun LisaScreen(
         // Drop the previous card straight away so a new lookup (typed or
         // spoken) doesn't sit under a stale result until the response lands.
         result = null
+        // Same bookkeeping handleAssistantUtterance does for a spoken
+        // utterance (see its comment) -- a typed phrase is just as much
+        // "the last utterance" as a spoken one, so eager prefetch, the
+        // what-else card, and requestWhatElse()/speakMeaningOfLast()/
+        // requestAnswerSuggestions() all key off it the same way regardless
+        // of how the phrase got here.
+        lastUtterance = input
         isLoading = true
         scope.launch {
             // Set when an on-device translate attempt below fails specifically
@@ -618,14 +625,14 @@ fun LisaScreen(
             return
         }
         val source = OnDeviceLlmConfig.getWhatElseSource(context)
-        if (lastUtterance.isBlank() ||
+        val utterance = lastUtterance.ifBlank { input }
+        if (utterance.isBlank() ||
             source == OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY ||
             !OnDeviceLlm.isDeviceCapable(context) ||
             OnDeviceLlmConfig.getModelState(context) != OnDeviceLlmConfig.ModelState.READY
         ) {
             return // genuinely nothing to generate (no utterance, library-only, or model not downloaded) -- no-op
         }
-        val utterance = lastUtterance
         val language = targetLanguage
         scope.launch {
             eagerSkippedForHeat = false // an explicit ask always tries, heat or not
@@ -1422,22 +1429,27 @@ fun LisaScreen(
             // still holding the last transcript (assistantState flips to
             // IDLE, but the text isn't cleared) used to read as "you're
             // typing now" and hide the chips out from under you the moment
-            // you tapped the mic to stop. Gated on inputFocused instead:
-            // true text mode (IDLE + the field actually focused, i.e. you
-            // tapped in to type) still hides them once there's text, since
-            // the keyboard's Search key does the same job then.
-            visible = !commandsDismissed &&
-                (assistantState != SpeechAssistant.State.IDLE || !inputFocused || input.isBlank()),
+            // you tapped the mic to stop.
+            visible = !commandsDismissed,
             items = buildList {
                 add(
-                    // Always just speaks the phrase, in both modes -- unlike
-                    // the other three, "translate" has no tap-to-invoke
-                    // equivalent: the real command needs an English word
-                    // *after* it, which a single tap has no way to supply.
                     CommandChipSpec(
                         CommandKind.TRANSLATE, translateTriggerPhrase,
                         TriggerPhraseConfig.TRANSLATE_TRIGGER_EN,
-                    ) { speakTriggerPhrase(translateTriggerPhrase) },
+                    ) {
+                        // Text mode with something already typed: the chip
+                        // IS the translate action, same as tapping the
+                        // keyboard's Search key -- run the lookup on what's
+                        // in the field right now. Otherwise (hands-free, or
+                        // nothing typed yet to translate) there's nothing to
+                        // act on, so just demonstrate the trigger phrase like
+                        // the other three chips do in that situation.
+                        if (assistantState == SpeechAssistant.State.IDLE && input.isNotBlank()) {
+                            onSend()
+                        } else {
+                            speakTriggerPhrase(translateTriggerPhrase)
+                        }
+                    },
                 )
                 add(
                     CommandChipSpec(
@@ -1498,13 +1510,15 @@ fun LisaScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    // The related-phrases list always comes from the Russian
-                    // curated library. In expand mode it's the whole point; in
-                    // translate mode it's only relevant when the target
-                    // language actually is Russian.
-                    val relatedRelevant =
-                        r.mode == "expand" || targetLanguage.code == SupportedLanguages.RUSSIAN.code
-
+                    // The related-phrases section below (relatedForDisplay)
+                    // already folds in the Russian-only curated-library
+                    // fallback via curatedRelatedSupported, and the AI path
+                    // works for any target language -- so translate mode
+                    // shares the exact same related-phrases rendering as
+                    // expand mode instead of a separate, library-only,
+                    // Russian-only block. This is what lets a typed phrase's
+                    // eager/on-demand "what else?" suggestions actually show
+                    // up here, the same as a spoken utterance's.
                     if (r.mode == "translate" && r.translation != null) {
                         Text("Translation:", style = MaterialTheme.typography.labelLarge)
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1529,48 +1543,42 @@ fun LisaScreen(
                                 )
                             }
                         }
-                        if (relatedRelevant && r.related.isNotEmpty()) {
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "More related phrases (Russian curated library):",
-                                style = MaterialTheme.typography.labelMedium,
-                            )
-                            RelatedPhraseList(r.related, speakingIndex, ::speakRelated)
-                        }
-                    } else if (relatedForDisplay.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text("Related phrases for:", style = MaterialTheme.typography.labelLarge)
-                            // Deliberately plain-text, not a subtler icon --
-                            // the user explicitly wants it obvious which
-                            // source answered, not a detail you have to
-                            // notice. See ON_DEVICE_LLM_PLAN.md Phase 7.
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = MaterialTheme.colorScheme.secondaryContainer,
+                        Spacer(Modifier.height(4.dp))
+                    }
+                    when {
+                        relatedForDisplay.isNotEmpty() -> {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
-                                Text(
-                                    if (usingAiSuggestions) "AI" else "Library",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                )
+                                Text("Related phrases for:", style = MaterialTheme.typography.labelLarge)
+                                // Deliberately plain-text, not a subtler icon --
+                                // the user explicitly wants it obvious which
+                                // source answered, not a detail you have to
+                                // notice. See ON_DEVICE_LLM_PLAN.md Phase 7.
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                ) {
+                                    Text(
+                                        if (usingAiSuggestions) "AI" else "Library",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    )
+                                }
                             }
+                            Text(
+                                r.input,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontStyle = FontStyle.Italic,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
                         }
-                        Text(
-                            r.input,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontStyle = FontStyle.Italic,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
-                    } else if (aiPending) {
-                        GeneratingRow("Generating AI suggestions for \"${r.input}\"…")
-                    } else {
-                        Text(
+                        aiPending -> GeneratingRow("Generating AI suggestions for \"${r.input}\"…")
+                        else -> Text(
                             "No related phrases for \"${r.input}\".",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
