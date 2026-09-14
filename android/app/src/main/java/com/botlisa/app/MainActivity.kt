@@ -265,12 +265,14 @@ fun LisaScreen(
     var onDeviceGenerating by remember { mutableStateOf(false) }
 
     // True once the caregiver has explicitly asked "what else?" for
-    // lastUtterance (spoken trigger, or tapping its chip/button) --
-    // separate from onDeviceGenerating/onDeviceRelated so background
-    // EAGER prefetch can quietly get a head start without the result card
-    // popping up before anyone actually asked for it. Reset to false
-    // whenever lastUtterance changes (see the prefetch LaunchedEffect
-    // below); set true at the top of requestWhatElse().
+    // lastUtterance (spoken trigger, or tapping its chip/button) -- only
+    // matters in ON_DEMAND mode, where nothing has been generated yet and
+    // the result card must stay hidden until asked (see its visibility
+    // check below: `eagerMode || whatElseRequested`). In EAGER mode the
+    // card shows automatically once there's something to show regardless
+    // of this flag -- that's the point of "eager". Reset to false whenever
+    // lastUtterance changes (see the prefetch LaunchedEffect below); set
+    // true at the top of requestWhatElse().
     var whatElseRequested by remember { mutableStateOf(false) }
 
     // True when the caregiver asked "what else?" while a generation was
@@ -279,6 +281,14 @@ fun LisaScreen(
     // in-flight call lands instead of starting a redundant second one.
     // Cleared once consumed.
     var speakWhenReady by remember { mutableStateOf(false) }
+
+    // True when EAGER prefetch would have run for lastUtterance but backed
+    // off because the device is thermally elevated (see
+    // OnDeviceLlm.isThermallyElevated). Drives an explicit "device's too
+    // warm" message in the result card instead of just silently producing
+    // nothing -- found via a real device test where "eager" quietly did
+    // nothing on a warm phone with no indication why.
+    var eagerSkippedForHeat by remember { mutableStateOf(false) }
 
     // TTS playback state. Drives the speaker-icon pulse in the result card,
     // and -- crucially -- mutes the mic (isMuted below) so the assistant
@@ -618,6 +628,7 @@ fun LisaScreen(
         val utterance = lastUtterance
         val language = targetLanguage
         scope.launch {
+            eagerSkippedForHeat = false // an explicit ask always tries, heat or not
             onDeviceGenerating = true
             onDeviceRelated = runCatching {
                 OnDeviceLlm.generateWhatElse(context, utterance, language.code)
@@ -772,35 +783,42 @@ fun LisaScreen(
     // hands-free flow nobody's looking at the screen for. Compose's
     // cancel-and-relaunch-on-key-change handles abandoning a stale
     // in-flight generation when a newer utterance arrives, same as the
-    // transcriptGloss effect above. Only runs in PrefetchMode.EAGER, and
-    // even then backs off once the device is thermally elevated -- every
-    // phrase triggering a multi-second, multi-core inference measurably
-    // heats the device (see OnDeviceLlmConfig.PrefetchMode's doc comment
-    // and android/app/benchmarks/README.md). ON_DEMAND mode, or an EAGER
-    // request skipped for heat, generates only when requestWhatElse() is
-    // actually called. LIBRARY_ONLY mode and a not-ready model skip the
-    // call either way -- no point spending battery/time on a generation
-    // nothing will display. See ON_DEVICE_LLM_PLAN.md Phase 7.
+    // transcriptGloss effect above. Only runs in PrefetchMode.EAGER --
+    // ON_DEMAND generates only when requestWhatElse() is actually called.
+    // LIBRARY_ONLY mode and a not-ready model skip the call either way --
+    // no point spending battery/time on a generation nothing will display.
+    // See ON_DEVICE_LLM_PLAN.md Phase 7.
     LaunchedEffect(lastUtterance, targetLanguage) {
         onDeviceRelated = null
         onDeviceGenerating = false
         whatElseRequested = false // fresh utterance -> hasn't been asked about yet
+        eagerSkippedForHeat = false
         val source = OnDeviceLlmConfig.getWhatElseSource(context)
-        val eager = OnDeviceLlmConfig.getPrefetchMode(context) == OnDeviceLlmConfig.PrefetchMode.EAGER &&
-            !OnDeviceLlm.isThermallyElevated(context)
-        if (eager &&
-            lastUtterance.isNotBlank() &&
+        val eagerMode = OnDeviceLlmConfig.getPrefetchMode(context) == OnDeviceLlmConfig.PrefetchMode.EAGER
+        val eligible = lastUtterance.isNotBlank() &&
             source != OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY &&
             OnDeviceLlm.canGenerate(context)
-        ) {
-            onDeviceGenerating = true
-            onDeviceRelated = runCatching {
-                OnDeviceLlm.generateWhatElse(context, lastUtterance, targetLanguage.code)
-            }.getOrNull()
-            onDeviceGenerating = false
-            if (speakWhenReady) {
-                speakWhenReady = false
-                speakNextSuggestion()
+        if (eagerMode && eligible) {
+            // Every phrase triggering a multi-second, multi-core inference
+            // measurably heats the device (see OnDeviceLlmConfig.PrefetchMode's
+            // doc comment and android/app/benchmarks/README.md) -- back off
+            // once it's already warm, but say so rather than quietly doing
+            // nothing (the result card surfaces eagerSkippedForHeat below).
+            // requestWhatElse() doesn't check this, so explicitly asking
+            // still works despite the heat -- this only affects the
+            // automatic background attempt.
+            if (OnDeviceLlm.isThermallyElevated(context)) {
+                eagerSkippedForHeat = true
+            } else {
+                onDeviceGenerating = true
+                onDeviceRelated = runCatching {
+                    OnDeviceLlm.generateWhatElse(context, lastUtterance, targetLanguage.code)
+                }.getOrNull()
+                onDeviceGenerating = false
+                if (speakWhenReady) {
+                    speakWhenReady = false
+                    speakNextSuggestion()
+                }
             }
         }
     }
@@ -1566,15 +1584,22 @@ fun LisaScreen(
         // whenever there's no backend `result` to show them inside (true
         // for every non-Russian target always, and now true for Russian
         // too since a plain utterance no longer auto-runs the backend
-        // "expand" lookup -- see handleAssistantUtterance). Gated on
-        // whatElseRequested, not just aiAttempted: EAGER prefetch may
-        // already be running (or done) in the background, but this card --
-        // and its "No related phrases" / "Generating..." states -- stays
-        // hidden until the caregiver actually asks, per their explicit
-        // request. aiAttempted still decides *which* state to show once it
-        // is visible (see below), and also keeps the card from flickering
-        // away mid-generation (see onDeviceGenerating's comment).
-        if (result == null && whatElseRequested && lastUtterance.isNotBlank() && aiAttempted) {
+        // "expand" lookup -- see handleAssistantUtterance).
+        //
+        // Visibility depends on the mode: EAGER shows this automatically
+        // once there's something to show (that's the point of "eager" --
+        // found via a real device test where gating it behind
+        // whatElseRequested made EAGER indistinguishable from ON_DEMAND).
+        // ON_DEMAND stays hidden until the caregiver actually asks, so a
+        // premature "No suggestions" doesn't pop up unprompted -- gated on
+        // whatElseRequested for that mode. aiAttempted (or
+        // eagerSkippedForHeat) still decides *which* state to show once
+        // visible (see below), and also keeps the card from flickering away
+        // mid-generation (see onDeviceGenerating's comment).
+        val eagerMode = OnDeviceLlmConfig.getPrefetchMode(context) == OnDeviceLlmConfig.PrefetchMode.EAGER
+        if (result == null && lastUtterance.isNotBlank() && (eagerMode || whatElseRequested) &&
+            (aiAttempted || eagerSkippedForHeat)
+        ) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -1609,6 +1634,14 @@ fun LisaScreen(
                             RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
                         }
                         aiPending -> GeneratingRow("Generating suggestions for “$lastUtterance”…")
+                        eagerSkippedForHeat ->
+                            Text(
+                                "Skipped generating suggestions for “$lastUtterance” -- " +
+                                    "device is running warm. Say “$nextSuggestionTriggerPhrase” " +
+                                    "to generate one anyway.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         else ->
                             Text(
                                 "No suggestions for “$lastUtterance”.",

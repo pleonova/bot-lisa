@@ -81,19 +81,26 @@ object OnDeviceLlm {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && hasEnoughRam(context)
 
     /**
-     * True once [PowerManager.getCurrentThermalStatus] is above NONE --
-     * i.e. the device is already running warm. Used to make EAGER prefetch
-     * back off rather than pile more heat-generating inference onto a
-     * device that's already elevated (measured directly: 20 back-to-back
-     * "what else?" calls pushed a Pixel 11 from NONE to LIGHT in under two
-     * minutes -- see android/app/benchmarks/README.md). API 29+; below
-     * that this can't be observed and reports false (not elevated) --
-     * moot in practice since [isDeviceCapable] already requires API 33+.
+     * True once [PowerManager.getCurrentThermalStatus] is at MODERATE or
+     * above -- i.e. the device is genuinely running hot, not just barely
+     * off NONE. Used to make EAGER prefetch back off rather than pile more
+     * heat-generating inference onto an already-hot device (measured
+     * directly: 20 back-to-back "what else?" calls pushed a Pixel 11 from
+     * NONE to LIGHT in under two minutes -- see
+     * android/app/benchmarks/README.md). Deliberately NOT triggered by
+     * LIGHT alone -- Android's own docs describe LIGHT as "UX is not
+     * impacted", and a real device sits there fairly often just from
+     * ambient conditions or charging; gating on it made EAGER skip its
+     * automatic attempt far more often than "the device is actually too
+     * hot" warrants. An explicit ask (requestWhatElse() in MainActivity)
+     * never checks this at all -- it always tries. API 29+; below that this
+     * can't be observed and reports false (not elevated) -- moot in
+     * practice since [isDeviceCapable] already requires API 33+.
      */
     fun isThermallyElevated(context: Context): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-        return powerManager.currentThermalStatus > PowerManager.THERMAL_STATUS_NONE
+        return powerManager.currentThermalStatus >= PowerManager.THERMAL_STATUS_MODERATE
     }
 
     private fun hasEnoughRam(context: Context): Boolean {
