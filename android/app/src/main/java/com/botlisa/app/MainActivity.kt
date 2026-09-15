@@ -370,13 +370,6 @@ fun LisaScreen(
         // Drop the previous card straight away so a new lookup (typed or
         // spoken) doesn't sit under a stale result until the response lands.
         result = null
-        // Same bookkeeping handleAssistantUtterance does for a spoken
-        // utterance (see its comment) -- a typed phrase is just as much
-        // "the last utterance" as a spoken one, so eager prefetch, the
-        // what-else card, and requestWhatElse()/speakMeaningOfLast()/
-        // requestAnswerSuggestions() all key off it the same way regardless
-        // of how the phrase got here.
-        lastUtterance = input
         isLoading = true
         scope.launch {
             // Set when an on-device translate attempt below fails specifically
@@ -422,6 +415,16 @@ fun LisaScreen(
                         )
                         res.translation?.let { speaker?.speak(it.ru) }
                         result = res
+                        // "Last utterance" for eager prefetch / what-else /
+                        // meaning / answer must be the *target-language*
+                        // phrase, not the English input -- generateWhatElse's
+                        // few-shot prompt is entirely target-language
+                        // examples (see PromptComposer.kt / what_else.json),
+                        // so feeding it English text back produces garbage or
+                        // empty suggestions. The translation is what's
+                        // actually now "in play" for the caregiver to build
+                        // on. See ON_DEVICE_LLM_PLAN.md Phase 7.
+                        lastUtterance = translated
                         suggestionIndex = 0
                         isLoading = false
                         return@launch
@@ -457,6 +460,16 @@ fun LisaScreen(
                     assist.translation?.let { speaker?.speak(it.ru) }
                 }
                 result = assist
+                // Target-language text only -- see the on-device translate
+                // branch above for why. Translate mode: the translation that
+                // won, if any (leave lastUtterance alone on outright
+                // failure). Expand mode: input was already target-language
+                // text going in.
+                if (assist.mode == "translate") {
+                    assist.translation?.let { lastUtterance = it.ru }
+                } else {
+                    lastUtterance = input
+                }
                 // A fresh lookup means a fresh suggestion list -- next-suggestion
                 // cycling (see speakNextSuggestion()) should start from the top.
                 suggestionIndex = 0
@@ -499,6 +512,7 @@ fun LisaScreen(
                 }
                 if (offline != null) {
                     offline.translation?.let { speaker?.speak(it.ru) }
+                    offline.translation?.let { lastUtterance = it.ru }
                     result = offline
                     suggestionIndex = 0
                     errorText = "Server unreachable -- translated on-device instead.$emulatorUrlHint"
