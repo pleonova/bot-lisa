@@ -338,13 +338,20 @@ class SpeechAssistant(
                 -> {
                     mainHandler.postDelayed({ if (!stoppedByUser) rearm() }, 200)
                 }
-                // Transient recogniser hiccups -- keep listening rather than
-                // dying, unless it keeps happening with nothing recognised in
-                // between, which (unlike the no-match case above) suggests
-                // something's actually wrong with the recogniser/service.
+                // Transient recogniser/network hiccups -- keep listening
+                // rather than dying, unless it keeps happening with nothing
+                // recognised in between, which (unlike the no-match case
+                // above) suggests something's actually wrong with the
+                // recogniser/service. Google's on-device recognizer briefly
+                // drops its connection to the cloud backend fairly often
+                // (SERVER_DISCONNECTED/NETWORK on a weak signal), so back off
+                // exponentially instead of a flat 200ms -- a real blip needs
+                // more than ~1s of total grace to clear.
                 SpeechRecognizer.ERROR_CLIENT,
                 SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
                 SpeechRecognizer.ERROR_SERVER_DISCONNECTED,
+                SpeechRecognizer.ERROR_NETWORK,
+                SpeechRecognizer.ERROR_NETWORK_TIMEOUT,
                 -> {
                     consecutiveErrors++
                     if (consecutiveErrors >= 6) {
@@ -353,7 +360,8 @@ class SpeechAssistant(
                         stoppedByUser = true
                         state = State.IDLE
                     } else {
-                        mainHandler.postDelayed({ if (!stoppedByUser) rearm() }, 200)
+                        val delayMs = (200L shl (consecutiveErrors - 1)).coerceAtMost(3000L)
+                        mainHandler.postDelayed({ if (!stoppedByUser) rearm() }, delayMs)
                     }
                 }
                 else -> {
