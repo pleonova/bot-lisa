@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -109,7 +110,28 @@ fun SettingsScreen(
             }
         }
 
-        SettingsSection("Voice commands") {
+        // Visible only on capable hardware (API 33+, enough RAM) -- hides
+        // rather than disables controls on ineligible configurations. See
+        // ON_DEVICE_LLM_PLAN.md Phase 5.
+        val deviceCapable = OnDeviceLlm.isDeviceCapable(context)
+
+        if (deviceCapable) {
+            SettingsSection("\"What else?\" timing") {
+                PrefetchModePicker(context)
+            }
+
+            // Collapsed by default -- AI vs. library source and the model
+            // download status are set-once-and-forget for most caregivers,
+            // unlike suggestion timing above (EAGER/ON_DEMAND), which trades
+            // off battery/heat and is more likely to get revisited.
+            SettingsSection("\"What else?\" source", initiallyExpanded = false) {
+                WhatElseSourcePicker(context)
+                Spacer(Modifier.height(4.dp))
+                ModelDownloadStatus(context)
+            }
+        }
+
+        SettingsSection("Voice commands", initiallyExpanded = false) {
             OutlinedTextField(
                 value = translateTriggerPhrase,
                 onValueChange = onTranslateTriggerPhraseChange,
@@ -148,20 +170,16 @@ fun SettingsScreen(
             }
         }
 
-        // Visible only on capable hardware (API 33+, enough RAM) -- hides
-        // rather than disables controls on ineligible configurations. See
-        // ON_DEVICE_LLM_PLAN.md Phase 5.
-        if (OnDeviceLlm.isDeviceCapable(context)) {
-            SettingsSection("\"What else?\" suggestions") {
-                WhatElseSourcePicker(context)
-                Spacer(Modifier.height(4.dp))
-                PrefetchModePicker(context)
-                Spacer(Modifier.height(4.dp))
+        // Split out from the "What else?" section above and collapsed by
+        // default -- gender and the few-shot demos steer prompt wording
+        // rather than *whether*/*when* generation runs, and most caregivers
+        // never need to touch them once set, so they shouldn't compete for
+        // attention with the more commonly-adjusted toggles above.
+        if (deviceCapable) {
+            SettingsSection("Prompt customization", initiallyExpanded = false) {
                 GenderPicker(context)
                 Spacer(Modifier.height(4.dp))
                 FewShotExamplesEditor(context, targetLanguage)
-                Spacer(Modifier.height(4.dp))
-                ModelDownloadStatus(context)
             }
         }
 
@@ -187,17 +205,45 @@ fun SettingsScreen(
     }
 }
 
+/**
+ * A collapsible group of settings, expanded by default -- tapping the
+ * header (title or chevron) toggles it. Collapsed state is local to this
+ * composable instance (not persisted), so every section starts open again
+ * next time Settings is opened -- simplest behavior and avoids yet another
+ * SharedPreferences key for something this low-stakes.
+ */
 @Composable
-private fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+private fun SettingsSection(
+    title: String,
+    initiallyExpanded: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    var expanded by remember { mutableStateOf(initiallyExpanded) }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-            title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded },
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Icon(
+                Icons.Filled.ExpandMore,
+                contentDescription = if (expanded) "Collapse" else "Expand",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.rotate(if (expanded) 180f else 0f),
+            )
+        }
         HorizontalDivider()
-        content()
+        if (expanded) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
+        }
     }
 }
 
@@ -328,7 +374,6 @@ private fun WhatElseSourcePicker(context: Context) {
 @Composable
 private fun PrefetchModePicker(context: Context) {
     var prefetchMode by remember { mutableStateOf(OnDeviceLlmConfig.getPrefetchMode(context)) }
-    Text("Suggestion timing", style = MaterialTheme.typography.bodyLarge)
     listOf(
         OnDeviceLlmConfig.PrefetchMode.EAGER to
             ("Eager — generate after every phrase, so \"what else?\" answers instantly" to
