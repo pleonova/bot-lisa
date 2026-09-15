@@ -160,7 +160,12 @@ class SpeechAssistant(
             onStateChanged(value)
         }
 
-    fun start() {
+    /**
+     * @param listenForWordFirst Land straight in LISTENING_FOR_WORD (English)
+     * instead of the usual LISTENING_DEFAULT -- for the "How to say?" chip's
+     * tap-to-invoke path when hands-free wasn't already running.
+     */
+    fun start(listenForWordFirst: Boolean = false) {
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
             onError("Speech recognition isn't available on this device.")
             return
@@ -170,9 +175,31 @@ class SpeechAssistant(
         consecutiveErrors = 0
         recognizer?.destroy()
         recognizer = newRecognizer()
-        state = State.LISTENING_DEFAULT
         resetSilenceTimeout()
-        listenOnce(getDefaultLanguageCode())
+        if (listenForWordFirst) {
+            state = State.LISTENING_FOR_WORD
+            listenOnce(translateLanguageCode)
+        } else {
+            state = State.LISTENING_DEFAULT
+            listenOnce(getDefaultLanguageCode())
+        }
+    }
+
+    /**
+     * Switches an already-running DEFAULT session straight to
+     * LISTENING_FOR_WORD, the same fast path a spoken translate trigger
+     * phrase takes (see onPartialResults) -- for the "How to say?" chip's
+     * tap-to-invoke path when hands-free is already running. No-op if not
+     * currently in plain DEFAULT listening (already mid-switch, already
+     * listening for the word, or not running at all -- use
+     * start(listenForWordFirst = true) in that last case).
+     */
+    fun switchToListeningForWord() {
+        if (stoppedByUser || state != State.LISTENING_DEFAULT || switchingToWord) return
+        switchingToWord = true
+        state = State.LISTENING_FOR_WORD
+        beep()
+        runCatching { recognizer?.stopListening() }
     }
 
     fun stop() {
@@ -291,20 +318,24 @@ class SpeechAssistant(
             if (partial.isBlank()) return
             resetSilenceTimeout()
             onTranscript(partial)
-            // Fast path: beep + switch to English-word mode the moment a
-            // partial already contains the translate trigger. We do NOT touch
-            // the recogniser -- the session ends on its own (short silence
-            // timeout) or we nudge it with stopListening() after a beat;
-            // either way onResults/onError then re-arms in English.
-            // Partials are rougher than final transcripts, so the default
-            // 0.75 fuzzy threshold often isn't cleared until the recognizer
-            // finalizes -- which means waiting on a silence timeout + full
-            // round trip before the beep fires. Loosen the bar here so the
-            // beep fires as early as possible; a stray false-positive just
-            // means an unwanted (recoverable) switch into LISTENING_FOR_WORD,
-            // which is an acceptable trade for a snappy trigger.
+            // Fast path: beep + switch to English-word mode as soon as a
+            // partial looks like the *start* of the translate trigger -- not
+            // once it contains the whole thing. matches() compares full
+            // strings, so it effectively needs the whole phrase (and
+            // typically a full recognizer round trip after that) before it
+            // clears any reasonable threshold; matchesPrefix() compares the
+            // partial against the phrase's own equal-length prefix instead,
+            // so it can fire while the caregiver is still mid-phrase -- the
+            // beep is the "keep going, I heard you" cue, so it should land
+            // near-instantly, not after the whole trigger has been said. We
+            // do NOT touch the recogniser here -- the session ends on its
+            // own (short silence timeout) or we nudge it with
+            // stopListening() after a beat; either way onResults/onError
+            // then re-arms in English. A stray false-positive just means an
+            // unwanted (recoverable) switch into LISTENING_FOR_WORD, an
+            // acceptable trade for a snappy trigger.
             if (!stoppedByUser && !switchingToWord && state == State.LISTENING_DEFAULT &&
-                TriggerPhraseDetector.matches(partial, getTranslateTriggerPhrase(), threshold = 0.6)
+                TriggerPhraseDetector.matchesPrefix(partial, getTranslateTriggerPhrase(), threshold = 0.6)
             ) {
                 switchingToWord = true
                 state = State.LISTENING_FOR_WORD

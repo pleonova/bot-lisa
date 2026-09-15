@@ -54,6 +54,45 @@ object TriggerPhraseDetector {
         return similarityRatio(normalizedTranscript, normalizedPhrase) >= threshold
     }
 
+    /**
+     * True if [partial] -- an in-progress, still-growing transcript --
+     * already looks like the start of [phrase], tolerant of minor ASR
+     * mistakes the same way [matches] is. Unlike [matches], which compares
+     * the two full strings and so effectively needs [phrase] spoken almost
+     * in its entirety before it can clear [threshold], this compares
+     * [partial] against [phrase]'s own leading substring of the same
+     * length -- so it can fire while the caregiver is still mid-phrase,
+     * which is the whole point of checking on partials (see
+     * SpeechAssistant.kt's onPartialResults) rather than waiting for a
+     * final result.
+     *
+     * Requires at least half of [phrase] (3 characters minimum) to already
+     * be present before attempting a fuzzy comparison at all -- a handful
+     * of characters fuzzy-matches almost anything, which would fire the
+     * trigger on unrelated speech that happens to start similarly.
+     */
+    fun matchesPrefix(partial: String, phrase: String, threshold: Double = 0.75): Boolean {
+        if (phrase.isBlank() || partial.isBlank()) return false
+
+        val normalizedPartial = normalize(partial)
+        val normalizedPhrase = normalize(phrase)
+        if (normalizedPhrase.isBlank()) return false
+
+        // The partial has caught up to (or passed) the whole phrase's
+        // length -- matches() already covers this (including a trailing
+        // word stuck to the end), no need for prefix logic.
+        if (normalizedPartial.length >= normalizedPhrase.length) {
+            return matches(partial, phrase, threshold)
+        }
+
+        val minPartialLength = (normalizedPhrase.length / 2).coerceAtLeast(3)
+        if (normalizedPartial.length < minPartialLength) return false
+
+        val phrasePrefix = normalizedPhrase.substring(0, normalizedPartial.length)
+        if (normalizedPartial == phrasePrefix) return true
+        return similarityRatio(normalizedPartial, phrasePrefix) >= threshold
+    }
+
     private fun similarityRatio(a: String, b: String): Double {
         val maxLen = maxOf(a.length, b.length)
         if (maxLen == 0) return 1.0

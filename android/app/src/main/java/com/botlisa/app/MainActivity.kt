@@ -739,10 +739,7 @@ fun LisaScreen(
         }
     val handleMeaningRequest = rememberUpdatedState { speakMeaningOfLast() }
     val handleAnswerRequest = rememberUpdatedState { requestAnswerSuggestions() }
-    val handleNextSuggestionRequest = rememberUpdatedState {
-        requestWhatElse()
-        commandsDismissed = true // spoken "что ещё?" -> hide the chips
-    }
+    val handleNextSuggestionRequest = rememberUpdatedState { requestWhatElse() }
 
     var assistantState by remember { mutableStateOf(SpeechAssistant.State.IDLE) }
     var assistantError by remember { mutableStateOf<String?>(null) }
@@ -803,6 +800,12 @@ fun LisaScreen(
         onDeviceGenerating = false
         whatElseRequested = false // fresh utterance -> hasn't been asked about yet
         eagerSkippedForHeat = false
+        // A fresh utterance means a fresh suggestion list -- without this,
+        // "what else?" on utterance #2 could pick up wherever cycling left
+        // off on utterance #1's (now-replaced) list instead of starting at
+        // the first phrase. Covers both eager and on-demand: this effect
+        // runs on every lastUtterance change regardless of PrefetchMode.
+        suggestionIndex = 0
         val source = OnDeviceLlmConfig.getWhatElseSource(context)
         val eagerMode = OnDeviceLlmConfig.getPrefetchMode(context) == OnDeviceLlmConfig.PrefetchMode.EAGER
         val eligible = lastUtterance.isNotBlank() &&
@@ -874,7 +877,7 @@ fun LisaScreen(
     // Hands-free needs a foreground service running alongside SpeechAssistant
     // -- since Android 9, a backgrounded process can't touch the microphone
     // at all without one. See ListeningForegroundService.kt.
-    fun startHandsFree() {
+    fun startHandsFree(listenForWordFirst: Boolean = false) {
         assistantError = null
         // Drop focus from the input field if switching straight from typing
         // mode -- handleTranscript guards writes on !inputFocused (so live
@@ -882,7 +885,7 @@ fun LisaScreen(
         // otherwise lingers across the switch, silently freezing the
         // transcript for the entire hands-free session.
         focusManager.clearFocus()
-        assistant.start()
+        assistant.start(listenForWordFirst)
         ListeningForegroundService.start(context)
         // Pre-load the on-device model + system prompt now, while the
         // caregiver is still settling into hands-free mode, rather than
@@ -933,6 +936,20 @@ fun LisaScreen(
         }
     }
 
+    // Same as assistantMicPermissionLauncher, but for the "How to say?" chip
+    // when hands-free wasn't already running -- lands straight in
+    // LISTENING_FOR_WORD (English) instead of LISTENING_DEFAULT.
+    val translateWordMicPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            requestNotificationPermissionIfNeeded()
+            startHandsFree(listenForWordFirst = true)
+        } else {
+            assistantError = "Microphone permission is required for Lisa Assistant."
+        }
+    }
+
     fun onToggleAssistant() {
         if (assistantState != SpeechAssistant.State.IDLE) {
             stopHandsFree()
@@ -946,6 +963,34 @@ fun LisaScreen(
             startHandsFree()
         } else {
             assistantMicPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    // "How to say?" chip: text already in the field -> that IS the word to
+    // translate, same as pressing the keyboard's Search key. Otherwise there's
+    // nothing to translate yet, so the chip's job is to open the English mic
+    // -- start hands-free landing straight in LISTENING_FOR_WORD if it wasn't
+    // running, or fast-switch an already-running DEFAULT session into it
+    // (same as if the target-language trigger phrase had just been spoken).
+    fun onTranslateChipTap() {
+        if (input.isNotBlank()) {
+            onSend()
+            return
+        }
+        when (assistantState) {
+            SpeechAssistant.State.IDLE -> {
+                val granted = ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+                if (granted) {
+                    requestNotificationPermissionIfNeeded()
+                    startHandsFree(listenForWordFirst = true)
+                } else {
+                    translateWordMicPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            }
+            SpeechAssistant.State.LISTENING_DEFAULT -> assistant.switchToListeningForWord()
+            SpeechAssistant.State.LISTENING_FOR_WORD -> Unit // already there
         }
     }
 
@@ -1186,20 +1231,7 @@ fun LisaScreen(
                     CommandChipSpec(
                         CommandKind.TRANSLATE, translateTriggerPhrase,
                         TriggerPhraseConfig.TRANSLATE_TRIGGER_EN,
-                    ) {
-                        // Text mode with something already typed: the chip
-                        // IS the translate action, same as tapping the
-                        // keyboard's Search key -- run the lookup on what's
-                        // in the field right now. Otherwise (hands-free, or
-                        // nothing typed yet to translate) there's nothing to
-                        // act on, so just demonstrate the trigger phrase like
-                        // the other three chips do in that situation.
-                        if (assistantState == SpeechAssistant.State.IDLE && input.isNotBlank()) {
-                            onSend()
-                        } else {
-                            speakTriggerPhrase(translateTriggerPhrase)
-                        }
-                    },
+                    ) { onTranslateChipTap() },
                 )
                 add(
                     CommandChipSpec(
