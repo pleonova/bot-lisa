@@ -47,8 +47,19 @@ class ListeningForegroundService : Service() {
             .apply { setReferenceCounted(false); acquire(WAKE_LOCK_TIMEOUT_MS) }
     }
 
+    // onCreate/onStartCommand/onDestroy/onBind are Service lifecycle
+    // callbacks the Android system invokes -- this class doesn't call them
+    // itself, it just implements what should happen at each stage.
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // startForeground must be called quickly after the service starts
+        // (a system requirement) -- it's what actually promotes this to a
+        // foreground service, showing the notification below and unlocking
+        // mic access while backgrounded.
         startForeground(NOTIFICATION_ID, buildNotification())
+        // START_STICKY tells Android to recreate this service (with a null
+        // Intent) if the system kills it under memory pressure, rather than
+        // leaving it dead -- appropriate here since MainActivity expects it
+        // to keep running for as long as hands-free mode is on.
         return START_STICKY
     }
 
@@ -58,9 +69,15 @@ class ListeningForegroundService : Service() {
         super.onDestroy()
     }
 
+    // Returning null means this service can't be bound to (no two-way
+    // interface for other components to call into it) -- it only supports
+    // start()/stop() via Intents, which is all MainActivity needs.
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun buildNotification(): Notification {
+        // A PendingIntent hands another party (here, the notification
+        // system) permission to fire an Intent as if it were this app,
+        // later -- used so tapping the notification reopens MainActivity.
         val openApp = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java),

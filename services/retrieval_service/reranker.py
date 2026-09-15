@@ -27,6 +27,10 @@ EVAL_SET_PATH = ROOT / "eval" / "labeled_eval_set.json"
 
 
 def _features(candidate: dict, context: dict) -> list[float]:
+    # The numeric signals the LTR model learns to weigh against each other:
+    # the two individual retrieval scores plus their blend, whether this
+    # candidate matches the caller's routine context, and how often it's
+    # been used -- rather than hand-picking fixed weights like hybrid.py does.
     routine_match = 1.0 if context.get("routine") == candidate.get("routine") else 0.0
     return [
         candidate["bm25_score"],
@@ -42,6 +46,10 @@ class Reranker:
         self.model: LogisticRegression | None = None
 
     def train(self, retriever: HybridRetriever) -> None:
+        # Supervised training data: for each labeled query, retrieve every
+        # phrase (top_k = full library) and label each one 1 (relevant) or 0
+        # (not) based on the eval set's ground truth, so the model learns
+        # from real hit/miss examples rather than being hand-tuned.
         eval_set = json.loads(EVAL_SET_PATH.read_text(encoding="utf-8"))
         X, y = [], []
         for example in eval_set:
@@ -73,6 +81,8 @@ class Reranker:
             # untrained fallback: preserve hybrid order
             return candidates
         X = np.array([_features(c, context) for c in candidates])
+        # predict_proba returns [P(class=0), P(class=1)] per row; take the
+        # "relevant" class probability and use it directly as the rank score.
         scores = self.model.predict_proba(X)[:, 1]
         reranked = [
             {**c, "ltr_score": float(s)} for c, s in zip(candidates, scores)

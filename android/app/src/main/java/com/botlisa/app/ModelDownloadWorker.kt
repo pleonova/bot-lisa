@@ -37,9 +37,18 @@ import java.util.concurrent.TimeUnit
  * process death, so Settings can always find the current/last attempt by
  * name alone.
  */
+// CoroutineWorker is WorkManager's async unit of deferrable background work:
+// the system schedules doWork() to run (even across app restarts/reboots,
+// per the enqueueUniqueWork call below), retries it on failure per policy,
+// and lets it suspend (via `suspend fun`) instead of blocking a thread while
+// waiting on I/O like the network download below.
 class ModelDownloadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        // setForeground promotes this background work to a foreground
+        // service with a visible notification -- required for a
+        // multi-minute download so Android doesn't kill the process for
+        // running too long in the background.
         setForeground(createForegroundInfo(0))
 
         val destFile = File(OnDeviceLlmConfig.modelFilePath(applicationContext))
@@ -165,6 +174,10 @@ class ModelDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
             .readTimeout(60, TimeUnit.SECONDS)
             .build()
 
+        // Context is Android's handle to system services and app resources
+        // (here, WorkManager's instance and the app's own files dir) --
+        // most Android APIs need one to know which app/process they're
+        // acting on behalf of.
         /** Enqueues the download if not already running/queued; Wifi-only, matching [OnDeviceTranslator]'s precedent. */
         fun enqueue(context: Context) {
             val request = OneTimeWorkRequestBuilder<ModelDownloadWorker>()

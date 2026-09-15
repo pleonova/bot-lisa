@@ -30,6 +30,10 @@ def build_system_prompt(few_shot_phrases: list[dict]) -> str:
 
 
 def generate(user_context: str, few_shot_phrases: list[dict]) -> dict:
+    """
+    Generate a child-directed Russian phrase for the (currently paused) /ask
+    perception-event flow, grounded in retrieved phrases as few-shot examples.
+    """
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     system_prompt = build_system_prompt(few_shot_phrases)
 

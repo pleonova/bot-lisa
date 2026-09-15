@@ -62,6 +62,10 @@ private val DarkColors = darkColorScheme(
     error = Color(0xFFFFB4AB),
 )
 
+// Wraps the whole app's UI once, near the root. Everything nested inside
+// `content` can then read MaterialTheme.colorScheme.xxx and get these colors
+// without it being passed down explicitly -- Compose makes it available
+// implicitly to every descendant composable.
 @Composable
 fun BotLisaTheme(
     useDarkTheme: Boolean = isSystemInDarkTheme(),

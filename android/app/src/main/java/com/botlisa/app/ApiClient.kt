@@ -52,6 +52,12 @@ object ApiClient {
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
+    // `suspend fun` marks a function that can pause without blocking a
+    // thread -- callers run it inside a coroutine (e.g. scope.launch) and
+    // the UI stays responsive while it waits. withContext(Dispatchers.IO)
+    // shifts execution onto a thread pool meant for blocking I/O (this
+    // synchronous OkHttp call), then hands control back to the caller's
+    // original dispatcher (typically the main thread) once it returns.
     suspend fun sendAssist(baseUrl: String, apiKey: String, text: String): AssistResult =
         withContext(Dispatchers.IO) {
             val payload = JSONObject().apply { put("text", text) }

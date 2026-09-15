@@ -54,6 +54,10 @@ fun AssistantButton(
     }
     val contentColor = if (phase == UiPhase.IDLE) MaterialTheme.colorScheme.onSurfaceVariant else Color.White
 
+    // rememberInfiniteTransition + animateFloat drive a value that loops
+    // forever (grow, shrink, repeat) without any manual timers or callbacks;
+    // `remember` is what makes it survive recomposition instead of
+    // restarting from scratch on every redraw.
     val transition = rememberInfiniteTransition(label = "assistant-pulse")
     val ringScale by transition.animateFloat(
         initialValue = 1f,
@@ -70,6 +74,9 @@ fun AssistantButton(
 
     Box(contentAlignment = Alignment.Center, modifier = modifier.size(120.dp)) {
         if (active) {
+            // Modifier chain reads top-to-bottom: fix the size, scale it up
+            // for the pulse, clip to a circle, then tint it -- each step
+            // wraps the one before it.
             Box(
                 modifier = Modifier
                     .size(92.dp)

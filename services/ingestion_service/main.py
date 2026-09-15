@@ -53,6 +53,8 @@ def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
         raise HTTPException(status_code=401, detail="missing or invalid X-API-Key")
 
 
+# Pydantic BaseModel: FastAPI validates the incoming JSON body against this
+# shape automatically and rejects anything that doesn't match.
 class VoiceEventRequest(BaseModel):
     transcript: str
     routine_hint: str | None = None
@@ -64,6 +66,8 @@ class VisionEventRequest(BaseModel):
 
 
 def _forward_to_orchestration(event: PerceptionEvent) -> dict:
+    # Vision events have no transcript yet (no vision model wired up), so
+    # fall back to a placeholder string rather than sending an empty one.
     transcript = event.payload.get("transcript") or f"[{event.event_type} event, no transcript yet]"
     try:
         with httpx.Client(timeout=5.0) as client:

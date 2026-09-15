@@ -47,8 +47,15 @@ import androidx.compose.ui.unit.dp
  * target language ([showNextSuggestionStep]); the "suggested reply" step is
  * Russian-only ([showAnswerStep]).
  */
+// @Composable marks a function that describes UI: Compose calls it (and
+// re-calls it -- "recomposition" -- whenever its inputs change) to decide
+// what's on screen, instead of you imperatively mutating views yourself.
 @Composable
 fun InstructionsPanel(
+    // expanded/onToggle follow Compose's "state hoisting" pattern: this
+    // composable owns no state of its own, just reads expanded and reports
+    // taps via onToggle -- the caller (MainActivity) decides what expanded
+    // actually means and remembers it, so this stays a dumb, reusable view.
     expanded: Boolean,
     onToggle: () -> Unit,
     spokenLanguage: String,
@@ -64,6 +71,10 @@ fun InstructionsPanel(
     showNextSuggestionStep: Boolean = true,
     showAnswerStep: Boolean = true,
 ) {
+    // animateFloatAsState gives back a Float that eases toward targetValue
+    // over time instead of jumping straight there; reading it with "by"
+    // (a property delegate) triggers recomposition on every animation tick
+    // so the chevron rotation is redrawn smoothly frame by frame.
     val chevronRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
         label = "instructions-chevron",
@@ -73,6 +84,9 @@ fun InstructionsPanel(
     val orange = MaterialTheme.colorScheme.secondary
     val divider = MaterialTheme.colorScheme.outlineVariant
 
+    // buildAnnotatedString lets one Text show mixed styling (the phrase in
+    // bold colour, the rest plain) -- plain String has no way to carry
+    // per-substring style, so Compose text styling always goes through this.
     fun say(phrase: String, color: Color, tail: String = "") = buildAnnotatedString {
         append("Say ")
         withStyle(SpanStyle(color = color, fontWeight = FontWeight.Bold)) { append(phrase) }
@@ -131,6 +145,11 @@ fun InstructionsPanel(
         modifier = modifier.fillMaxWidth(),
     ) {
         Column {
+            // A Modifier is a chained list of decorations/behaviors applied
+            // in order -- here: take full width, then tint the background,
+            // then make the whole row tappable, then add padding. Order
+            // matters (e.g. padding after clickable keeps the padded area
+            // tappable too).
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -155,6 +174,9 @@ fun InstructionsPanel(
                 )
             }
 
+            // AnimatedVisibility fades/expands its content in and out as
+            // `visible` flips, instead of the content just appearing or
+            // disappearing instantly.
             AnimatedVisibility(visible = expanded) {
                 Column {
                     steps.forEachIndexed { i, s ->

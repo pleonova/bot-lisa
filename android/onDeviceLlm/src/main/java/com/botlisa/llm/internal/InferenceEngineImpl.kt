@@ -34,6 +34,12 @@ import java.io.IOException
 /**
  * JNI wrapper for the llama.cpp library providing Android-friendly access to large language models.
  *
+ * JNI (Java Native Interface) is what lets this Kotlin class call into
+ * llama.cpp's compiled C++ code and get results back -- Kotlin/the JVM cannot
+ * execute C++ directly, so JNI is the bridge between the two. The `external
+ * fun` declarations below are the Kotlin side of that bridge; each one is
+ * implemented on the C++ side in llama_bridge.cpp.
+ *
  * This class implements a singleton pattern for managing the lifecycle of a single LLM instance.
  * All operations are executed on a dedicated single-threaded dispatcher to ensure thread safety
  * with the underlying C++ native code.
@@ -84,6 +90,13 @@ internal class InferenceEngineImpl private constructor(
 
     /**
      * JNI methods
+     *
+     * Each `external fun` here has no Kotlin body -- there's nothing to
+     * decompile or step into. At runtime the JVM resolves each one to a
+     * native function of the same name in llama_bridge.cpp (matched by the
+     * `Java_com_botlisa_llm_internal_InferenceEngineImpl_<methodName>` naming
+     * convention JNI requires), and calling it actually runs C++ code.
+     *
      * @see ai_chat.cpp
      */
     private external fun init(nativeLibDir: String)
@@ -116,6 +129,12 @@ internal class InferenceEngineImpl private constructor(
 
     /**
      * Single-threaded coroutine dispatcher & scope for LLama asynchronous operations
+     *
+     * The native llama.cpp state (the loaded model, its context, KV cache,
+     * position counters, etc.) lives in global C++ variables that assume only
+     * one caller touches them at a time. Pinning every native call to this
+     * one thread is what makes that safe -- two concurrent JNI calls could
+     * otherwise corrupt that shared state or crash the process.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     private val llamaDispatcher = Dispatchers.IO.limitedParallelism(1)
@@ -129,7 +148,12 @@ internal class InferenceEngineImpl private constructor(
                 }
                 _state.value = InferenceEngine.State.Initializing
                 Log.i(TAG, "Loading native library...")
+                // Loads the compiled .so file (built from llama_bridge.cpp +
+                // llama.cpp via CMakeLists.txt) into this process, which is
+                // what makes the `external fun`s below resolvable at all.
                 System.loadLibrary("ondevicellm")
+                // First real JNI call: sets up llama.cpp's backend (compute
+                // "engine") on the native side.
                 init(nativeLibDir)
                 _state.value = InferenceEngine.State.Initialized
                 Log.i(TAG, "Native library loaded! System info: \n${systemInfo()}")
@@ -161,6 +185,10 @@ internal class InferenceEngineImpl private constructor(
                 Log.i(TAG, "Loading model... \n$pathToModel")
                 _readyForSystemPrompt = false
                 _state.value = InferenceEngine.State.LoadingModel
+                // load() reads the GGUF file's weights into memory on the
+                // native side. prepare() then builds the runtime state needed
+                // to actually use those weights (context, batch buffer,
+                // sampler) -- both are separate JNI calls into llama_bridge.cpp.
                 load(pathToModel).let {
                     // TODO-han.yin: find a better way to pass other error codes
                     if (it != 0) throw UnsupportedArchitectureException()
@@ -274,6 +302,10 @@ internal class InferenceEngineImpl private constructor(
 
     /**
      * Unloads the model and frees resources, or reset error states
+     *
+     * Unlike [destroy], this keeps the native backend initialized (state
+     * returns to [InferenceEngine.State.Initialized], not [InferenceEngine.State.Uninitialized]), so
+     * a new model can be loaded afterwards without recreating the engine.
      */
     override fun cleanUp() {
         _cancelGeneration = true
@@ -305,6 +337,10 @@ internal class InferenceEngineImpl private constructor(
 
     /**
      * Cancel all ongoing coroutines and free GGML backends
+     *
+     * This is the final teardown -- unlike [cleanUp], it also releases the
+     * native backend itself, and this instance cannot be used again
+     * afterwards (a fresh [getInstance] would be a new native init).
      */
     override fun destroy() {
         _cancelGeneration = true

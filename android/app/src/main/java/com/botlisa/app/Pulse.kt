@@ -16,6 +16,9 @@ import androidx.compose.ui.graphics.graphicsLayer
  * speaker icons to show which line is being read aloud. When [active] is
  * false the transition settles at scale 1 and does nothing.
  */
+// `composed` lets a Modifier extension function call @Composable APIs
+// (rememberInfiniteTransition below needs to be remembered per call site) --
+// a plain Modifier factory function can't do that on its own.
 fun Modifier.pulse(active: Boolean): Modifier = composed {
     val transition = rememberInfiniteTransition(label = "pulse")
     val scale by transition.animateFloat(

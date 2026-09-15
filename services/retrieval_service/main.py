@@ -23,6 +23,9 @@ logger = logging.getLogger("retrieval_service")
 
 app = FastAPI(title="retrieval-service")
 
+# Loaded/trained once at process startup (not per request): phrase library
+# read from disk, BM25 index built, and the LTR reranker fit on the labeled
+# eval set -- so a slow one-time cost here keeps individual requests fast.
 bm25_index = BM25Index()
 retriever = HybridRetriever(bm25_index)
 reranker = Reranker()
@@ -33,6 +36,10 @@ except ValueError:
     logger.warning("Not enough labeled data to train LTR reranker; falling back to hybrid order.")
 
 
+# Pydantic BaseModel subclasses double as the request/response schema: FastAPI
+# uses them to validate incoming JSON (reject bad requests with a 422 before
+# this code even runs) and to generate the OpenAPI docs, rather than us
+# hand-parsing dicts.
 class SearchRequest(BaseModel):
     query: str
     routine: str | None = None
@@ -49,6 +56,8 @@ class SearchResponse(BaseModel):
 @app.post("/search", response_model=SearchResponse)
 def search(req: SearchRequest) -> SearchResponse:
     start = time.perf_counter()
+    # Retrieve more candidates than requested (at least 10) so the reranker
+    # below has a real pool to reorder, then trim down to top_k afterward.
     candidates = retriever.search(req.query, top_k=max(req.top_k, 10))
     if req.use_reranker:
         candidates = reranker.rerank(candidates, {"routine": req.routine})

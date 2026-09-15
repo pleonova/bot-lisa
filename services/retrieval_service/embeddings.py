@@ -53,6 +53,9 @@ def embed(text: str, is_query: bool = False) -> list[float]:
     return vector.tolist()
 
 
+# Cosine similarity: how closely two vectors point in the same direction,
+# ignoring their magnitude. The standard way to compare dense embeddings,
+# since embedding magnitude doesn't carry meaning here, only direction does.
 def cosine_sim(a: list[float], b: list[float]) -> float:
     dot = sum(x * y for x, y in zip(a, b))
     norm_a = math.sqrt(sum(x * x for x in a)) or 1.0

@@ -25,6 +25,8 @@ object ServerConfig {
     const val DEFAULT_BASE_URL = "http://10.0.2.2:8002"
 
     fun getBaseUrl(context: Context): String {
+        // SharedPreferences: Android's basic on-device key-value store for
+        // small settings like this one.
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return prefs.getString(KEY_BASE_URL, DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL
     }

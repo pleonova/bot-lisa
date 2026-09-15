@@ -65,6 +65,10 @@ fun SettingsScreen(
     apiKey: String,
     onApiKeyChange: (String) -> Unit,
 ) {
+    // LocalContext.current retrieves the Context for use inside a
+    // Composable -- Compose functions don't take Context as an ordinary
+    // parameter, so this is how they reach it (needed here to read/write
+    // SharedPreferences-backed settings like GenderConfig, OnDeviceLlmConfig).
     val context = LocalContext.current
 
     // No own verticalScroll/fillMaxSize here: this renders inside
@@ -218,6 +222,11 @@ private fun SettingsSection(
     initiallyExpanded: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // remember { mutableStateOf(...) } is how Compose holds mutable state:
+    // plain local `var` would reset to its initial value on every
+    // recomposition, but wrapping it in `remember` keeps the same value
+    // across recompositions and reading/writing it (via `by`) automatically
+    // triggers a recomposition so the UI updates.
     var expanded by remember { mutableStateOf(initiallyExpanded) }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
@@ -473,6 +482,10 @@ private fun FewShotExamplesEditor(context: Context, targetLanguage: TargetLangua
     var demo2Responses by remember(languageCode) { mutableStateOf(listOf("", "", "")) }
     var isOverride by remember(languageCode) { mutableStateOf(false) }
 
+    // LaunchedEffect runs a coroutine tied to this composable's lifetime,
+    // restarting it whenever its key (languageCode) changes -- used here to
+    // load this language's saved examples once, rather than on every
+    // recomposition.
     LaunchedEffect(languageCode) {
         val current = PromptComposer.currentExamplesForLanguage(context, languageCode)
         val (heard1, responses1) = demoFields(current, 0)
@@ -590,6 +603,10 @@ private fun FewShotDemoFields(
 @Composable
 private fun ModelDownloadStatus(context: Context) {
     val modelState = OnDeviceLlmConfig.getModelState(context)
+    // getWorkInfosForUniqueWorkFlow returns a Flow -- a stream of values over
+    // time (here, updated download status as it changes). collectAsState
+    // bridges that stream into Compose state, so this composable
+    // automatically recomposes each time WorkManager emits a new value.
     val workInfos by remember(context) {
         WorkManager.getInstance(context).getWorkInfosForUniqueWorkFlow(ModelDownloadWorker.UNIQUE_WORK_NAME)
     }.collectAsState(initial = emptyList())

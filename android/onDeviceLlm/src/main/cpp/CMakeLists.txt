@@ -13,6 +13,12 @@
 # 3.22.1 here matches what's already proven to auto-install via the Android
 # SDK's package repository (see Phase 1) -- upstream's own example pins
 # 3.31.6, but that's their toolchain choice, not something llama.cpp needs.
+#
+# CMake is the build tool that compiles the C++ side of this module
+# (llama_bridge.cpp + the llama.cpp library it pulls in) into a native .so
+# library, via the Android NDK (Native Development Kit). The rest of the app
+# is built by Gradle/the Kotlin compiler instead, which is why this native
+# code lives in its own module with its own, separate build file like this one.
 cmake_minimum_required(VERSION 3.22.1)
 
 project("ondevicellm" VERSION 1.0.0 LANGUAGES C CXX)

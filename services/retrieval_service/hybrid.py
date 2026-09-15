@@ -40,6 +40,10 @@ class HybridRetriever:
     def search(self, query: str, top_k: int = 5) -> list[dict]:
         phrases = self.bm25_index.phrases
 
+        # Calls the underlying BM25Okapi object directly (not BM25Index.search())
+        # to get one score per phrase in a fixed order, aligned index-for-index
+        # with self._phrase_embeddings below -- BM25Index.search() sorts, which
+        # would break that alignment.
         bm25_scores = list(self.bm25_index._bm25.get_scores(_tokenize(query)))
         query_vec = embed(query, is_query=True)
         embed_scores = [cosine_sim(query_vec, pe) for pe in self._phrase_embeddings]

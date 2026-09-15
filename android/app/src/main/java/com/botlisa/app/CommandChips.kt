@@ -53,6 +53,9 @@ data class CommandChipSpec(
  * available for the target language, plus "how to answer?" for Russian) and
  * controls [visible].
  */
+// FlowRow (below) is still marked experimental by Compose, so using it
+// requires explicitly opting in -- this doesn't change behavior, it just
+// acknowledges the API could still change in a future Compose release.
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CommandChips(
@@ -60,6 +63,9 @@ fun CommandChips(
     items: List<CommandChipSpec>,
     modifier: Modifier = Modifier,
 ) {
+    // FlowRow lays children left-to-right and wraps to a new line once a row
+    // fills up (like CSS flex-wrap) -- unlike Row, which would just overflow
+    // or squeeze everything onto one line.
     AnimatedVisibility(visible = visible && items.isNotEmpty(), modifier = modifier) {
         FlowRow(
             modifier = Modifier.fillMaxWidth(),

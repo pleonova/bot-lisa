@@ -20,6 +20,9 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Literal
 
+# Literal restricts event_type to exactly these two strings -- a type
+# checker (or IDE) flags a typo like "voise" at edit time instead of it
+# silently becoming an unmatched topic at runtime.
 EventType = Literal["voice", "vision"]
 
 
@@ -29,6 +32,9 @@ class PerceptionEvent:
     event_type: EventType
     payload: dict[str, Any]  # e.g. {"transcript": "..."} or {"image_ref": "..."}
     context: dict[str, Any]  # e.g. {"routine_hint": "mealtime", "time_of_day": "morning"}
+    # default_factory=time.time (not a plain default) so each event gets its
+    # own creation timestamp, evaluated when the instance is built, not once
+    # when the class is defined.
     created_at: float = field(default_factory=time.time)
 
     @classmethod

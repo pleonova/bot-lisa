@@ -9,6 +9,13 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Interface defining the core LLM inference operations.
+ *
+ * This is the Kotlin-facing API only -- the actual model math runs in native
+ * C++ (llama.cpp) on the other side of a JNI (Java Native Interface) boundary.
+ * JNI is the mechanism that lets Kotlin call into compiled C++ and get
+ * results back, since Kotlin/the JVM can't run C++ code directly. See
+ * [com.botlisa.llm.internal.InferenceEngineImpl] for where that boundary is
+ * actually crossed.
  */
 interface InferenceEngine {
     /**
@@ -18,6 +25,11 @@ interface InferenceEngine {
 
     /**
      * Load a model from the given path.
+     *
+     * [pathToModel] points to a GGUF file -- llama.cpp's file format for a
+     * quantized (compressed, lower-precision) set of model weights, small and
+     * fast enough to run on a phone. "Loading" reads those weights from disk
+     * into memory so the native code has something to run inference against.
      *
      * @throws UnsupportedArchitectureException if model architecture not supported
      */
@@ -50,6 +62,12 @@ interface InferenceEngine {
 
     /**
      * States of the inference engine
+     *
+     * Loading the model and running inference happen on native code that must
+     * be driven in a strict order (e.g. a model has to finish loading before
+     * a prompt can be sent). This state machine exists so callers can check
+     * "is it safe to do X right now?" in Kotlin, instead of finding out by
+     * crashing or corrupting native state.
      */
     sealed class State {
         object Uninitialized : State()
@@ -74,6 +92,9 @@ interface InferenceEngine {
     }
 }
 
+// True while the engine is mid-way through a blocking native call (loading,
+// unloading, benchmarking, or processing a prompt) -- callers can use this to
+// disable UI actions that would otherwise race with that native work.
 val State.isUninterruptible
     get() = this is State.Initializing ||
         this is State.LoadingModel ||

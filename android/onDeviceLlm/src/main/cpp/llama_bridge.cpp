@@ -11,6 +11,21 @@
 #include "common.h"
 #include "llama.h"
 
+// This file is the JNI (Java Native Interface) bridge: the C++ side of the
+// boundary that lets Kotlin call into llama.cpp. A few conventions repeat
+// throughout the file, explained once here instead of at every call site:
+//  - `extern "C" JNIEXPORT <type> JNICALL Java_com_botlisa_llm_internal_
+//    InferenceEngineImpl_<name>(...)` is the exact function signature/naming
+//    the JVM requires to match a Kotlin `external fun <name>(...)` in
+//    InferenceEngineImpl.kt -- the names must line up exactly or the app
+//    crashes at first call with "no implementation found".
+//  - `JNIEnv *env` is the JVM's handle back into itself, used e.g. to convert
+//    between Java/Kotlin strings (jstring) and C++ strings (std::string) --
+//    see env->GetStringUTFChars()/ReleaseStringUTFChars() below. C++ has no
+//    garbage collector, so anything obtained this way must be released
+//    manually once we're done reading it.
+//  - jint/jstring/jobject are JNI's C++ types for Java int/String/Object.
+
 template<class T>
 static std::string join(const std::vector<T> &values, const std::string &delim) {
     std::ostringstream str;
@@ -33,6 +48,11 @@ constexpr int   OVERFLOW_HEADROOM       = 4;
 constexpr int   BATCH_SIZE              = 512;
 constexpr float DEFAULT_SAMPLER_TEMP    = 0.3f;
 
+// g_model is the loaded GGUF weights (static -- doesn't change once loaded).
+// g_context is the per-session runtime state built on top of it (KV cache,
+// position tracking, batch settings); a model can't run inference without a
+// context, and in principle one model could have multiple contexts, though
+// this bridge only ever keeps one of each at a time via these globals.
 static llama_model                      * g_model;
 static llama_context                    * g_context;
 static llama_batch                        g_batch;
@@ -46,6 +66,10 @@ Java_com_botlisa_llm_internal_InferenceEngineImpl_init(JNIEnv *env, jobject /*un
     llama_log_set(aichat_android_log_callback, nullptr);
 
     // Loading all CPU backend variants
+    // A "backend" here is a compute implementation (e.g. a CPU variant tuned
+    // for this device's architecture) that llama.cpp can run the model's math
+    // on; this scans nativeLibDir (this app's own installed .so files) and
+    // loads whichever ones are available, once, before any model is loaded.
     const auto *path_to_backend = env->GetStringUTFChars(nativeLibDir, 0);
     LOGi("Loading backends from %s", path_to_backend);
     ggml_backend_load_all_from_path(path_to_backend);
@@ -61,9 +85,16 @@ JNIEXPORT jint JNICALL
 Java_com_botlisa_llm_internal_InferenceEngineImpl_load(JNIEnv *env, jobject, jstring jmodel_path) {
     llama_model_params model_params = llama_model_default_params();
 
+    // jmodel_path is a Kotlin String; GetStringUTFChars() borrows its
+    // contents as a C-style UTF-8 string for use here, and
+    // ReleaseStringUTFChars() below gives that memory back to the JVM once
+    // we're done reading it.
     const auto *model_path = env->GetStringUTFChars(jmodel_path, 0);
     LOGd("%s: Loading model from: \n%s\n", __func__, model_path);
 
+    // This is the actual "load a GGUF file" step: it reads the quantized
+    // model weights from disk at model_path into memory, returning a handle
+    // to them (or null on failure, e.g. an unsupported architecture).
     auto *model = llama_model_load_from_file(model_path, model_params);
     env->ReleaseStringUTFChars(jmodel_path, model_path);
     if (!model) {
@@ -86,6 +117,10 @@ static llama_context *init_context(llama_model *model, const int n_ctx = DEFAULT
     LOGi("%s: Using %d threads", __func__, n_threads);
 
     // Context parameters setup
+    // n_ctx is the "context window": the max number of tokens (roughly,
+    // word-pieces) the model can attend to at once across the whole
+    // conversation. Once that many tokens have accumulated, older ones have
+    // to be dropped to make room -- see shift_context() below.
     llama_context_params ctx_params = llama_context_default_params();
     const int trained_context_size = llama_model_n_ctx_train(model);
     if (n_ctx > trained_context_size) {
@@ -104,6 +139,10 @@ static llama_context *init_context(llama_model *model, const int n_ctx = DEFAULT
     return context;
 }
 
+// A sampler is what turns the model's raw output (a probability for every
+// possible next token) into one chosen token. temp ("temperature") controls
+// how random that choice is: lower is more predictable/repetitive, higher is
+// more varied but riskier.
 static common_sampler *new_sampler(float temp) {
     common_params_sampling sparams;
     sparams.temp = temp;
@@ -113,6 +152,9 @@ static common_sampler *new_sampler(float temp) {
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_botlisa_llm_internal_InferenceEngineImpl_prepare(JNIEnv * /*env*/, jobject /*unused*/) {
+    // Called once, right after load(): builds everything needed to actually
+    // run inference against the model that was just loaded (a context, a
+    // reusable token batch buffer, the chat template, and a sampler).
     auto *context = init_context(g_model);
     if (!context) { return 1; }
     g_context = context;
@@ -341,6 +383,10 @@ static int decode_tokens_in_batches(
         }
 
         // Decode this batch
+        // llama_decode() is the actual model forward pass: it feeds these
+        // tokens through the network and updates the context's internal
+        // KV cache accordingly. Everything else in this file exists to set
+        // up its inputs and interpret its effects.
         const int decode_result = llama_decode(context, batch);
         if (decode_result) {
             LOGe("%s: llama_decode failed w/ %d", __func__, decode_result);
@@ -467,6 +513,12 @@ Java_com_botlisa_llm_internal_InferenceEngineImpl_processUserPrompt(
     return 0;
 }
 
+// A single generated token doesn't always line up with one complete UTF-8
+// character -- multi-byte characters (accented letters, non-Latin scripts,
+// emoji) can be split across two or more consecutive tokens. This checks
+// whether what's accumulated so far in cached_token_chars is a complete,
+// valid UTF-8 string; if not, generateNextToken() holds onto it and waits for
+// more bytes instead of handing a broken string back to Kotlin.
 static bool is_valid_utf8(const char *string) {
     if (!string) { return true; }
 
@@ -507,6 +559,11 @@ Java_com_botlisa_llm_internal_InferenceEngineImpl_generateNextToken(
         JNIEnv *env,
         jobject /*unused*/
 ) {
+    // Kotlin's while loop (see InferenceEngineImpl.sendUserPrompt) calls this
+    // JNI function once per generated token: sample one token from the
+    // model's current output, decode() it to fold it back into the KV cache,
+    // and return its text. Returning null signals "generation is done".
+
     // Infinite text generation via context shifting
     if (current_position >= DEFAULT_CONTEXT_SIZE - OVERFLOW_HEADROOM) {
         LOGw("%s: Context full! Shifting...", __func__);
@@ -569,6 +626,9 @@ Java_com_botlisa_llm_internal_InferenceEngineImpl_unload(JNIEnv * /*unused*/, jo
     reset_short_term_states();
 
     // Free up resources
+    // C++ has no garbage collector, so everything allocated by load()/
+    // prepare() (model weights, context, batch buffer, sampler) has to be
+    // freed explicitly here, or it leaks for the lifetime of the process.
     common_sampler_free(g_sampler);
     g_chat_templates.reset();
     llama_batch_free(g_batch);

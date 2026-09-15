@@ -20,6 +20,9 @@ object GenderConfig {
     }
 
     fun getGender(context: Context): Gender {
+        // SharedPreferences is Android's simple built-in key-value store --
+        // a small file of settings that survives app restarts, backed by
+        // the given name and read/written through this handle.
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val name = prefs.getString(KEY_GENDER, null) ?: return Gender.BOY
         return runCatching { Gender.valueOf(name) }.getOrDefault(Gender.BOY)
