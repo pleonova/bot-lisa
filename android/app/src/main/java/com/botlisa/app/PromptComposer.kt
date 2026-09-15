@@ -50,7 +50,34 @@ object PromptComposer {
         val template = loadJson(context, TASK_PATH)
         val persona = loadJson(context, PERSONA_PATH)
         val examples = resolveExamplesForLanguage(loadJson(context, EXAMPLES_BY_LANGUAGE_PATH), languageCode)
-        return compose(template, persona, examples, utterance)
+        // A user-edited set of demos (see FewShotExamplesConfig.kt / the
+        // Settings screen) takes the place of the language's default demos;
+        // language_display still comes from the asset default since the
+        // override only ever replaces the demos, not the language name.
+        val overrideDemos = FewShotExamplesConfig.getOverride(context, languageCode)
+        val resolvedExamples = if (overrideDemos != null) {
+            JSONObject(examples.toString()).put("few_shot_examples", overrideDemos)
+        } else {
+            examples
+        }
+        val gender = GenderConfig.getGender(context).promptValue
+        return compose(template, persona, resolvedExamples, utterance, gender)
+    }
+
+    /** The demos currently in effect for [languageCode] -- a user override if
+     * one has been saved, otherwise the bundled asset default. Used by the
+     * Settings screen's few-shot editor to know what to show/edit. */
+    fun currentExamplesForLanguage(context: Context, languageCode: String): JSONArray {
+        val override = FewShotExamplesConfig.getOverride(context, languageCode)
+        if (override != null) return override
+        return defaultExamplesForLanguage(context, languageCode)
+    }
+
+    /** The bundled asset default demos for [languageCode], ignoring any user
+     * override -- what the Settings screen's "reset to default" reverts to. */
+    fun defaultExamplesForLanguage(context: Context, languageCode: String): JSONArray {
+        val byLanguage = loadJson(context, EXAMPLES_BY_LANGUAGE_PATH)
+        return resolveExamplesForLanguage(byLanguage, languageCode).getJSONArray("few_shot_examples")
     }
 
     /**
@@ -69,9 +96,15 @@ object PromptComposer {
      * JSON directly so it's testable on a plain JVM (no Robolectric/Mockito
      * needed just to fake an AssetManager).
      */
-    fun compose(template: JSONObject, persona: JSONObject, examples: JSONObject, utterance: String): Prompt {
+    fun compose(
+        template: JSONObject,
+        persona: JSONObject,
+        examples: JSONObject,
+        utterance: String,
+        gender: String = persona.getString("gender"),
+    ): Prompt {
         val fields = mapOf(
-            "gender" to persona.getString("gender"),
+            "gender" to gender,
             "language" to examples.getString("language_display"),
             "speaker" to persona.getString("default_speaker"),
             "few_shot_examples" to formatFewShotExamples(examples.getJSONArray("few_shot_examples")),

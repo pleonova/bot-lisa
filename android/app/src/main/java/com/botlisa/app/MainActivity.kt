@@ -10,7 +10,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -21,7 +20,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -31,22 +29,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import androidx.core.content.ContextCompat
-import androidx.work.WorkManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -180,7 +170,7 @@ fun LisaScreen(
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var serverUrl by remember { mutableStateOf(ServerConfig.getBaseUrl(context)) }
     var apiKey by remember { mutableStateOf(ServerConfig.getApiKey(context)) }
-    var showServerSettings by rememberSaveable { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
     var showInstructions by rememberSaveable { mutableStateOf(false) }
 
     // Command-chip reminders (§3.6): hidden in hands-free once a command is
@@ -191,7 +181,6 @@ fun LisaScreen(
     // STT locale, and the trigger phrases. Everything downstream reads from
     // this so switching language updates the whole screen.
     var targetLanguage by remember { mutableStateOf(LanguageConfig.getTargetLanguage(context)) }
-    var languageMenuExpanded by remember { mutableStateOf(false) }
 
     // The curated phrase library + the backend's "expand" mode are
     // Russian-only: that's what powers a typed Russian phrase -> related
@@ -976,8 +965,7 @@ fun LisaScreen(
         suggestionIndex = 0
         commandsDismissed = false
         showInstructions = false
-        showServerSettings = false
-        languageMenuExpanded = false
+        showSettings = false
     }
 
     Column(
@@ -987,6 +975,32 @@ fun LisaScreen(
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        if (showSettings) {
+            SettingsScreen(
+                onBack = { showSettings = false },
+                isDark = isDark,
+                onToggleDark = onToggleDark,
+                targetLanguage = targetLanguage,
+                onTargetLanguageChange = {
+                    targetLanguage = it
+                    LanguageConfig.setTargetLanguage(context, it)
+                },
+                translateTriggerPhrase = translateTriggerPhrase,
+                onTranslateTriggerPhraseChange = ::onTranslateTriggerPhraseChange,
+                meaningTriggerPhrase = meaningTriggerPhrase,
+                onMeaningTriggerPhraseChange = ::onMeaningTriggerPhraseChange,
+                nextSuggestionTriggerPhrase = nextSuggestionTriggerPhrase,
+                onNextSuggestionTriggerPhraseChange = ::onNextSuggestionTriggerPhraseChange,
+                nextSuggestionSupported = nextSuggestionSupported,
+                answerTriggerPhrase = answerTriggerPhrase,
+                onAnswerTriggerPhraseChange = ::onAnswerTriggerPhraseChange,
+                curatedRelatedSupported = curatedRelatedSupported,
+                serverUrl = serverUrl,
+                onServerUrlChange = ::onServerUrlChange,
+                apiKey = apiKey,
+                onApiKeyChange = ::onApiKeyChange,
+            )
+        } else {
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -1005,11 +1019,8 @@ fun LisaScreen(
                         .clip(CircleShape)
                         .clickable { resetToStart() },
                 )
-                IconButton(onClick = { showServerSettings = !showServerSettings }) {
-                    Icon(
-                        Icons.Filled.Settings,
-                        contentDescription = if (showServerSettings) "Hide settings" else "Settings",
-                    )
+                IconButton(onClick = { showSettings = true }) {
+                    Icon(Icons.Filled.Settings, contentDescription = "Settings")
                 }
             }
             Text(
@@ -1058,287 +1069,6 @@ fun LisaScreen(
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
-            )
-        }
-
-        if (showServerSettings) {
-            // Material3's ExposedDropdownMenu flips above the field whenever
-            // it doesn't measure enough room below (a 48dp margin plus the
-            // menu's own height) -- capping the height alone doesn't stop
-            // that. Anchor a plain Popup to the field's bottom edge instead,
-            // which always opens downward regardless of available space.
-            var languageFieldHeightPx by remember { mutableStateOf(0) }
-            var languageFieldWidthPx by remember { mutableStateOf(0) }
-            val density = LocalDensity.current
-            Box {
-                // supportingText deliberately NOT used here (even though
-                // OutlinedTextField has that slot) -- it's measured as part
-                // of the field's own onGloballyPositioned height below,
-                // which would push the popup's anchor point below the
-                // explanation text instead of right under the bordered box.
-                // Confirmed live: this exact gap showed the explanation
-                // text sitting between the field and the dropdown list. The
-                // explanation renders as a plain Text after this Box instead.
-                OutlinedTextField(
-                    value = targetLanguage.displayName,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Target language") },
-                    trailingIcon = {
-                        Icon(
-                            Icons.Filled.ArrowDropDown,
-                            contentDescription = if (languageMenuExpanded) "Collapse" else "Expand",
-                            modifier = Modifier.rotate(if (languageMenuExpanded) 180f else 0f),
-                        )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onGloballyPositioned {
-                            languageFieldHeightPx = it.size.height
-                            languageFieldWidthPx = it.size.width
-                        },
-                )
-                // A readOnly OutlinedTextField still consumes taps for its own
-                // focus-request behavior, so a .clickable{} modifier on the
-                // field itself never fires -- confirmed live on a physical
-                // device: tapping focused the field (label/border turned
-                // purple) but the dropdown never opened. This transparent
-                // overlay sits on top and gets the tap first instead.
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                        ) { languageMenuExpanded = !languageMenuExpanded },
-                )
-                if (languageMenuExpanded) {
-                    Popup(
-                        alignment = Alignment.TopStart,
-                        offset = IntOffset(0, languageFieldHeightPx),
-                        onDismissRequest = { languageMenuExpanded = false },
-                        properties = PopupProperties(focusable = true),
-                    ) {
-                        Surface(
-                            shape = MaterialTheme.shapes.extraSmall,
-                            // tonalElevation deliberately 0 -- Material3
-                            // tints a Surface toward the primary color at
-                            // higher elevations, which on this app's purple
-                            // theme showed up as an unwanted lavender wash
-                            // behind the list. shadowElevation alone still
-                            // gives it a floating drop shadow.
-                            tonalElevation = 0.dp,
-                            shadowElevation = 3.dp,
-                            modifier = Modifier.width(with(density) { languageFieldWidthPx.toDp() }),
-                        ) {
-                            Column(modifier = Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
-                                SupportedLanguages.ALL.forEach { language ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                language.displayName,
-                                                style = MaterialTheme.typography.bodyLarge,
-                                            )
-                                        },
-                                        onClick = {
-                                            targetLanguage = language
-                                            LanguageConfig.setTargetLanguage(context, language)
-                                            languageMenuExpanded = false
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            // Same text Material3's supportingText slot would have shown --
-            // moved out here (see the comment above the OutlinedTextField)
-            // so it doesn't get counted in the height the popup anchors to.
-            // Matches OutlinedTextField's own default supportingText padding
-            // (16dp start/end, 4dp top) and style so it looks unchanged.
-            Text(
-                "What English translates into, the voice that reads it back, and what Lisa Assistant listens for. Related-phrase suggestions still come from the Russian library for now.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp),
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Dark mode", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        "Overrides the system setting.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(checked = isDark, onCheckedChange = { onToggleDark() })
-            }
-            OutlinedTextField(
-                value = translateTriggerPhrase,
-                onValueChange = { onTranslateTriggerPhraseChange(it) },
-                label = { Text("Voice command — translate") },
-                supportingText = { Text("Say this, pause, then an English word, to have Lisa Assistant translate it instead of treating it as ${targetLanguage.displayName}.") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
-            OutlinedTextField(
-                value = meaningTriggerPhrase,
-                onValueChange = { onMeaningTriggerPhraseChange(it) },
-                label = { Text("Voice command — what does that mean?") },
-                supportingText = { Text("Say this to hear an English translation of the last thing you said, spoken aloud.") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
-            if (nextSuggestionSupported) {
-                OutlinedTextField(
-                    value = nextSuggestionTriggerPhrase,
-                    onValueChange = { onNextSuggestionTriggerPhraseChange(it) },
-                    label = { Text("Voice command — next suggestion") },
-                    supportingText = { Text("Say this to have Lisa Assistant read the next suggested phrase aloud. Say it again for the next one in the list.") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-            }
-            if (curatedRelatedSupported) {
-                OutlinedTextField(
-                    value = answerTriggerPhrase,
-                    onValueChange = { onAnswerTriggerPhraseChange(it) },
-                    label = { Text("Voice command — how to answer?") },
-                    supportingText = { Text("Say this to look up phrases you could say back to what you just heard.") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-            }
-            // Visible only on capable hardware (API 33+, enough RAM) --
-            // hides rather than disables controls on ineligible
-            // configurations. See ON_DEVICE_LLM_PLAN.md Phase 5.
-            if (OnDeviceLlm.isDeviceCapable(context)) {
-                var whatElseSource by remember {
-                    mutableStateOf(OnDeviceLlmConfig.getWhatElseSource(context))
-                }
-                val modelState = OnDeviceLlmConfig.getModelState(context)
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text("\"What else?\" suggestions", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        "Your device can generate these on-device, in the selected target language, instead of (or alongside) the Russian phrase library. Model: ${modelState.name}.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    listOf(
-                        OnDeviceLlmConfig.WhatElseSource.BOTH to "Both — AI, falling back to the library if it's not ready",
-                        OnDeviceLlmConfig.WhatElseSource.AI_ONLY to "AI only",
-                        OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY to "Library only",
-                    ).forEach { (source, label) ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    whatElseSource = source
-                                    OnDeviceLlmConfig.setWhatElseSource(context, source)
-                                },
-                        ) {
-                            RadioButton(
-                                selected = whatElseSource == source,
-                                onClick = {
-                                    whatElseSource = source
-                                    OnDeviceLlmConfig.setWhatElseSource(context, source)
-                                },
-                            )
-                            Text(label, style = MaterialTheme.typography.bodyLarge)
-                        }
-                    }
-
-                    var prefetchMode by remember {
-                        mutableStateOf(OnDeviceLlmConfig.getPrefetchMode(context))
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Text("Suggestion timing", style = MaterialTheme.typography.bodyLarge)
-                    listOf(
-                        OnDeviceLlmConfig.PrefetchMode.EAGER to
-                            ("Eager — generate after every phrase, so \"what else?\" answers instantly" to
-                                "Uses more battery and can heat up your device faster, since it runs on-device AI whether or not you end up asking. Backs off automatically once your device is already warm."),
-                        OnDeviceLlmConfig.PrefetchMode.ON_DEMAND to
-                            ("On-demand — only generate when you say \"what else?\"" to
-                                "Uses less battery. You'll hear a short pause the first time you ask about each phrase."),
-                    ).forEach { (mode, labelAndCaption) ->
-                        val (label, caption) = labelAndCaption
-                        Row(
-                            verticalAlignment = Alignment.Top,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    prefetchMode = mode
-                                    OnDeviceLlmConfig.setPrefetchMode(context, mode)
-                                },
-                        ) {
-                            RadioButton(
-                                selected = prefetchMode == mode,
-                                onClick = {
-                                    prefetchMode = mode
-                                    OnDeviceLlmConfig.setPrefetchMode(context, mode)
-                                },
-                            )
-                            Column(modifier = Modifier.padding(top = 12.dp)) {
-                                Text(label, style = MaterialTheme.typography.bodyLarge)
-                                Text(
-                                    caption,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-                    // Live download progress, if a download is currently
-                    // running or queued -- WorkManager persists this across
-                    // process death, so this reflects reality even right
-                    // after the app relaunches mid-download. See
-                    // ON_DEVICE_LLM_PLAN.md Phase 6.
-                    val workInfos by remember(context) {
-                        WorkManager.getInstance(context)
-                            .getWorkInfosForUniqueWorkFlow(ModelDownloadWorker.UNIQUE_WORK_NAME)
-                    }.collectAsState(initial = emptyList())
-                    val activeWork = workInfos.firstOrNull { !it.state.isFinished }
-                    if (activeWork != null) {
-                        val progress = activeWork.progress.getInt(ModelDownloadWorker.KEY_PROGRESS, 0)
-                        Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                            Text("Downloading model... $progress%", style = MaterialTheme.typography.bodyMedium)
-                            LinearProgressIndicator(
-                                progress = { progress / 100f },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-                    } else if (modelState != OnDeviceLlmConfig.ModelState.READY) {
-                        Button(
-                            onClick = { ModelDownloadWorker.enqueue(context) },
-                            modifier = Modifier.padding(top = 8.dp),
-                        ) {
-                            Text("Download model (2.7GB, WiFi only)")
-                        }
-                    }
-                }
-            }
-            OutlinedTextField(
-                value = serverUrl,
-                onValueChange = { onServerUrlChange(it) },
-                label = { Text("Server URL") },
-                supportingText = { Text("Emulator: http://10.0.2.2:8002 · Real device: http://<mac-lan-ip>:8002 · Deployed: http://<load-balancer-ip>:8002") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
-            OutlinedTextField(
-                value = apiKey,
-                onValueChange = { onApiKeyChange(it) },
-                label = { Text("API key (optional)") },
-                supportingText = { Text("Only required when the server enforces ORCHESTRATION_API_KEY, e.g. the deployed cluster.") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
             )
         }
 
@@ -1679,6 +1409,7 @@ fun LisaScreen(
                     }
                 }
             }
+        }
         }
     }
 }
