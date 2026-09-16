@@ -173,6 +173,11 @@ fun LisaScreen(
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showInstructions by rememberSaveable { mutableStateOf(false) }
 
+    // Full-screen intro (IntroScreen.kt): auto-shown once on first launch,
+    // and again any time the fox logo is tapped (see resetToStart() below).
+    var showIntro by rememberSaveable { mutableStateOf(!IntroConfig.hasSeenIntro(context)) }
+    var audience by remember { mutableStateOf(AudienceConfig.getAudience(context)) }
+
     // Command-chip reminders (§3.6): hidden in hands-free once a command is
     // used (spoken trigger), back on the next new input.
     var commandsDismissed by remember { mutableStateOf(false) }
@@ -1053,8 +1058,10 @@ fun LisaScreen(
         commandsDismissed = false
         showInstructions = false
         showSettings = false
+        showIntro = true
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1501,6 +1508,26 @@ fun LisaScreen(
             }
         }
         }
+    }
+
+    if (showIntro) {
+        IntroScreen(
+            targetLanguage = targetLanguage,
+            onTargetLanguageChange = {
+                targetLanguage = it
+                LanguageConfig.setTargetLanguage(context, it)
+            },
+            audience = audience,
+            onAudienceChange = {
+                audience = it
+                AudienceConfig.setAudience(context, it)
+            },
+            onDismiss = {
+                showIntro = false
+                IntroConfig.setHasSeenIntro(context, true)
+            },
+        )
+    }
     }
 }
 
