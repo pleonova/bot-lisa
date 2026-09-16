@@ -238,12 +238,25 @@ class SpeechAssistant(
         listenOnce(languageCode)
     }
 
+    // Every trigger phrase is configured per target language (see
+    // TriggerPhraseConfig.kt), but the caregiver may not have that language
+    // comfortable enough yet to reliably produce it -- so a command also
+    // fires on its fixed English equivalent (e.g. "how to say?"), regardless
+    // of target language. The recognizer is still listening in the target
+    // locale, so English speech transcribes less reliably than it would
+    // under an English locale -- this is a best-effort second chance, not a
+    // guarantee, same fuzzy tolerance either way.
+    private fun matchesTrigger(transcript: String, targetPhrase: String, englishPhrase: String, threshold: Double = 0.75): Boolean =
+        TriggerPhraseDetector.matches(transcript, targetPhrase, threshold) ||
+            TriggerPhraseDetector.matches(transcript, englishPhrase, threshold)
+
     private fun handleTranscript(transcript: String) {
         if (stoppedByUser) return
         when (state) {
             State.LISTENING_DEFAULT -> {
                 when {
-                    transcript.isNotBlank() && TriggerPhraseDetector.matches(transcript, getTranslateTriggerPhrase()) -> {
+                    transcript.isNotBlank() &&
+                        matchesTrigger(transcript, getTranslateTriggerPhrase(), TriggerPhraseConfig.TRANSLATE_TRIGGER_EN) -> {
                         // Trigger caught on the final result (partials didn't
                         // fire). Session already ended -- beep, then open the
                         // English mic.
@@ -252,15 +265,18 @@ class SpeechAssistant(
                         beep()
                         listenForWord()
                     }
-                    transcript.isNotBlank() && TriggerPhraseDetector.matches(transcript, getMeaningTriggerPhrase()) -> {
+                    transcript.isNotBlank() &&
+                        matchesTrigger(transcript, getMeaningTriggerPhrase(), TriggerPhraseConfig.MEANING_TRIGGER_EN) -> {
                         onMeaningRequested()
                         rearm()
                     }
-                    transcript.isNotBlank() && TriggerPhraseDetector.matches(transcript, getNextSuggestionTriggerPhrase()) -> {
+                    transcript.isNotBlank() &&
+                        matchesTrigger(transcript, getNextSuggestionTriggerPhrase(), TriggerPhraseConfig.NEXT_SUGGESTION_TRIGGER_EN) -> {
                         onNextSuggestionRequested()
                         rearm()
                     }
-                    transcript.isNotBlank() && TriggerPhraseDetector.matches(transcript, getAnswerTriggerPhrase()) -> {
+                    transcript.isNotBlank() &&
+                        matchesTrigger(transcript, getAnswerTriggerPhrase(), TriggerPhraseConfig.ANSWER_TRIGGER_EN) -> {
                         onAnswerRequested()
                         rearm()
                     }
@@ -274,7 +290,7 @@ class SpeechAssistant(
                 // A late final of the trigger phrase itself -- we already
                 // fast-switched on a partial and the English mic is opening
                 // via beepThenListenForWord(). Ignore it.
-                if (TriggerPhraseDetector.matches(transcript, getTranslateTriggerPhrase())) return
+                if (matchesTrigger(transcript, getTranslateTriggerPhrase(), TriggerPhraseConfig.TRANSLATE_TRIGGER_EN)) return
                 if (transcript.isNotBlank()) onUtterance(transcript, State.LISTENING_FOR_WORD)
                 state = State.LISTENING_DEFAULT
                 rearm()
@@ -335,7 +351,10 @@ class SpeechAssistant(
             // unwanted (recoverable) switch into LISTENING_FOR_WORD, an
             // acceptable trade for a snappy trigger.
             if (!stoppedByUser && !switchingToWord && state == State.LISTENING_DEFAULT &&
-                TriggerPhraseDetector.matchesPrefix(partial, getTranslateTriggerPhrase(), threshold = 0.6)
+                (
+                    TriggerPhraseDetector.matchesPrefix(partial, getTranslateTriggerPhrase(), threshold = 0.6) ||
+                        TriggerPhraseDetector.matchesPrefix(partial, TriggerPhraseConfig.TRANSLATE_TRIGGER_EN, threshold = 0.6)
+                    )
             ) {
                 switchingToWord = true
                 state = State.LISTENING_FOR_WORD
