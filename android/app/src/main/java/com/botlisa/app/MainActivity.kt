@@ -177,6 +177,14 @@ fun LisaScreen(
     // used (spoken trigger), back on the next new input.
     var commandsDismissed by remember { mutableStateOf(false) }
 
+    // Declared up here (rather than down by the rest of the hands-free
+    // plumbing) so requestWhatElse()/speakMeaningOfLast()/
+    // requestAnswerSuggestions() above can read it -- they need to know
+    // whether they're being invoked from a tap while idle (where falling
+    // back to `input` is correct) or from genuine hands-free listening
+    // (where it isn't -- see requestWhatElse()'s utterance comment).
+    var assistantState by remember { mutableStateOf(SpeechAssistant.State.IDLE) }
+
     // Target language: drives translation, the spoken voice, the hands-free
     // STT locale, and the trigger phrases. Everything downstream reads from
     // this so switching language updates the whole screen.
@@ -628,7 +636,17 @@ fun LisaScreen(
             return
         }
         val source = OnDeviceLlmConfig.getWhatElseSource(context)
-        val utterance = lastUtterance.ifBlank { input }
+        // Only fall back to `input` while idle (a phrase typed but not yet
+        // sent) -- while genuinely hands-free listening, lastUtterance alone
+        // is authoritative (cleared fresh by startHandsFree(), then kept
+        // current by every heard utterance); falling back to `input` there
+        // too could reach back into stale leftover field text from well
+        // before this listening session started.
+        val utterance = if (assistantState == SpeechAssistant.State.IDLE) {
+            lastUtterance.ifBlank { input }
+        } else {
+            lastUtterance
+        }
         if (utterance.isBlank() ||
             source == OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY ||
             !OnDeviceLlm.isDeviceCapable(context) ||
@@ -671,7 +689,13 @@ fun LisaScreen(
     // "what does that mean?" -- translate the previous target-language
     // utterance into English and read it aloud (English voice).
     fun speakMeaningOfLast() {
-        val text = lastUtterance.ifBlank { input }
+        // See requestWhatElse()'s utterance comment for why the `input`
+        // fallback is IDLE-only.
+        val text = if (assistantState == SpeechAssistant.State.IDLE) {
+            lastUtterance.ifBlank { input }
+        } else {
+            lastUtterance
+        }
         if (text.isBlank()) return
         scope.launch {
             val english = runCatching {
@@ -681,15 +705,22 @@ fun LisaScreen(
         }
     }
 
-    // "how to answer?" -- a fresh related-phrases lookup on the previous
-    // utterance, so the result card shows things you could say back. Russian
-    // only (same backend limitation as the next-suggestion command).
+    // "how to answer?" -- meant to run a fresh related-phrases lookup on the
+    // previous utterance, so the result card shows things you could say
+    // back. The backend endpoint this needs isn't wired up yet -- calling
+    // onSend() here used to just hang until the network call timed out, then
+    // surface a generic "server unreachable" error, which reads as broken
+    // rather than "not built yet". Say so plainly and immediately instead.
     fun requestAnswerSuggestions() {
-        val text = lastUtterance.ifBlank { input }
+        // See requestWhatElse()'s utterance comment for why the `input`
+        // fallback is IDLE-only.
+        val text = if (assistantState == SpeechAssistant.State.IDLE) {
+            lastUtterance.ifBlank { input }
+        } else {
+            lastUtterance
+        }
         if (text.isBlank() || !curatedRelatedSupported) return
-        input = text
-        commandsDismissed = false
-        onSend()
+        errorText = "\"How to answer?\" isn't wired up yet -- this feature is still a work in progress."
     }
 
     // Always-current handles onto onSend()/speakNextSuggestion() for Lisa
@@ -741,7 +772,6 @@ fun LisaScreen(
     val handleAnswerRequest = rememberUpdatedState { requestAnswerSuggestions() }
     val handleNextSuggestionRequest = rememberUpdatedState { requestWhatElse() }
 
-    var assistantState by remember { mutableStateOf(SpeechAssistant.State.IDLE) }
     var assistantError by remember { mutableStateOf<String?>(null) }
 
     // Header subtitle + (later) central-button colour. derivedStateOf so more
@@ -881,10 +911,22 @@ fun LisaScreen(
         assistantError = null
         // Drop focus from the input field if switching straight from typing
         // mode -- handleTranscript guards writes on !inputFocused (so live
-        // transcript updates never clobber active typing), and that focus
+        // transcript updates never clobbers active typing), and that focus
         // otherwise lingers across the switch, silently freezing the
         // transcript for the entire hands-free session.
         focusManager.clearFocus()
+        // A fresh hands-free session has nothing said in it yet -- clear the
+        // "last utterance" meaning/what-else/answer act on, so a caregiver
+        // who hasn't said anything this round can't trigger those and have
+        // them reach back into a much earlier (possibly from a prior
+        // session) utterance without any indication that's what happened.
+        // Only lastUtterance itself -- not `input`, the visible field text --
+        // stopping hands-free deliberately leaves that alone (see
+        // stopHandsFree() callers) so the caregiver can still read the last
+        // thing heard; this only resets what counts as "in play" for the
+        // follow-up voice commands.
+        lastUtterance = ""
+        result = null
         assistant.start(listenForWordFirst)
         ListeningForegroundService.start(context)
         // Pre-load the on-device model + system prompt now, while the
@@ -1227,6 +1269,13 @@ fun LisaScreen(
             // you tapped the mic to stop.
             visible = !commandsDismissed,
             items = buildList {
+                // Nothing yet for meaning/what-else/answer to act on (fresh
+                // app start, or hands-free was stopped/never started and the
+                // field's still empty) -- these three used to silently no-op
+                // in that case instead of the tap producing *any* feedback.
+                // Same fallback the hands-free branch already uses: read the
+                // trigger phrase aloud as a demo instead.
+                val hasUtteranceToActOn = lastUtterance.isNotBlank() || input.isNotBlank()
                 add(
                     CommandChipSpec(
                         CommandKind.TRANSLATE, translateTriggerPhrase,
@@ -1238,13 +1287,16 @@ fun LisaScreen(
                         CommandKind.MEANING, meaningTriggerPhrase,
                         TriggerPhraseConfig.MEANING_TRIGGER_EN,
                     ) {
-                        // Hands-free: tapping just demonstrates how to say the
-                        // trigger phrase, same as every other chip -- you'd
-                        // speak it yourself to actually invoke it. Not
-                        // listening: there's no mic to speak the trigger to,
-                        // so the tap IS the command.
-                        if (assistantState == SpeechAssistant.State.IDLE) speakMeaningOfLast()
-                        else speakTriggerPhrase(meaningTriggerPhrase)
+                        // Hands-free (or idle with nothing to act on): tapping
+                        // just demonstrates how to say the trigger phrase --
+                        // you'd speak it yourself to actually invoke it.
+                        // Not listening AND there's a phrase in play: the tap
+                        // IS the command, no mic needed for it.
+                        if (assistantState == SpeechAssistant.State.IDLE && hasUtteranceToActOn) {
+                            speakMeaningOfLast()
+                        } else {
+                            speakTriggerPhrase(meaningTriggerPhrase)
+                        }
                     },
                 )
                 if (nextSuggestionSupported) {
@@ -1253,8 +1305,11 @@ fun LisaScreen(
                             CommandKind.NEXT_SUGGESTION, nextSuggestionTriggerPhrase,
                             TriggerPhraseConfig.NEXT_SUGGESTION_TRIGGER_EN,
                         ) {
-                            if (assistantState == SpeechAssistant.State.IDLE) requestWhatElse()
-                            else speakTriggerPhrase(nextSuggestionTriggerPhrase)
+                            if (assistantState == SpeechAssistant.State.IDLE && hasUtteranceToActOn) {
+                                requestWhatElse()
+                            } else {
+                                speakTriggerPhrase(nextSuggestionTriggerPhrase)
+                            }
                         },
                     )
                 }
@@ -1264,8 +1319,11 @@ fun LisaScreen(
                             CommandKind.ANSWER, answerTriggerPhrase,
                             TriggerPhraseConfig.ANSWER_TRIGGER_EN,
                         ) {
-                            if (assistantState == SpeechAssistant.State.IDLE) requestAnswerSuggestions()
-                            else speakTriggerPhrase(answerTriggerPhrase)
+                            if (assistantState == SpeechAssistant.State.IDLE && hasUtteranceToActOn) {
+                                requestAnswerSuggestions()
+                            } else {
+                                speakTriggerPhrase(answerTriggerPhrase)
+                            }
                         },
                     )
                 }
