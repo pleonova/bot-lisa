@@ -124,13 +124,15 @@ fun SettingsScreen(
                 PrefetchModePicker(context)
             }
 
-            // Collapsed by default -- AI vs. library source and the model
-            // download status are set-once-and-forget for most caregivers,
-            // unlike suggestion timing above (EAGER/ON_DEMAND), which trades
-            // off battery/heat and is more likely to get revisited.
-            SettingsSection("\"What else?\" source", initiallyExpanded = false) {
-                WhatElseSourcePicker(context)
-                Spacer(Modifier.height(4.dp))
+            // Collapsed by default -- the model download status is
+            // set-once-and-forget for most caregivers, unlike suggestion
+            // timing above (EAGER/ON_DEMAND), which trades off battery/heat
+            // and is more likely to get revisited. No source picker here any
+            // more (AI vs. library) -- it always uses AI, falling back to
+            // the curated library only where that library has content
+            // (Russian) -- see OnDeviceLlmConfig.getWhatElseSource()'s
+            // comment for why the picker was removed.
+            SettingsSection("\"What else?\" model", initiallyExpanded = false) {
                 ModelDownloadStatus(context)
             }
         }
@@ -343,41 +345,6 @@ private fun LanguagePicker(targetLanguage: TargetLanguage, onChange: (TargetLang
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun WhatElseSourcePicker(context: Context) {
-    var whatElseSource by remember { mutableStateOf(OnDeviceLlmConfig.getWhatElseSource(context)) }
-    val modelState = OnDeviceLlmConfig.getModelState(context)
-    Text(
-        "Your device can generate these on-device, in the selected target language, instead of (or alongside) the Russian phrase library. Model: ${modelState.name}.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    listOf(
-        OnDeviceLlmConfig.WhatElseSource.BOTH to "Both — AI, falling back to the library if it's not ready",
-        OnDeviceLlmConfig.WhatElseSource.AI_ONLY to "AI only",
-        OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY to "Library only",
-    ).forEach { (source, label) ->
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    whatElseSource = source
-                    OnDeviceLlmConfig.setWhatElseSource(context, source)
-                },
-        ) {
-            RadioButton(
-                selected = whatElseSource == source,
-                onClick = {
-                    whatElseSource = source
-                    OnDeviceLlmConfig.setWhatElseSource(context, source)
-                },
-            )
-            Text(label, style = MaterialTheme.typography.bodyLarge)
         }
     }
 }

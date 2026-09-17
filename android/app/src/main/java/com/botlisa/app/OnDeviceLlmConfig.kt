@@ -22,7 +22,6 @@ import java.io.File
  */
 object OnDeviceLlmConfig {
     private const val PREFS_NAME = "bot_lisa_prefs"
-    private const val KEY_WHAT_ELSE_SOURCE = "on_device_llm_what_else_source"
     private const val KEY_MODEL_STATE = "on_device_llm_model_state"
     private const val KEY_PREFETCH_MODE = "on_device_llm_prefetch_mode"
     private const val MODEL_FILE_NAME = "qwen3.5-4b-q4_k_m.gguf"
@@ -47,16 +46,16 @@ object OnDeviceLlmConfig {
     fun modelFilePath(context: Context): String =
         File(context.filesDir, MODEL_FILE_NAME).absolutePath
 
-    fun getWhatElseSource(context: Context): WhatElseSource {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val name = prefs.getString(KEY_WHAT_ELSE_SOURCE, null) ?: return WhatElseSource.BOTH
-        return runCatching { WhatElseSource.valueOf(name) }.getOrDefault(WhatElseSource.BOTH)
-    }
-
-    fun setWhatElseSource(context: Context, source: WhatElseSource) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putString(KEY_WHAT_ELSE_SOURCE, source.name).apply()
-    }
+    // Always BOTH -- AI_ONLY and LIBRARY_ONLY existed as a user-facing
+    // Settings picker, but LIBRARY_ONLY has no content for any non-Russian
+    // target language, which meant picking it silently hid the "what else?"
+    // command entirely for every other language -- confusing enough (and
+    // easy enough to land on by accident while exploring Settings) that the
+    // picker was removed in favor of always using the source that degrades
+    // gracefully. See SettingsScreen.kt's former WhatElseSourcePicker.
+    // KEY_WHAT_ELSE_SOURCE is intentionally no longer read -- an old
+    // persisted value from before this change is simply ignored.
+    fun getWhatElseSource(context: Context): WhatElseSource = WhatElseSource.BOTH
 
     fun getModelState(context: Context): ModelState {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

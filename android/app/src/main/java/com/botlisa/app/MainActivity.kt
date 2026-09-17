@@ -738,19 +738,38 @@ fun LisaScreen(
             eagerSkippedForHeat = false // an explicit ask always tries, heat or not
             if (tryAi) {
                 onDeviceGenerating = true
-                onDeviceRelated = runCatching {
+                val generated = runCatching {
                     OnDeviceLlm.generateWhatElse(context, utterance, language.code)
-                }.getOrNull()
+                }
+                onDeviceRelated = generated.getOrNull()
                 onDeviceGenerating = false
+                // Model marked READY but generation itself blew up (corrupt/
+                // incomplete download despite that, OOM, a native crash in
+                // the inference engine, ...) used to vanish into
+                // getOrNull() with zero trace -- "what else?" would just do
+                // nothing and never even show the Generating spinner long
+                // enough to notice, since the failure could happen before
+                // any real suspension point. Surface it instead -- if the
+                // library can still answer (tryLibrary below), don't let
+                // this failure block that, but it's still worth knowing
+                // about, so only skip showing it when the library already
+                // did the job silently.
+                generated.exceptionOrNull()?.let { e ->
+                    if (!tryLibrary) errorText = "\"What else?\" generation failed: ${e.message ?: e::class.simpleName}"
+                }
             }
             // Only hit the library when it's the only option (LIBRARY_ONLY)
             // or AI came back empty (BOTH's documented fallback -- see
             // relatedForDisplay) -- not when AI already has something to say,
             // so BOTH doesn't pay for a network round trip it won't use.
             if (tryLibrary && onDeviceRelated.isNullOrEmpty()) {
-                runCatching {
+                val fetched = runCatching {
                     ApiClient.sendAssist(baseUrl = serverUrl, apiKey = apiKey, text = utterance)
-                }.getOrNull()?.let { result = it }
+                }
+                fetched.getOrNull()?.let { result = it }
+                fetched.exceptionOrNull()?.let { e ->
+                    errorText = "\"What else?\" library lookup failed: ${e.message ?: e::class.simpleName}"
+                }
             }
             speakNextSuggestion()
         }
@@ -944,10 +963,19 @@ fun LisaScreen(
                 eagerSkippedForHeat = true
             } else {
                 onDeviceGenerating = true
-                onDeviceRelated = runCatching {
+                val generated = runCatching {
                     OnDeviceLlm.generateWhatElse(context, lastUtterance, targetLanguage.code)
-                }.getOrNull()
+                }
+                onDeviceRelated = generated.getOrNull()
                 onDeviceGenerating = false
+                // Same reasoning as requestWhatElse()'s equivalent comment --
+                // a failure here used to vanish silently, and since this is
+                // the *background* prefetch, it could fail minutes before
+                // the caregiver ever says "what else?", with nothing to show
+                // for it when they do.
+                generated.exceptionOrNull()?.let { e ->
+                    errorText = "\"What else?\" generation failed: ${e.message ?: e::class.simpleName}"
+                }
                 if (speakWhenReady) {
                     speakWhenReady = false
                     speakNextSuggestion()
