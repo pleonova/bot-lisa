@@ -15,12 +15,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ExpandMore
@@ -105,9 +103,9 @@ fun InstructionsPanel(
                 flow = listOf(
                     FlowItem.CardItem(CardSpec(Icons.Filled.Translate, false, translateTriggerPhrase, TriggerPhraseConfig.TRANSLATE_TRIGGER_EN, onSpeakTranslate)),
                     FlowItem.ArrowItem,
-                    FlowItem.BubbleItem(wordExampleEn, gloss = null, spoken = false, label = "Example"),
+                    FlowItem.BubbleItem(wordExampleEn, gloss = null, label = "Example"),
                     FlowItem.ArrowItem,
-                    FlowItem.BubbleItem(wordExampleTranslated, gloss = wordExampleEn, spoken = true, label = null),
+                    FlowItem.BubbleItem(wordExampleTranslated, gloss = wordExampleEn, label = null),
                 ),
             ),
         )
@@ -118,11 +116,11 @@ fun InstructionsPanel(
                     heading = "While you're speaking",
                     body = "Get contextual suggestions on what to say next based on what you just said.",
                     flow = listOf(
-                        FlowItem.BubbleItem(phraseExampleHeard, phraseExampleHeardGloss, spoken = false, label = "Example"),
+                        FlowItem.BubbleItem(phraseExampleHeard, phraseExampleHeardGloss, label = "Example"),
                         FlowItem.ArrowItem,
                         FlowItem.CardItem(CardSpec(Icons.Filled.Lightbulb, true, nextSuggestionTriggerPhrase, TriggerPhraseConfig.NEXT_SUGGESTION_TRIGGER_EN, onSpeakNext)),
                         FlowItem.ArrowItem,
-                        FlowItem.BubbleItem(phraseExampleResponse, phraseExampleResponseGloss, spoken = true, label = null),
+                        FlowItem.BubbleItem(phraseExampleResponse, phraseExampleResponseGloss, label = null),
                     ),
                 ),
             )
@@ -241,13 +239,12 @@ private data class CardSpec(
 )
 
 /** One row in a section's vertical flow: a tappable command card, a small
- * down-arrow connector, or a worked-example bubble -- [BubbleItem.spoken]
- * just adds a speaker icon (the assistant's audio output), and
- * [BubbleItem.label] tags an input bubble (what the caregiver says/hears) as
- * "Example". Every bubble is otherwise plain -- no section colour or border. */
+ * down-arrow connector, or a worked-example bubble. [BubbleItem.label] tags
+ * an input bubble (what the caregiver says/hears) as "Example". Every
+ * bubble is otherwise plain -- no section colour, border, or icon. */
 private sealed class FlowItem {
     data class CardItem(val spec: CardSpec) : FlowItem()
-    data class BubbleItem(val text: String, val gloss: String?, val spoken: Boolean, val label: String?) : FlowItem()
+    data class BubbleItem(val text: String, val gloss: String?, val label: String?) : FlowItem()
     data object ArrowItem : FlowItem()
 }
 
@@ -291,7 +288,7 @@ private fun SectionBlock(number: Int, section: Section) {
             when (item) {
                 is FlowItem.CardItem -> CommandCard(item.spec, section.color)
                 is FlowItem.BubbleItem -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    ExampleBubble(item.text, item.gloss, item.spoken, item.label)
+                    ExampleBubble(item.text, item.gloss, item.label)
                 }
                 is FlowItem.ArrowItem -> ExampleArrow(section.color)
             }
@@ -312,7 +309,7 @@ private fun ExampleArrow(color: Color) {
 }
 
 @Composable
-private fun ExampleBubble(text: String, gloss: String?, spoken: Boolean, label: String?) {
+private fun ExampleBubble(text: String, gloss: String?, label: String?) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         if (label != null) {
             Text(
@@ -324,37 +321,26 @@ private fun ExampleBubble(text: String, gloss: String?, spoken: Boolean, label: 
                 modifier = Modifier.padding(bottom = 4.dp),
             )
         }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
             modifier = Modifier
                 .clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            if (spoken) {
-                Icon(
-                    Icons.AutoMirrored.Filled.VolumeUp,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-            }
-            Column {
+            Text(
+                text,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (gloss != null) {
                 Text(
-                    text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    "($gloss)",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontStyle = FontStyle.Italic,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (gloss != null) {
-                    Text(
-                        "($gloss)",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontStyle = FontStyle.Italic,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
         }
     }
