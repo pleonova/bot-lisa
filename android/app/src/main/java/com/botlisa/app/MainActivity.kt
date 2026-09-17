@@ -171,14 +171,39 @@ fun LisaScreen(
     var serverUrl by remember { mutableStateOf(ServerConfig.getBaseUrl(context)) }
     var apiKey by remember { mutableStateOf(ServerConfig.getApiKey(context)) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
-    // Auto-shown on every fresh screen (matches showIntro below): tapping the
-    // header collapses it, and resetToStart() (fox tap) closes it too.
+    // Auto-shown on every fresh screen, and stays expanded through
+    // resetToStart() (fox tap) too, matching showIntro below -- tapping the
+    // header still collapses it for the rest of the session.
     var showInstructions by rememberSaveable { mutableStateOf(true) }
 
     // Full-screen intro (IntroScreen.kt): auto-shown once on first launch,
     // and again any time the fox logo is tapped (see resetToStart() below).
     var showIntro by rememberSaveable { mutableStateOf(!IntroConfig.hasSeenIntro(context)) }
     var audience by remember { mutableStateOf(AudienceConfig.getAudience(context)) }
+
+    // True once we've tried to auto-start the "what else?" model download
+    // (on intro dismiss, or from requestWhatElse() itself) and found no
+    // WiFi -- ModelDownloadWorker.enqueue() is WiFi-only by default and
+    // would otherwise just queue silently and wait, possibly forever, with
+    // no sign to the caregiver that's what's happening. Drives the homepage
+    // banner below offering to spend cellular data instead. Cleared once
+    // they act (either button) or the model becomes ready.
+    var modelDownloadNeedsWifi by rememberSaveable { mutableStateOf(false) }
+
+    // Starts the on-device "what else?" model download if it isn't already
+    // downloaded/downloading -- auto-starts immediately on WiFi, otherwise
+    // raises modelDownloadNeedsWifi instead of enqueueing blind (see its
+    // comment). Called from the intro's onDismiss and from requestWhatElse()
+    // so both the proactive (first-launch) and reactive (command used, model
+    // still missing) paths land in the same place.
+    fun maybeStartModelDownload() {
+        if (OnDeviceLlmConfig.getModelState(context) == OnDeviceLlmConfig.ModelState.READY) return
+        if (ModelDownloadWorker.isOnWifi(context)) {
+            ModelDownloadWorker.enqueue(context)
+        } else {
+            modelDownloadNeedsWifi = true
+        }
+    }
 
     // Command-chip reminders (§3.6): hidden in hands-free once a command is
     // used (spoken trigger), back on the next new input.
@@ -660,21 +685,73 @@ fun LisaScreen(
         } else {
             lastUtterance
         }
-        if (utterance.isBlank() ||
-            source == OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY ||
-            !OnDeviceLlm.isDeviceCapable(context) ||
-            OnDeviceLlmConfig.getModelState(context) != OnDeviceLlmConfig.ModelState.READY
-        ) {
-            return // genuinely nothing to generate (no utterance, library-only, or model not downloaded) -- no-op
+        if (utterance.isBlank()) return
+        // Which source(s) are actually worth trying -- independently, since
+        // BOTH should still fall back to the library when AI isn't
+        // available rather than doing nothing (see below; this used to
+        // bail out entirely whenever the on-device model wasn't ready,
+        // which is the common case on a device that hasn't downloaded the
+        // ~2.7GB model -- found as "what else? does nothing" for every
+        // source setting except AI_ONLY on a capable+ready device).
+        val tryAi = source != OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY &&
+            OnDeviceLlm.isDeviceCapable(context) &&
+            OnDeviceLlmConfig.getModelState(context) == OnDeviceLlmConfig.ModelState.READY
+        // Russian-only curated library (see relatedForDisplay/curatedRelatedSupported).
+        val tryLibrary = source != OnDeviceLlmConfig.WhatElseSource.AI_ONLY && curatedRelatedSupported
+        if (!tryAi && !tryLibrary) {
+            // Silently doing nothing here reads as "the button is broken" --
+            // this is overwhelmingly the "AI model never downloaded" case
+            // (it's a ~2.7GB opt-in download, so NOT_DOWNLOADED is the
+            // default for every fresh install) combined with a non-Russian
+            // target, which has no curated-library fallback to fall back
+            // to -- so for most target languages, until the model is
+            // downloaded, this command has genuinely nothing to work with.
+            // Say so and point at the fix instead of staying silent.
+            errorText = if (!OnDeviceLlm.isDeviceCapable(context)) {
+                "\"What else?\" isn't available -- this device can't run the on-device AI model."
+            } else if (OnDeviceLlmConfig.getModelState(context) == OnDeviceLlmConfig.ModelState.DOWNLOADING) {
+                // The intro-dismiss auto-download (see maybeStartModelDownload())
+                // is presumably what's running -- worth distinguishing from
+                // "never started" so this doesn't read as needing a trip to
+                // Settings when it's already underway.
+                "\"What else?\" needs the on-device AI model for ${targetLanguage.displayName}, " +
+                    "which is still downloading -- try again once it finishes."
+            } else {
+                // Covers both "never got a chance to auto-start" (e.g. the
+                // intro was dismissed back before that existed) and "was
+                // WiFi-blocked and the caregiver hasn't acted on the banner
+                // yet" -- try again now either way, and let the message
+                // reflect whichever of those this call just found.
+                maybeStartModelDownload()
+                if (modelDownloadNeedsWifi) {
+                    "\"What else?\" needs the on-device AI model for ${targetLanguage.displayName} -- " +
+                        "you're not on WiFi, so connect to WiFi or download over cellular data below."
+                } else {
+                    "\"What else?\" needs the on-device AI model for ${targetLanguage.displayName} -- " +
+                        "starting the download now (WiFi required; see Settings for progress)."
+                }
+            }
+            return
         }
         val language = targetLanguage
         scope.launch {
             eagerSkippedForHeat = false // an explicit ask always tries, heat or not
-            onDeviceGenerating = true
-            onDeviceRelated = runCatching {
-                OnDeviceLlm.generateWhatElse(context, utterance, language.code)
-            }.getOrNull()
-            onDeviceGenerating = false
+            if (tryAi) {
+                onDeviceGenerating = true
+                onDeviceRelated = runCatching {
+                    OnDeviceLlm.generateWhatElse(context, utterance, language.code)
+                }.getOrNull()
+                onDeviceGenerating = false
+            }
+            // Only hit the library when it's the only option (LIBRARY_ONLY)
+            // or AI came back empty (BOTH's documented fallback -- see
+            // relatedForDisplay) -- not when AI already has something to say,
+            // so BOTH doesn't pay for a network round trip it won't use.
+            if (tryLibrary && onDeviceRelated.isNullOrEmpty()) {
+                runCatching {
+                    ApiClient.sendAssist(baseUrl = serverUrl, apiKey = apiKey, text = utterance)
+                }.getOrNull()?.let { result = it }
+            }
             speakNextSuggestion()
         }
     }
@@ -1064,7 +1141,7 @@ fun LisaScreen(
         assistantError = null
         suggestionIndex = 0
         commandsDismissed = false
-        showInstructions = false
+        showInstructions = true
         showSettings = false
         showIntro = true
     }
@@ -1365,6 +1442,36 @@ fun LisaScreen(
             }
         }
 
+        // Persists independently of errorText (which clears on the next
+        // lookup/send) since "no WiFi yet" can easily still be true well
+        // after whatever triggered this notice -- stays up, with an action,
+        // until the caregiver dismisses it or the download actually starts.
+        if (modelDownloadNeedsWifi && OnDeviceLlmConfig.getModelState(context) != OnDeviceLlmConfig.ModelState.READY) {
+            Column {
+                Text(
+                    "The on-device \"what else?\" model needs WiFi to download (~2.7GB).",
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    TextButton(
+                        onClick = {
+                            ModelDownloadWorker.enqueue(context, allowCellular = true)
+                            modelDownloadNeedsWifi = false
+                        },
+                        contentPadding = PaddingValues(0.dp),
+                    ) {
+                        Text("Download over cellular data")
+                    }
+                    TextButton(
+                        onClick = { modelDownloadNeedsWifi = false },
+                        contentPadding = PaddingValues(0.dp),
+                    ) {
+                        Text("Not now")
+                    }
+                }
+            }
+        }
+
         result?.let { r ->
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
@@ -1539,6 +1646,12 @@ fun LisaScreen(
             onDismiss = {
                 showIntro = false
                 IntroConfig.setHasSeenIntro(context, true)
+                // Get the "what else?" model downloading as soon as the
+                // caregiver is done with the intro, rather than making them
+                // discover the Settings download button on their own after
+                // the command silently does nothing -- see
+                // maybeStartModelDownload()'s comment for the WiFi handling.
+                maybeStartModelDownload()
             },
         )
     }

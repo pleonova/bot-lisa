@@ -4,6 +4,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.StatFs
 import android.util.Log
@@ -174,21 +176,49 @@ class ModelDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
             .readTimeout(60, TimeUnit.SECONDS)
             .build()
 
+        // True if the active network is WiFi (unmetered) right now -- used
+        // to decide whether enqueue() can auto-start silently or needs to
+        // ask first before spending cellular data on a ~2.7GB download.
+        // Transport-based, not NetworkCapabilities.NET_CAPABILITY_NOT_METERED,
+        // to match exactly what setRequiredNetworkType(UNMETERED) below will
+        // itself wait for.
+        fun isOnWifi(context: Context): Boolean {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                ?: return false
+            val network = cm.activeNetwork ?: return false
+            val capabilities = cm.getNetworkCapabilities(network) ?: return false
+            return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+        }
+
         // Context is Android's handle to system services and app resources
         // (here, WorkManager's instance and the app's own files dir) --
         // most Android APIs need one to know which app/process they're
         // acting on behalf of.
-        /** Enqueues the download if not already running/queued; Wifi-only, matching [OnDeviceTranslator]'s precedent. */
-        fun enqueue(context: Context) {
+        /**
+         * Enqueues the download if not already running/queued. Wifi-only by
+         * default, matching [OnDeviceTranslator]'s precedent -- if there's no
+         * WiFi right now, this just queues silently and waits, potentially
+         * indefinitely, for WiFi to show up, so callers that can't guarantee
+         * that (see MainActivity's isOnWifi() checks) should ask the
+         * caregiver first rather than enqueueing blind.
+         *
+         * @param allowCellular Pass true only after the caregiver has
+         * explicitly agreed to spend cellular data -- switches the
+         * constraint to any connectivity and REPLACEs (not KEEPs) an
+         * existing queued/WiFi-waiting attempt, since KEEP would otherwise
+         * leave that attempt's stricter WiFi-only constraint in place.
+         */
+        fun enqueue(context: Context, allowCellular: Boolean = false) {
             val request = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
                 .setConstraints(
                     Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.UNMETERED)
+                        .setRequiredNetworkType(if (allowCellular) NetworkType.CONNECTED else NetworkType.UNMETERED)
                         .build(),
                 )
                 .build()
+            val policy = if (allowCellular) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP
             WorkManager.getInstance(context)
-                .enqueueUniqueWork(UNIQUE_WORK_NAME, ExistingWorkPolicy.KEEP, request)
+                .enqueueUniqueWork(UNIQUE_WORK_NAME, policy, request)
         }
     }
 }
