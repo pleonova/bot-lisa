@@ -1565,6 +1565,19 @@ fun LisaScreen(
             }
         }
 
+        // Mirrors speakMeaningOfLast()/requestWhatElse()/
+        // requestAnswerSuggestions()'s own idea of "is there anything to act
+        // on": while genuinely hands-free listening, only lastUtterance
+        // counts (same as a spoken trigger phrase would see) -- `input` is
+        // only a valid fallback while IDLE. Shared by the instructions
+        // panel's cards and the command chips below so both act the same
+        // way a spoken trigger phrase would, not just play a TTS demo.
+        val hasUtteranceToActOn = if (assistantState == SpeechAssistant.State.IDLE) {
+            lastUtterance.isNotBlank() || input.isNotBlank()
+        } else {
+            lastUtterance.isNotBlank()
+        }
+
         InstructionsPanel(
             expanded = showInstructions,
             onToggle = { showInstructions = !showInstructions },
@@ -1573,10 +1586,16 @@ fun LisaScreen(
             meaningTriggerPhrase = meaningTriggerPhrase,
             nextSuggestionTriggerPhrase = nextSuggestionTriggerPhrase,
             answerTriggerPhrase = answerTriggerPhrase,
-            onSpeakTranslate = { speakTriggerPhrase(translateTriggerPhrase) },
-            onSpeakMeaning = { speakTriggerPhrase(meaningTriggerPhrase) },
-            onSpeakNext = { speakTriggerPhrase(nextSuggestionTriggerPhrase) },
-            onSpeakAnswer = { speakTriggerPhrase(answerTriggerPhrase) },
+            onSpeakTranslate = { onTranslateChipTap() },
+            onSpeakMeaning = {
+                if (hasUtteranceToActOn) speakMeaningOfLast() else speakTriggerPhrase(meaningTriggerPhrase)
+            },
+            onSpeakNext = {
+                if (hasUtteranceToActOn) requestWhatElse() else speakTriggerPhrase(nextSuggestionTriggerPhrase)
+            },
+            onSpeakAnswer = {
+                if (hasUtteranceToActOn) requestAnswerSuggestions() else speakTriggerPhrase(answerTriggerPhrase)
+            },
             wordExampleEn = wordExample.en,
             wordExampleTranslated = wordExample.translated,
             phraseExampleHeard = phraseExample.heard,
@@ -1601,8 +1620,8 @@ fun LisaScreen(
                 // field's still empty) -- these three used to silently no-op
                 // in that case instead of the tap producing *any* feedback.
                 // Same fallback the hands-free branch already uses: read the
-                // trigger phrase aloud as a demo instead.
-                val hasUtteranceToActOn = lastUtterance.isNotBlank() || input.isNotBlank()
+                // trigger phrase aloud as a demo instead. (hasUtteranceToActOn
+                // computed above, shared with the instructions panel's cards.)
                 add(
                     CommandChipSpec(
                         CommandKind.TRANSLATE, translateTriggerPhrase,
@@ -1614,12 +1633,12 @@ fun LisaScreen(
                         CommandKind.MEANING, meaningTriggerPhrase,
                         TriggerPhraseConfig.MEANING_TRIGGER_EN,
                     ) {
-                        // Hands-free (or idle with nothing to act on): tapping
-                        // just demonstrates how to say the trigger phrase --
-                        // you'd speak it yourself to actually invoke it.
-                        // Not listening AND there's a phrase in play: the tap
-                        // IS the command, no mic needed for it.
-                        if (assistantState == SpeechAssistant.State.IDLE && hasUtteranceToActOn) {
+                        // There's something to act on (whether idle or
+                        // actively listening): the tap IS the command, same
+                        // as if the trigger phrase had just been spoken.
+                        // Nothing to act on yet: tapping just demonstrates
+                        // how to say the trigger phrase instead.
+                        if (hasUtteranceToActOn) {
                             speakMeaningOfLast()
                         } else {
                             speakTriggerPhrase(meaningTriggerPhrase)
@@ -1632,7 +1651,7 @@ fun LisaScreen(
                             CommandKind.NEXT_SUGGESTION, nextSuggestionTriggerPhrase,
                             TriggerPhraseConfig.NEXT_SUGGESTION_TRIGGER_EN,
                         ) {
-                            if (assistantState == SpeechAssistant.State.IDLE && hasUtteranceToActOn) {
+                            if (hasUtteranceToActOn) {
                                 requestWhatElse()
                             } else {
                                 speakTriggerPhrase(nextSuggestionTriggerPhrase)
@@ -1646,7 +1665,7 @@ fun LisaScreen(
                             CommandKind.ANSWER, answerTriggerPhrase,
                             TriggerPhraseConfig.ANSWER_TRIGGER_EN,
                         ) {
-                            if (assistantState == SpeechAssistant.State.IDLE && hasUtteranceToActOn) {
+                            if (hasUtteranceToActOn) {
                                 requestAnswerSuggestions()
                             } else {
                                 speakTriggerPhrase(answerTriggerPhrase)
