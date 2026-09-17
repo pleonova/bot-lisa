@@ -308,6 +308,8 @@ few-shot examples now follow the selected language — see "Done so far").
 - **"What Else" prompt section/page** — a separate screen where the
   per-language few-shot examples and `{gender}` can be overridden (the
   "Edit `FEW_SHOT_EXAMPLES`" and "Gender" items above live here).
+- **Slow down spoken responses** — a speech-rate toggle in Settings to
+  slow down TTS playback, for easier listening/learning.
 
 **Usage history & reports.** Builds on the logging/dashboard work already
 sketched for hands-free mode in [ROADMAP.md](ROADMAP.md) (#4–#6).
