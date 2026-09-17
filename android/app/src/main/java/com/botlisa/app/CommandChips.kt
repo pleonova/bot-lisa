@@ -91,8 +91,9 @@ fun CommandChips(
 @Composable
 private fun CommandItem(spec: CommandChipSpec, modifier: Modifier = Modifier) {
     val color = when (spec.kind) {
-        CommandKind.TRANSLATE, CommandKind.MEANING -> MaterialTheme.colorScheme.tertiary // teal
-        CommandKind.NEXT_SUGGESTION, CommandKind.ANSWER -> MaterialTheme.colorScheme.secondary // orange
+        CommandKind.TRANSLATE -> MaterialTheme.colorScheme.tertiary // teal
+        CommandKind.NEXT_SUGGESTION -> MaterialTheme.colorScheme.primary // purple
+        CommandKind.MEANING, CommandKind.ANSWER -> MaterialTheme.colorScheme.secondary // orange
     }
     val icon: ImageVector = when (spec.kind) {
         CommandKind.TRANSLATE -> Icons.Filled.Translate
@@ -144,8 +145,11 @@ private fun CommandItem(spec: CommandChipSpec, modifier: Modifier = Modifier) {
     }
 }
 
-/** Presentational only: "как сказать" -> "Как сказать?". Callers keep the raw string for matching. */
-private fun formatCommand(phrase: String): String {
+/**
+ * Presentational only: "как сказать" -> "Как сказать?". Callers keep the raw
+ * string for matching. Shared with [InstructionsPanel]'s command cards.
+ */
+internal fun formatCommand(phrase: String): String {
     val trimmed = phrase.trim()
     if (trimmed.isEmpty()) return trimmed
     val capitalised = trimmed.replaceFirstChar { it.uppercaseChar() }

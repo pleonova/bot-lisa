@@ -171,7 +171,9 @@ fun LisaScreen(
     var serverUrl by remember { mutableStateOf(ServerConfig.getBaseUrl(context)) }
     var apiKey by remember { mutableStateOf(ServerConfig.getApiKey(context)) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
-    var showInstructions by rememberSaveable { mutableStateOf(false) }
+    // Auto-shown on every fresh screen (matches showIntro below): tapping the
+    // header collapses it, and resetToStart() (fox tap) closes it too.
+    var showInstructions by rememberSaveable { mutableStateOf(true) }
 
     // Full-screen intro (IntroScreen.kt): auto-shown once on first launch,
     // and again any time the fox logo is tapped (see resetToStart() below).

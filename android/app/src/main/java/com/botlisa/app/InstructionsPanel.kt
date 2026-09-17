@@ -4,18 +4,24 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.QuestionAnswer
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Translate
@@ -28,28 +34,28 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /**
- * Collapsible "How hands-free mode works" card. Tap the lavender header to
- * expand a numbered walkthrough; each command phrase is shown in its accent
- * colour, verbatim from Settings, and tapping a step speaks the phrase. The
- * "next suggestion" step appears whenever "what else?" is available in the
- * target language ([showNextSuggestionStep]); the "suggested reply" step is
+ * Collapsible "Use voice commands" card. Tap the header to expand three
+ * numbered, colour-coded sections -- stuck speaking (teal), while speaking
+ * (purple), after hearing [spokenLanguage] (orange) -- each holding one or
+ * two tappable command cards showing the phrase (verbatim from Settings) and
+ * its English caption. Tapping a card speaks the phrase. The "next
+ * suggestion" section only appears when "what else?" is available in the
+ * target language ([showNextSuggestionStep]); the "suggested reply" card is
  * Russian-only ([showAnswerStep]).
  */
-// @Composable marks a function that describes UI: Compose calls it (and
-// re-calls it -- "recomposition" -- whenever its inputs change) to decide
-// what's on screen, instead of you imperatively mutating views yourself.
 @Composable
 fun InstructionsPanel(
     // expanded/onToggle follow Compose's "state hoisting" pattern: this
@@ -71,71 +77,50 @@ fun InstructionsPanel(
     showNextSuggestionStep: Boolean = true,
     showAnswerStep: Boolean = true,
 ) {
-    // animateFloatAsState gives back a Float that eases toward targetValue
-    // over time instead of jumping straight there; reading it with "by"
-    // (a property delegate) triggers recomposition on every animation tick
-    // so the chevron rotation is redrawn smoothly frame by frame.
     val chevronRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
         label = "instructions-chevron",
     )
-    val primary = MaterialTheme.colorScheme.primary
     val teal = MaterialTheme.colorScheme.tertiary
+    val purple = MaterialTheme.colorScheme.primary
     val orange = MaterialTheme.colorScheme.secondary
-    val divider = MaterialTheme.colorScheme.outlineVariant
 
-    // buildAnnotatedString lets one Text show mixed styling (the phrase in
-    // bold colour, the rest plain) -- plain String has no way to carry
-    // per-substring style, so Compose text styling always goes through this.
-    fun say(phrase: String, color: Color, tail: String = "") = buildAnnotatedString {
-        append("Say ")
-        withStyle(SpanStyle(color = color, fontWeight = FontWeight.Bold)) { append(phrase) }
-        if (tail.isNotEmpty()) append(tail)
-    }
-
-    val steps = buildList {
+    val sections = buildList {
         add(
-            StepSpec(
-                Icons.Filled.Mic, primary, "Tap the mic",
-                AnnotatedString(
-                    if (showNextSuggestionStep) "Then speak $spokenLanguage normally."
-                    else "Then say a command below.",
+            Section(
+                color = teal,
+                heading = "When you're stuck speaking",
+                body = "Say the command, then an English word. I'll translate it into $spokenLanguage.",
+                cards = listOf(
+                    CardSpec(Icons.Filled.Translate, false, translateTriggerPhrase, TriggerPhraseConfig.TRANSLATE_TRIGGER_EN, onSpeakTranslate),
                 ),
-                null,
-            ),
-        )
-        add(
-            StepSpec(
-                Icons.Filled.Translate, teal, "To translate a word into $spokenLanguage",
-                say(translateTriggerPhrase, teal, ", then the English word after the beep and wait for the $spokenLanguage translation."),
-                onSpeakTranslate,
             ),
         )
         if (showNextSuggestionStep) {
             add(
-                StepSpec(
-                    Icons.Filled.Lightbulb, orange, "To hear the next suggestion in $spokenLanguage",
-                    say(nextSuggestionTriggerPhrase, orange, " to cycle through more phrases."),
-                    onSpeakNext,
+                Section(
+                    color = purple,
+                    heading = "While you're speaking",
+                    body = "Get contextual suggestions on what to say next based on what you just said.",
+                    cards = listOf(
+                        CardSpec(Icons.Filled.Lightbulb, true, nextSuggestionTriggerPhrase, TriggerPhraseConfig.NEXT_SUGGESTION_TRIGGER_EN, onSpeakNext),
+                    ),
                 ),
             )
         }
         add(
-            StepSpec(
-                Icons.AutoMirrored.Filled.MenuBook, teal, "To hear what a phrase means in English",
-                say(meaningTriggerPhrase, teal, ", for an English translation of what was just said."),
-                onSpeakMeaning,
+            Section(
+                color = orange,
+                heading = "After hearing $spokenLanguage",
+                body = "Ask for help with what someone said or how to respond.",
+                cards = buildList {
+                    add(CardSpec(Icons.AutoMirrored.Filled.MenuBook, false, meaningTriggerPhrase, TriggerPhraseConfig.MEANING_TRIGGER_EN, onSpeakMeaning))
+                    if (showAnswerStep) {
+                        add(CardSpec(Icons.Filled.QuestionAnswer, true, answerTriggerPhrase, TriggerPhraseConfig.ANSWER_TRIGGER_EN, onSpeakAnswer))
+                    }
+                },
             ),
         )
-        if (showAnswerStep) {
-            add(
-                StepSpec(
-                    Icons.Filled.QuestionAnswer, orange, "To hear a suggested reply in $spokenLanguage",
-                    say(answerTriggerPhrase, orange, " for phrases you could say back."),
-                    onSpeakAnswer,
-                ),
-            )
-        }
     }
 
     Surface(
@@ -146,27 +131,37 @@ fun InstructionsPanel(
     ) {
         Column {
             // A Modifier is a chained list of decorations/behaviors applied
-            // in order -- here: take full width, then tint the background,
-            // then make the whole row tappable, then add padding. Order
-            // matters (e.g. padding after clickable keeps the padded area
-            // tappable too).
+            // in order -- here: take full width, then make the whole row
+            // tappable, then add padding.
             Row(
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment = Alignment.Top,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
                     .clickable(onClick = onToggle)
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                    .padding(horizontal = 20.dp, vertical = 18.dp),
             ) {
-                Icon(Icons.Filled.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
-                Text(
-                    "How hands-free mode works",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
+                Icon(
+                    Icons.Filled.AutoAwesome,
+                    null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(28.dp),
+                )
+                Column(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(start = 12.dp),
-                )
+                        .padding(start = 14.dp),
+                ) {
+                    Text(
+                        "Use voice commands",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        "Say these phrases in hands-free mode.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Icon(
                     Icons.Filled.ExpandMore,
                     contentDescription = if (expanded) "Collapse" else "Expand",
@@ -179,21 +174,15 @@ fun InstructionsPanel(
             // disappearing instantly.
             AnimatedVisibility(visible = expanded) {
                 Column {
-                    steps.forEachIndexed { i, s ->
-                        if (i > 0) HorizontalDivider(color = divider)
-                        Step(
-                            number = i + 1,
-                            icon = s.icon,
-                            iconColor = s.iconColor,
-                            heading = s.heading,
-                            body = s.body,
-                            onClick = s.onClick,
-                        )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    sections.forEachIndexed { i, section ->
+                        if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        SectionBlock(number = i + 1, section = section)
                     }
-                    HorizontalDivider(color = divider)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
                     ) {
                         Icon(
                             Icons.Filled.Settings,
@@ -217,39 +206,98 @@ fun InstructionsPanel(
     }
 }
 
-private data class StepSpec(
-    val icon: ImageVector,
-    val iconColor: Color,
+private data class Section(
+    val color: Color,
     val heading: String,
-    val body: AnnotatedString,
-    val onClick: (() -> Unit)?,
+    val body: String,
+    val cards: List<CardSpec>,
+)
+
+private data class CardSpec(
+    val icon: ImageVector,
+    val sparkle: Boolean,
+    val phrase: String,
+    val caption: String,
+    val onClick: () -> Unit,
 )
 
 @Composable
-private fun Step(
-    number: Int,
-    icon: ImageVector,
-    iconColor: Color,
-    heading: String,
-    body: AnnotatedString,
-    onClick: (() -> Unit)? = null,
-) {
+private fun SectionBlock(number: Int, section: Section) {
+    Column(modifier = Modifier.padding(20.dp)) {
+        Row {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(section.color),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    number.toString(),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Column(modifier = Modifier.padding(start = 14.dp)) {
+                Text(
+                    section.heading.uppercase(),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp,
+                )
+                Text(
+                    section.body,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        section.cards.forEachIndexed { i, card ->
+            if (i > 0) Spacer(Modifier.height(10.dp))
+            CommandCard(card, section.color)
+        }
+    }
+}
+
+@Composable
+private fun CommandCard(card: CardSpec, color: Color) {
     Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .clip(RoundedCornerShape(14.dp))
+            .background(color.copy(alpha = 0.08f))
+            .border(1.dp, color.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+            .clickable(onClick = card.onClick)
+            .padding(14.dp),
     ) {
-        Icon(icon, null, tint = iconColor, modifier = Modifier.padding(top = 2.dp))
+        Box {
+            Icon(card.icon, contentDescription = null, tint = color, modifier = Modifier.size(32.dp))
+            if (card.sparkle) {
+                Icon(
+                    Icons.Filled.AutoAwesome,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 4.dp, y = (-2).dp)
+                        .size(14.dp),
+                )
+            }
+        }
         Column(modifier = Modifier.padding(start = 14.dp)) {
             Text(
-                "$number. $heading",
-                style = MaterialTheme.typography.bodyMedium,
+                formatCommand(card.phrase),
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
+                color = color,
             )
             Text(
-                body,
-                style = MaterialTheme.typography.bodySmall,
+                formatCommand(card.caption),
+                style = MaterialTheme.typography.bodyMedium,
+                fontStyle = FontStyle.Italic,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
