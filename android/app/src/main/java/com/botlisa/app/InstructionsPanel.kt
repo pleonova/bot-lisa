@@ -111,8 +111,8 @@ fun InstructionsPanel(
                 body = "Say the command, then an English word. I'll translate it into $spokenLanguage.",
                 flow = listOf(
                     FlowItem.CardItem(CardSpec(Icons.Filled.Translate, false, translateTriggerPhrase, TriggerPhraseConfig.TRANSLATE_TRIGGER_EN, onSpeakTranslate)),
-                    FlowItem.BubbleItem(wordExampleEn, gloss = null, label = "Example", speaker = Speaker.USER),
-                    FlowItem.BubbleItem(wordExampleTranslated, gloss = wordExampleEn, label = null, speaker = Speaker.FOX),
+                    FlowItem.BubbleItem(wordExampleEn, gloss = null, speaker = Speaker.USER),
+                    FlowItem.BubbleItem(wordExampleTranslated, gloss = wordExampleEn, speaker = Speaker.FOX),
                 ),
             ),
         )
@@ -123,9 +123,9 @@ fun InstructionsPanel(
                     heading = "While you're speaking",
                     body = "Get contextual suggestions on what to say next based on what you just said.",
                     flow = listOf(
-                        FlowItem.BubbleItem(phraseExampleHeard, phraseExampleHeardGloss, label = "Example", speaker = Speaker.USER),
+                        FlowItem.BubbleItem(phraseExampleHeard, phraseExampleHeardGloss, speaker = Speaker.USER),
                         FlowItem.CardItem(CardSpec(Icons.Filled.Lightbulb, true, nextSuggestionTriggerPhrase, TriggerPhraseConfig.NEXT_SUGGESTION_TRIGGER_EN, onSpeakNext)),
-                        FlowItem.BubbleItem(phraseExampleResponse, phraseExampleResponseGloss, label = null, speaker = Speaker.FOX),
+                        FlowItem.BubbleItem(phraseExampleResponse, phraseExampleResponseGloss, speaker = Speaker.FOX),
                     ),
                 ),
             )
@@ -248,11 +248,10 @@ private data class CardSpec(
 private enum class Speaker { USER, FOX }
 
 /** One row in a section's vertical flow: a tappable command card or a
- * worked-example bubble. [BubbleItem.label] tags an input bubble (what the
- * caregiver says/hears) as "Example". */
+ * worked-example bubble. */
 private sealed class FlowItem {
     data class CardItem(val spec: CardSpec) : FlowItem()
-    data class BubbleItem(val text: String, val gloss: String?, val label: String?, val speaker: Speaker) : FlowItem()
+    data class BubbleItem(val text: String, val gloss: String?, val speaker: Speaker) : FlowItem()
 }
 
 @Composable
@@ -297,10 +296,10 @@ private fun SectionBlock(number: Int, section: Section) {
                     // a chat conversation -- the caregiver's own bubbles
                     // (cards, USER examples) stay on the left.
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                        SpeakerBubble(item.speaker, item.text, item.gloss, item.label)
+                        SpeakerBubble(item.speaker, item.text, item.gloss)
                     }
                 } else {
-                    SpeakerBubble(item.speaker, item.text, item.gloss, item.label)
+                    SpeakerBubble(item.speaker, item.text, item.gloss)
                 }
             }
         }
@@ -350,57 +349,40 @@ private fun rememberSpeechBubbleShape(tailOnRight: Boolean = false): Shape {
  * person glyph, both tinted to match the bubble so neither clashes with the
  * section's accent colour. Lisa's bubbles mirror to the right (icon on the
  * right, tail pointing right), like the other side of a chat conversation;
- * the caregiver's stay on the left. [label] tags an input bubble (what the
- * caregiver says/hears) as "Example". */
+ * the caregiver's stay on the left. */
 @Composable
-private fun SpeakerBubble(speaker: Speaker, text: String, gloss: String?, label: String?) {
+private fun SpeakerBubble(speaker: Speaker, text: String, gloss: String?) {
     val isFox = speaker == Speaker.FOX
     val shape = rememberSpeechBubbleShape(tailOnRight = isFox)
-    Column(horizontalAlignment = if (isFox) Alignment.End else Alignment.Start) {
-        if (label != null) {
-            Text(
-                label.uppercase(),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.5.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(
-                    bottom = 4.dp,
-                    start = if (isFox) 0.dp else SPEAKER_ICON_SIZE + 4.dp,
-                    end = if (isFox) SPEAKER_ICON_SIZE + 4.dp else 0.dp,
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (!isFox) SpeakerIcon(speaker)
+        Column(
+            modifier = Modifier
+                .clip(shape)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(
+                    start = if (isFox) 14.dp else 14.dp + SPEAKER_BUBBLE_TAIL_WIDTH,
+                    end = if (isFox) 14.dp + SPEAKER_BUBBLE_TAIL_WIDTH else 14.dp,
+                    top = 10.dp,
+                    bottom = 10.dp,
                 ),
+        ) {
+            Text(
+                text,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
             )
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (!isFox) SpeakerIcon(speaker)
-            Column(
-                modifier = Modifier
-                    .clip(shape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(
-                        start = if (isFox) 14.dp else 14.dp + SPEAKER_BUBBLE_TAIL_WIDTH,
-                        end = if (isFox) 14.dp + SPEAKER_BUBBLE_TAIL_WIDTH else 14.dp,
-                        top = 10.dp,
-                        bottom = 10.dp,
-                    ),
-            ) {
+            if (gloss != null) {
                 Text(
-                    text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    "($gloss)",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontStyle = FontStyle.Italic,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (gloss != null) {
-                    Text(
-                        "($gloss)",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontStyle = FontStyle.Italic,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
-            if (isFox) SpeakerIcon(speaker)
         }
+        if (isFox) SpeakerIcon(speaker)
     }
 }
 
@@ -438,11 +420,19 @@ private val COMMAND_CARD_BORDER = 2.5.dp
  * but keeping the section's accent colour as a bold outline + tint so it's
  * still identifiable as a command. Tapping it speaks the phrase in Lisa's
  * voice, as a demo -- a separate affordance from who says it during actual
- * hands-free use. */
+ * hands-free use. Stops short of the right edge by a speaker icon's width
+ * plus a bubble tail's width -- lining its right edge up with the rounded
+ * body of Lisa's reply bubbles on the right (whose tail + icon occupy that
+ * same margin), so neither side's bubbles ever reach edge to edge. */
 @Composable
 private fun CommandCard(card: CardSpec, color: Color) {
     val shape = rememberSpeechBubbleShape()
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(end = SPEAKER_ICON_SIZE + SPEAKER_BUBBLE_TAIL_WIDTH),
+    ) {
         SpeakerIcon(Speaker.USER)
         Row(
             verticalAlignment = Alignment.CenterVertically,
