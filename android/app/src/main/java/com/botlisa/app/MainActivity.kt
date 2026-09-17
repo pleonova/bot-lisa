@@ -213,6 +213,12 @@ fun LisaScreen(
         OnDeviceLlmConfig.getWhatElseSource(context) != OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY
     val nextSuggestionSupported = curatedRelatedSupported || aiWhatElseSupported
 
+    // Worked examples shown in the "Use voice commands" panel -- see
+    // InstructionsExamples.kt. Small bundled-asset reads, cheap enough to
+    // redo inline whenever the target language changes.
+    val wordExample = remember(targetLanguage.code) { InstructionsExamples.wordExample(context, targetLanguage.code) }
+    val phraseExample = remember(targetLanguage.code) { InstructionsExamples.phraseExample(context, targetLanguage.code) }
+
     // Lisa Assistant's voice-command trigger phrases -- editable in Settings,
     // persisted per target-language via TriggerPhraseConfig.kt. Keyed on
     // `targetLanguage` so switching language swaps in that language's phrases.
@@ -1265,6 +1271,12 @@ fun LisaScreen(
             onSpeakMeaning = { speakTriggerPhrase(meaningTriggerPhrase) },
             onSpeakNext = { speakTriggerPhrase(nextSuggestionTriggerPhrase) },
             onSpeakAnswer = { speakTriggerPhrase(answerTriggerPhrase) },
+            wordExampleEn = wordExample.en,
+            wordExampleTranslated = wordExample.translated,
+            phraseExampleHeard = phraseExample.heard,
+            phraseExampleHeardGloss = phraseExample.heardGloss,
+            phraseExampleResponse = phraseExample.response,
+            phraseExampleResponseGloss = phraseExample.responseGloss,
             showNextSuggestionStep = nextSuggestionSupported,
             showAnswerStep = curatedRelatedSupported,
         )

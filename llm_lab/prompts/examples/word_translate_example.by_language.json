@@ -1,0 +1,60 @@
+{
+  "_comment": [
+    "Seed word-translation demo for the 'how to say?' command's",
+    "instructions-panel illustration, one entry per language code in",
+    "android SupportedLanguages.ALL. Each language has a `language_display`",
+    "string and one `example` with the same fixed English source word",
+    "('sleepy') plus its translation, so the app can show a live",
+    "'sleepy -> <word>' arrow demo without calling on-device translation",
+    "just to render a static instructions panel.",
+    "",
+    "Only the Russian entry is battle-tested (matches the reference",
+    "design). The rest are reasonable single-word translations, NOT",
+    "verified by a native speaker yet -- same caveat as",
+    "few_shot_examples.caregiver_infant.by_language.json."
+  ],
+  "ru-RU": {
+    "language_display": "Russian",
+    "example": { "en": "sleepy", "translated": "сонный" }
+  },
+  "uk-UA": {
+    "language_display": "Ukrainian",
+    "example": { "en": "sleepy", "translated": "сонний" }
+  },
+  "es-ES": {
+    "language_display": "Spanish",
+    "example": { "en": "sleepy", "translated": "soñoliento" }
+  },
+  "fr-FR": {
+    "language_display": "French",
+    "example": { "en": "sleepy", "translated": "somnolent" }
+  },
+  "de-DE": {
+    "language_display": "German",
+    "example": { "en": "sleepy", "translated": "schläfrig" }
+  },
+  "pt-PT": {
+    "language_display": "Portuguese",
+    "example": { "en": "sleepy", "translated": "sonolento" }
+  },
+  "ro-RO": {
+    "language_display": "Romanian",
+    "example": { "en": "sleepy", "translated": "somnoros" }
+  },
+  "hi-IN": {
+    "language_display": "Hindi",
+    "example": { "en": "sleepy", "translated": "उनींदा" }
+  },
+  "mr-IN": {
+    "language_display": "Marathi",
+    "example": { "en": "sleepy", "translated": "झोपाळू" }
+  },
+  "zh-CN": {
+    "language_display": "Mandarin",
+    "example": { "en": "sleepy", "translated": "困" }
+  },
+  "ko-KR": {
+    "language_display": "Korean",
+    "example": { "en": "sleepy", "translated": "졸린" }
+  }
+}
