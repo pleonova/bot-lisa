@@ -1,27 +1,33 @@
 package com.botlisa.app
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Headset
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
@@ -34,9 +40,10 @@ import androidx.compose.ui.window.PopupProperties
  * not a Material AlertDialog (there's no existing dialog chrome in this
  * app to match), just a Box + Surface built the same way so the app
  * underneath stays visible rather than being replaced outright. Dismissed
- * by tapping the scrim OR the card's own background (hence the .clickable
- * on both), with the interactive rows inside consuming their own taps so
- * picking a language/audience doesn't also dismiss it.
+ * only via the scrim (tapping outside the card) or the explicit "Let's go"
+ * button -- unlike the first version of this screen, the card body itself
+ * is no longer a dismiss target, so a mistap near the audience rows can't
+ * close it before the caregiver's made a choice.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -59,13 +66,7 @@ fun IntroScreen(
         contentAlignment = Alignment.Center,
     ) {
         Surface(
-            modifier = Modifier
-                .fillMaxWidth(0.9f)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onDismiss,
-                ),
+            modifier = Modifier.fillMaxWidth(0.9f),
             shape = MaterialTheme.shapes.large,
             tonalElevation = 0.dp,
             shadowElevation = 8.dp,
@@ -74,17 +75,26 @@ fun IntroScreen(
                 modifier = Modifier.padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
-                Text(
-                    "Hi, I'm Lisa",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Hi, I'm Lisa",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(
+                        Icons.Filled.AutoAwesome,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
 
                 FlowRow(
                     verticalArrangement = Arrangement.spacedBy(0.dp),
                     horizontalArrangement = Arrangement.spacedBy(0.dp),
                 ) {
-                    Text("Talk freely and I'll fill in the ", style = MaterialTheme.typography.bodyLarge)
+                    Text("Talk naturally and I'll help with the ", style = MaterialTheme.typography.bodyLarge)
                     InlineLanguagePicker(targetLanguage, onTargetLanguageChange)
                     Text(" when you get stuck.", style = MaterialTheme.typography.bodyLarge)
                 }
@@ -97,24 +107,46 @@ fun IntroScreen(
                     )
                     AudienceOption(
                         selected = audience == AudienceConfig.Audience.BABY,
+                        icon = Icons.Filled.Face,
                         label = "A baby",
-                        caption = "soft, simple phrases a little one can absorb",
+                        caption = "Soft, simple phrases",
                         onClick = { onAudienceChange(AudienceConfig.Audience.BABY) },
                     )
                     AudienceOption(
                         selected = audience == AudienceConfig.Audience.ADULT,
+                        icon = Icons.Filled.People,
                         label = "An adult",
-                        caption = "everyday, natural phrasing",
+                        caption = "Everyday, natural phrasing",
                         onClick = { onAudienceChange(AudienceConfig.Audience.ADULT) },
                     )
                 }
 
-                Text(
-                    "Tap anywhere to start · tap the fox anytime to reset page · go to settings to update language.",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontStyle = FontStyle.Italic,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.Headset,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        "Works best with one headphone",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    Text("Let's go", fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                }
             }
         }
     }
@@ -123,24 +155,56 @@ fun IntroScreen(
 @Composable
 private fun AudienceOption(
     selected: Boolean,
+    icon: ImageVector,
     label: String,
     caption: String,
     onClick: () -> Unit,
 ) {
+    val containerColor = if (selected) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
+    val avatarColor = if (selected) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val iconTint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clip(RoundedCornerShape(16.dp))
+            .background(containerColor)
+            .then(
+                if (selected) {
+                    Modifier
+                } else {
+                    Modifier.border(
+                        BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        RoundedCornerShape(16.dp),
+                    )
+                },
+            )
+            .clickable(onClick = onClick)
+            .padding(12.dp),
     ) {
         RadioButton(selected = selected, onClick = onClick)
-        Text(
-            buildAnnotatedString {
-                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(label) }
-                append(" — $caption")
-            },
-            style = MaterialTheme.typography.bodyLarge,
-        )
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(avatarColor),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(22.dp))
+        }
+        Column {
+            Text(label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+            Text(caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
