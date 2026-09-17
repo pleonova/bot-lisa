@@ -1364,98 +1364,6 @@ fun LisaScreen(
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
 
-        InstructionsPanel(
-            expanded = showInstructions,
-            onToggle = { showInstructions = !showInstructions },
-            spokenLanguage = targetLanguage.displayName,
-            translateTriggerPhrase = translateTriggerPhrase,
-            meaningTriggerPhrase = meaningTriggerPhrase,
-            nextSuggestionTriggerPhrase = nextSuggestionTriggerPhrase,
-            answerTriggerPhrase = answerTriggerPhrase,
-            onSpeakTranslate = { speakTriggerPhrase(translateTriggerPhrase) },
-            onSpeakMeaning = { speakTriggerPhrase(meaningTriggerPhrase) },
-            onSpeakNext = { speakTriggerPhrase(nextSuggestionTriggerPhrase) },
-            onSpeakAnswer = { speakTriggerPhrase(answerTriggerPhrase) },
-            wordExampleEn = wordExample.en,
-            wordExampleTranslated = wordExample.translated,
-            phraseExampleHeard = phraseExample.heard,
-            phraseExampleHeardGloss = phraseExample.heardGloss,
-            phraseExampleResponse = phraseExample.response,
-            phraseExampleResponseGloss = phraseExample.responseGloss,
-            showNextSuggestionStep = nextSuggestionSupported,
-            showAnswerStep = curatedRelatedSupported,
-        )
-
-        CommandChips(
-            // Hands-free: shown until a command is used (commandsDismissed).
-            // Stopping hands-free alone should NOT hide these -- the field
-            // still holding the last transcript (assistantState flips to
-            // IDLE, but the text isn't cleared) used to read as "you're
-            // typing now" and hide the chips out from under you the moment
-            // you tapped the mic to stop.
-            visible = !commandsDismissed,
-            items = buildList {
-                // Nothing yet for meaning/what-else/answer to act on (fresh
-                // app start, or hands-free was stopped/never started and the
-                // field's still empty) -- these three used to silently no-op
-                // in that case instead of the tap producing *any* feedback.
-                // Same fallback the hands-free branch already uses: read the
-                // trigger phrase aloud as a demo instead.
-                val hasUtteranceToActOn = lastUtterance.isNotBlank() || input.isNotBlank()
-                add(
-                    CommandChipSpec(
-                        CommandKind.TRANSLATE, translateTriggerPhrase,
-                        TriggerPhraseConfig.TRANSLATE_TRIGGER_EN,
-                    ) { onTranslateChipTap() },
-                )
-                add(
-                    CommandChipSpec(
-                        CommandKind.MEANING, meaningTriggerPhrase,
-                        TriggerPhraseConfig.MEANING_TRIGGER_EN,
-                    ) {
-                        // Hands-free (or idle with nothing to act on): tapping
-                        // just demonstrates how to say the trigger phrase --
-                        // you'd speak it yourself to actually invoke it.
-                        // Not listening AND there's a phrase in play: the tap
-                        // IS the command, no mic needed for it.
-                        if (assistantState == SpeechAssistant.State.IDLE && hasUtteranceToActOn) {
-                            speakMeaningOfLast()
-                        } else {
-                            speakTriggerPhrase(meaningTriggerPhrase)
-                        }
-                    },
-                )
-                if (nextSuggestionSupported) {
-                    add(
-                        CommandChipSpec(
-                            CommandKind.NEXT_SUGGESTION, nextSuggestionTriggerPhrase,
-                            TriggerPhraseConfig.NEXT_SUGGESTION_TRIGGER_EN,
-                        ) {
-                            if (assistantState == SpeechAssistant.State.IDLE && hasUtteranceToActOn) {
-                                requestWhatElse()
-                            } else {
-                                speakTriggerPhrase(nextSuggestionTriggerPhrase)
-                            }
-                        },
-                    )
-                }
-                if (curatedRelatedSupported) {
-                    add(
-                        CommandChipSpec(
-                            CommandKind.ANSWER, answerTriggerPhrase,
-                            TriggerPhraseConfig.ANSWER_TRIGGER_EN,
-                        ) {
-                            if (assistantState == SpeechAssistant.State.IDLE && hasUtteranceToActOn) {
-                                requestAnswerSuggestions()
-                            } else {
-                                speakTriggerPhrase(answerTriggerPhrase)
-                            }
-                        },
-                    )
-                }
-            },
-        )
-
         errorText?.let {
             Column {
                 Text(it, color = MaterialTheme.colorScheme.error)
@@ -1656,6 +1564,98 @@ fun LisaScreen(
                 }
             }
         }
+
+        InstructionsPanel(
+            expanded = showInstructions,
+            onToggle = { showInstructions = !showInstructions },
+            spokenLanguage = targetLanguage.displayName,
+            translateTriggerPhrase = translateTriggerPhrase,
+            meaningTriggerPhrase = meaningTriggerPhrase,
+            nextSuggestionTriggerPhrase = nextSuggestionTriggerPhrase,
+            answerTriggerPhrase = answerTriggerPhrase,
+            onSpeakTranslate = { speakTriggerPhrase(translateTriggerPhrase) },
+            onSpeakMeaning = { speakTriggerPhrase(meaningTriggerPhrase) },
+            onSpeakNext = { speakTriggerPhrase(nextSuggestionTriggerPhrase) },
+            onSpeakAnswer = { speakTriggerPhrase(answerTriggerPhrase) },
+            wordExampleEn = wordExample.en,
+            wordExampleTranslated = wordExample.translated,
+            phraseExampleHeard = phraseExample.heard,
+            phraseExampleHeardGloss = phraseExample.heardGloss,
+            phraseExampleResponse = phraseExample.response,
+            phraseExampleResponseGloss = phraseExample.responseGloss,
+            showNextSuggestionStep = nextSuggestionSupported,
+            showAnswerStep = curatedRelatedSupported,
+        )
+
+        CommandChips(
+            // Hands-free: shown until a command is used (commandsDismissed).
+            // Stopping hands-free alone should NOT hide these -- the field
+            // still holding the last transcript (assistantState flips to
+            // IDLE, but the text isn't cleared) used to read as "you're
+            // typing now" and hide the chips out from under you the moment
+            // you tapped the mic to stop.
+            visible = !commandsDismissed,
+            items = buildList {
+                // Nothing yet for meaning/what-else/answer to act on (fresh
+                // app start, or hands-free was stopped/never started and the
+                // field's still empty) -- these three used to silently no-op
+                // in that case instead of the tap producing *any* feedback.
+                // Same fallback the hands-free branch already uses: read the
+                // trigger phrase aloud as a demo instead.
+                val hasUtteranceToActOn = lastUtterance.isNotBlank() || input.isNotBlank()
+                add(
+                    CommandChipSpec(
+                        CommandKind.TRANSLATE, translateTriggerPhrase,
+                        TriggerPhraseConfig.TRANSLATE_TRIGGER_EN,
+                    ) { onTranslateChipTap() },
+                )
+                add(
+                    CommandChipSpec(
+                        CommandKind.MEANING, meaningTriggerPhrase,
+                        TriggerPhraseConfig.MEANING_TRIGGER_EN,
+                    ) {
+                        // Hands-free (or idle with nothing to act on): tapping
+                        // just demonstrates how to say the trigger phrase --
+                        // you'd speak it yourself to actually invoke it.
+                        // Not listening AND there's a phrase in play: the tap
+                        // IS the command, no mic needed for it.
+                        if (assistantState == SpeechAssistant.State.IDLE && hasUtteranceToActOn) {
+                            speakMeaningOfLast()
+                        } else {
+                            speakTriggerPhrase(meaningTriggerPhrase)
+                        }
+                    },
+                )
+                if (nextSuggestionSupported) {
+                    add(
+                        CommandChipSpec(
+                            CommandKind.NEXT_SUGGESTION, nextSuggestionTriggerPhrase,
+                            TriggerPhraseConfig.NEXT_SUGGESTION_TRIGGER_EN,
+                        ) {
+                            if (assistantState == SpeechAssistant.State.IDLE && hasUtteranceToActOn) {
+                                requestWhatElse()
+                            } else {
+                                speakTriggerPhrase(nextSuggestionTriggerPhrase)
+                            }
+                        },
+                    )
+                }
+                if (curatedRelatedSupported) {
+                    add(
+                        CommandChipSpec(
+                            CommandKind.ANSWER, answerTriggerPhrase,
+                            TriggerPhraseConfig.ANSWER_TRIGGER_EN,
+                        ) {
+                            if (assistantState == SpeechAssistant.State.IDLE && hasUtteranceToActOn) {
+                                requestAnswerSuggestions()
+                            } else {
+                                speakTriggerPhrase(answerTriggerPhrase)
+                            }
+                        },
+                    )
+                }
+            },
+        )
         }
     }
 
