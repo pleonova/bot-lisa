@@ -134,7 +134,7 @@ speech_lab/                       # offline STT + per-utterance language-ID expe
 infra/
   Dockerfile
   docker-compose.yml
-  k8s/                            # scaffold manifests, untested against a real cluster
+  k8s/                            # orchestration-service + retrieval-service: live on DOKS. paused/: not applied
   terraform/main.tf              # scaffold, no provider configured
 tests/test_retrieval.py
 android/                          # Kotlin/Compose app — see android/README.md
@@ -144,6 +144,49 @@ android/                          # Kotlin/Compose app — see android/README.md
   ON_DEVICE_LLM_PLAN.md  PHONE_DEPLOY.md  UI_REDESIGN_PLAN.md
 ROADMAP.md                        # bigger multi-layer feature bets (hands-free Lisa Assistant)
 ```
+
+## Hosting
+
+The backend runs on a single-node DigitalOcean Kubernetes (DOKS) cluster
+(`bot-lisa-cluster`, see `infra/terraform/main.tf` and `infra/k8s/`).
+`android/PHONE_DEPLOY.md` has the full deploy/update runbook.
+
+**Currently live:** `orchestration-service` (exposed via a DigitalOcean
+LoadBalancer — the phone app talks to its external IP directly, see
+`infra/k8s/orchestration-service.yaml`) and `retrieval-service` (internal
+only, `type: ClusterIP`, no public IP or LoadBalancer charge — called only by
+`orchestration-service`, never by the phone directly).
+
+**Not currently deployed:** `ingestion-service` — it served the paused
+child-perception voice pipeline (see "Paused features" below) and nothing
+calls it today. Its manifest lived in `infra/k8s/` with `type: LoadBalancer`
+for 31 days, unused, billing for a public IP nothing needed. Torn down
+2026-09-17 and moved to `infra/k8s/paused/ingestion-service.yaml` — apply
+that file again if the feature is revisited.
+
+### Why the DigitalOcean bill moves the way it does
+
+DigitalOcean's Kubernetes charges are **fixed monthly costs for what's
+provisioned, not for how much the app is actually used** — a LoadBalancer
+and a node cost the same whether zero people or a thousand people hit the
+app that day. That's why "traffic" is never the right first suspect for a
+cost spike here; an extra `type: LoadBalancer` Service (like the
+`ingestion-service` one above) or a bigger/extra node is. DigitalOcean's
+Spend Alerts (Billing → Spend alerts) can warn you past a threshold, but
+they're notifications only — DigitalOcean has no hard spending cap that
+auto-shuts-down resources.
+
+### What needs the server vs. what runs on-device (Android app)
+
+| Feature | On-device today? | Needs the server? |
+|---|---|---|
+| **Translate** (English → target language) | Yes — on-device ML Kit is tried first (`OnDeviceTranslator.kt`, see `MainActivity.kt`'s `onSend()`) | Only as a backup if on-device translation itself fails |
+| **"Что ещё" (what-else suggestions)** | Yes — on-device Qwen (`OnDeviceLlm.generateWhatElse`) is tried first once the ~2.7GB model is downloaded | Only if the on-device model isn't ready/available — falls back to whatever the last server call already returned, not a fresh call |
+| **Typed/spoken Russian phrase → "Look up" (expand mode)** | No on-device path exists | **Yes, every time** — hits `orchestration-service`'s `/assist`, which queries `retrieval-service`'s curated phrase library |
+| **"Как ответить" (how to respond)** | Not built yet | **Yes, always** |
+
+The two "yes, always" rows above are the reason the cluster can't be deleted
+outright today.
 
 ## Suggested expansion order
 

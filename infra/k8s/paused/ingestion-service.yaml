@@ -1,4 +1,10 @@
-# Scaffold only -- same pattern as retrieval-service.yaml.
+# Paused -- moved out of infra/k8s/ so `kubectl apply -f infra/k8s/` (see
+# android/PHONE_DEPLOY.md) doesn't redeploy it. Was live on the cluster for
+# 31 days as an unused LoadBalancer (the child-perception voice pipeline it
+# serves is paused -- see README.md's "Paused features") before being torn
+# down on 2026-09-17 to stop paying for it. Re-apply with
+# `kubectl apply -f infra/k8s/paused/ingestion-service.yaml` when that
+# feature is revisited.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

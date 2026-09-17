@@ -91,8 +91,10 @@ get the new code running on the cluster:
    doctl kubernetes cluster kubeconfig save bot-lisa-cluster
    kubectl get pods
    ```
-   You should see `retrieval-service`, `orchestration-service`, and
-   `ingestion-service` pods already `Running`.
+   You should see `retrieval-service` and `orchestration-service` pods
+   already `Running`. (`ingestion-service` was torn down 2026-09-17 -- it
+   was an unused LoadBalancer billing for a paused feature; see
+   `infra/k8s/paused/ingestion-service.yaml`.)
 
    *In other words: this makes sure the commands below land on Bot Lisa's
    cluster and not some other DigitalOcean project you might have.*
@@ -126,7 +128,7 @@ get the new code running on the cluster:
 4. **If you only changed Python code, restart the deployments so they pick
    up the new image:**
    ```bash
-   kubectl rollout restart deployment/retrieval-service deployment/orchestration-service deployment/ingestion-service
+   kubectl rollout restart deployment/retrieval-service deployment/orchestration-service
    kubectl rollout status deployment/retrieval-service
    kubectl rollout status deployment/orchestration-service
    ```
