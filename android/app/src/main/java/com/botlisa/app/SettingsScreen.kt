@@ -317,6 +317,7 @@ private fun LanguagePicker(targetLanguage: TargetLanguage, onChange: (TargetLang
                 properties = PopupProperties(focusable = true),
             ) {
                 Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
                     shape = MaterialTheme.shapes.extraSmall,
                     // tonalElevation deliberately 0 -- Material3 tints a
                     // Surface toward the primary color at higher elevations,
@@ -330,8 +331,9 @@ private fun LanguagePicker(targetLanguage: TargetLanguage, onChange: (TargetLang
                 ) {
                     Column(modifier = Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
                         SupportedLanguages.ALL.forEach { language ->
-                            DropdownMenuItem(
-                                text = { Text(language.displayName, style = MaterialTheme.typography.bodyLarge) },
+                            LanguageDropdownItem(
+                                language = language,
+                                selected = language.code == targetLanguage.code,
                                 onClick = {
                                     onChange(language)
                                     expanded = false

@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -25,7 +24,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.IntOffset
@@ -45,7 +47,6 @@ import androidx.compose.ui.window.PopupProperties
  * is no longer a dismiss target, so a mistap near the audience rows can't
  * close it before the caregiver's made a choice.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun IntroScreen(
     targetLanguage: TargetLanguage,
@@ -65,8 +66,11 @@ fun IntroScreen(
             ),
         contentAlignment = Alignment.Center,
     ) {
+        var cardCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
         Surface(
-            modifier = Modifier.fillMaxWidth(0.9f),
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .onGloballyPositioned { cardCoordinates = it },
             shape = MaterialTheme.shapes.large,
             tonalElevation = 0.dp,
             shadowElevation = 8.dp,
@@ -90,13 +94,17 @@ fun IntroScreen(
                     )
                 }
 
-                FlowRow(
-                    verticalArrangement = Arrangement.spacedBy(0.dp),
-                    horizontalArrangement = Arrangement.spacedBy(0.dp),
-                ) {
-                    Text("Talk naturally and I'll help with the ", style = MaterialTheme.typography.bodyLarge)
-                    InlineLanguagePicker(targetLanguage, onTargetLanguageChange)
-                    Text(" when you get stuck.", style = MaterialTheme.typography.bodyLarge)
+                Column {
+                    // Two fixed lines, not one wrapping paragraph -- so the
+                    // language name (varying from "Hindi" to "Marathi") never
+                    // changes how many words fit on the first line and shifts
+                    // the whole card's layout around depending which is
+                    // selected. The language always opens line two instead.
+                    Text("Talk naturally and I'll help with your", style = MaterialTheme.typography.bodyLarge)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        InlineLanguagePicker(targetLanguage, onTargetLanguageChange, cardCoordinates)
+                        Text(" when you get stuck.", style = MaterialTheme.typography.bodyLarge)
+                    }
                 }
 
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -214,16 +222,31 @@ private fun AudienceOption(
  * ExposedDropdownMenu flips upward when it doesn't measure room below), just
  * styled as bold underlined text instead of an outlined field so it reads
  * inline with the surrounding sentence.
+ *
+ * The dropdown itself is sized and positioned to match the intro card, not
+ * the (much narrower) inline text it hangs off of: cardCoordinates -- the
+ * card Surface's own onGloballyPositioned result, from the caller -- gives
+ * both its width and its window position, so the popup can be widened to
+ * match and shifted left by however far this text sits from the card's left
+ * edge. That gap is fixed today (the caller always opens its own line with
+ * this picker -- see the two-line Column in IntroScreen), but computing it
+ * from actual layout coordinates rather than hardcoding it means this still
+ * holds if that sentence is ever restructured again.
  */
 @Composable
-private fun InlineLanguagePicker(targetLanguage: TargetLanguage, onChange: (TargetLanguage) -> Unit) {
+private fun InlineLanguagePicker(
+    targetLanguage: TargetLanguage,
+    onChange: (TargetLanguage) -> Unit,
+    cardCoordinates: LayoutCoordinates?,
+) {
     var expanded by remember { mutableStateOf(false) }
-    var anchorHeightPx by remember { mutableStateOf(0) }
+    var anchorCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val density = LocalDensity.current
     Box {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .onGloballyPositioned { anchorHeightPx = it.size.height }
+                .onGloballyPositioned { anchorCoordinates = it }
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -243,22 +266,28 @@ private fun InlineLanguagePicker(targetLanguage: TargetLanguage, onChange: (Targ
                 modifier = Modifier.size(20.dp).rotate(if (expanded) 180f else 0f),
             )
         }
-        if (expanded) {
+        val card = cardCoordinates
+        val anchor = anchorCoordinates
+        if (expanded && card != null && anchor != null) {
+            val xOffsetPx = (card.positionInWindow().x - anchor.positionInWindow().x).toInt()
             Popup(
                 alignment = Alignment.TopStart,
-                offset = IntOffset(0, anchorHeightPx),
+                offset = IntOffset(xOffsetPx, anchor.size.height),
                 onDismissRequest = { expanded = false },
                 properties = PopupProperties(focusable = true),
             ) {
                 Surface(
+                    modifier = Modifier.width(with(density) { card.size.width.toDp() }),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
                     shape = MaterialTheme.shapes.extraSmall,
                     tonalElevation = 0.dp,
                     shadowElevation = 3.dp,
                 ) {
                     Column(modifier = Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
                         SupportedLanguages.ALL.forEach { language ->
-                            DropdownMenuItem(
-                                text = { Text(language.displayName, style = MaterialTheme.typography.bodyLarge) },
+                            LanguageDropdownItem(
+                                language = language,
+                                selected = language.code == targetLanguage.code,
                                 onClick = {
                                     onChange(language)
                                     expanded = false
