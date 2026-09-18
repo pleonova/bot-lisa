@@ -84,6 +84,7 @@ fun IntroScreen(
                         "Hi, I'm Lisa",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Icon(
@@ -100,10 +101,18 @@ fun IntroScreen(
                     // changes how many words fit on the first line and shifts
                     // the whole card's layout around depending which is
                     // selected. The language always opens line two instead.
-                    Text("Talk naturally and I'll help with your", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Talk naturally and I'll help with your",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         InlineLanguagePicker(targetLanguage, onTargetLanguageChange, cardCoordinates)
-                        Text(" when you get stuck.", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            " when you get stuck.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
 
@@ -112,6 +121,7 @@ fun IntroScreen(
                         "Who are you talking to?",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     AudienceOption(
                         selected = audience == AudienceConfig.Audience.BABY,
@@ -210,7 +220,12 @@ private fun AudienceOption(
             Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(22.dp))
         }
         Column {
-            Text(label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Text(caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
