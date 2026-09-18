@@ -160,12 +160,20 @@ fun InstructionsPanel(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    // A subtle tonal step off the panel's own colour --
-                    // enough to read as its own bar without the drama of a
-                    // fully inverted dark-on-light block. Clipped to the
-                    // Surface's own top corners for free, since this is the
-                    // first thing in its content.
-                    .background(lerp(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant, 0.15f))
+                    // Collapsed: same grey as the record button's idle fill
+                    // (i.e. the panel's own colour, so it reads as part of
+                    // one quiet bar). Expanded: a tonal step darker, so the
+                    // header still reads as its own bar once the numbered
+                    // sections are open below it. Clipped to the Surface's
+                    // own top corners for free, since this is the first
+                    // thing in its content.
+                    .background(
+                        if (expanded) {
+                            lerp(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant, 0.15f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                    )
                     .clickable(onClick = onToggle)
                     // Same 20dp inset as each numbered section's own
                     // padding, so the sparkle lines up under the number
@@ -199,7 +207,6 @@ fun InstructionsPanel(
                     Text(
                         "Say these phrases in hands-free mode.",
                         style = MaterialTheme.typography.bodyMedium,
-                        fontStyle = FontStyle.Italic,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
