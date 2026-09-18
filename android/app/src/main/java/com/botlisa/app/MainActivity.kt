@@ -1531,14 +1531,17 @@ fun LisaScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
+                                // Same size as the "Related phrases for: ..."
+                                // query text in the related-phrases card below.
                                 translation.ru,
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.tertiary,
                             )
                             Text(
                                 r.input,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontStyle = FontStyle.Italic,
+                                fontWeight = FontWeight.Normal,
                                 color = bubbleContentColor(),
                             )
                         }
