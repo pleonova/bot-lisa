@@ -1350,7 +1350,6 @@ fun LisaScreen(
         // italic + muted so it reads as "being heard", not "typed".
         val assistantOwnsField = assistantState != SpeechAssistant.State.IDLE &&
             !inputFocused && input.isNotBlank()
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         OutlinedTextField(
             value = input,
             onValueChange = {
@@ -1358,6 +1357,7 @@ fun LisaScreen(
                 commandsDismissed = false // caregiver typing -> chips come back
                 wordFromTranslateCapture = false
             },
+            placeholder = { Text("Enter English or ${targetLanguage.displayName} Text") },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             trailingIcon = {
                 // Reads aloud: the translation if there is one, otherwise
@@ -1403,21 +1403,6 @@ fun LisaScreen(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { onSend() }),
         )
-
-        if (input.isBlank()) {
-            // Was the field's own placeholder -- moved below the box so it
-            // stays visible (a placeholder disappears the instant a live
-            // transcript lands in the field) and reads at the same size as
-            // the translation gloss below.
-            Text(
-                "Enter English or ${targetLanguage.displayName} Text",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        }
 
         transcriptGloss?.let { gloss ->
             // Purple box directly beneath the search bar. Grows with the text
