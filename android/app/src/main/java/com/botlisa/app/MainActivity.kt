@@ -123,9 +123,9 @@ private fun uiPhaseOf(assistantState: SpeechAssistant.State): UiPhase = when (as
 }
 
 // Kept short -- these render in the handwritten hint beside the mic.
-private fun UiPhase.subtitle(): String = when (this) {
+private fun UiPhase.subtitle(spokenLanguage: String): String = when (this) {
     UiPhase.IDLE -> "Tap for hands-free mode"
-    UiPhase.LISTENING_RU -> "Listening…"
+    UiPhase.LISTENING_RU -> "Listening for $spokenLanguage…"
     UiPhase.LISTENING_EN -> "Now say the English word"
     UiPhase.SPEAKING_TRANSLATION -> "Playing the translation…"
     UiPhase.READING_RECOMMENDATION -> "Playing the suggestion…"
@@ -1329,7 +1329,7 @@ fun LisaScreen(
                 onClick = { onToggleAssistant() },
             )
             Text(
-                uiPhase.subtitle(),
+                uiPhase.subtitle(targetLanguage.displayName),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
