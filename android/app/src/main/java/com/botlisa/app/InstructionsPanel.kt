@@ -160,6 +160,12 @@ fun InstructionsPanel(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
+                    // A subtle tonal step off the panel's own colour --
+                    // enough to read as its own bar without the drama of a
+                    // fully inverted dark-on-light block. Clipped to the
+                    // Surface's own top corners for free, since this is the
+                    // first thing in its content.
+                    .background(lerp(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant, 0.15f))
                     .clickable(onClick = onToggle)
                     // Same 20dp inset as each numbered section's own
                     // padding, so the sparkle lines up under the number
