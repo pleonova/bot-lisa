@@ -175,8 +175,9 @@ fun InstructionsPanel(
                 ) {
                     Text(
                         "Use voice commands",
-                        style = MaterialTheme.typography.titleSmall,
+                        style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp,
                     )
                     Text(
                         "Say these phrases in hands-free mode.",
