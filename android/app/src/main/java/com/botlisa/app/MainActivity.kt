@@ -1184,7 +1184,6 @@ fun LisaScreen(
     ) {
         if (showSettings) {
             SettingsScreen(
-                onBack = { showSettings = false },
                 isDark = isDark,
                 onToggleDark = onToggleDark,
                 targetLanguage = targetLanguage,
@@ -1676,6 +1675,13 @@ fun LisaScreen(
             },
         )
         }
+    }
+
+    if (showSettings) {
+        SettingsHeaderBar(
+            onClose = { showSettings = false },
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
     }
 
     if (showIntro) {

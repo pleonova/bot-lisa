@@ -7,8 +7,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,10 +31,10 @@ import org.json.JSONObject
 /**
  * The full-screen Settings page -- previously an inline `if (showSettings)`
  * block inside MainActivity.kt's LisaScreen that expanded in place below the
- * main assistant UI. Split out here (a) so it reads as its own page (a back
- * arrow replaces the main screen entirely, rather than pushing it down) and
- * (b) so the settings themselves are grouped under section headers instead
- * of one long undifferentiated list.
+ * main assistant UI. Split out here (a) so it reads as its own page (the
+ * caller overlays a fixed [SettingsHeaderBar] on top, rather than pushing it
+ * down) and (b) so the settings themselves are grouped under section headers
+ * instead of one long undifferentiated list.
  *
  * State that's shared with the main screen (target language, trigger
  * phrases, dark mode, server config) is hoisted by the caller, same as
@@ -45,7 +45,6 @@ import org.json.JSONObject
  */
 @Composable
 fun SettingsScreen(
-    onBack: () -> Unit,
     isDark: Boolean,
     onToggleDark: () -> Unit,
     targetLanguage: TargetLanguage,
@@ -80,17 +79,27 @@ fun SettingsScreen(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-            }
-            Text("Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        }
+        // Reserves room for the fixed SettingsHeaderBar the caller overlays
+        // on top of this scrolling content -- see that composable's height.
+        Spacer(Modifier.height(SETTINGS_HEADER_HEIGHT))
 
         SettingsSection("Language") {
             LanguagePicker(targetLanguage, onTargetLanguageChange)
+            // Names the actual source for the CURRENT target language instead
+            // of naming Russian outright -- curatedRelatedSupported is only
+            // ever true when targetLanguage is Russian (see MainActivity's
+            // curatedRelatedSupported comment), so this reads correctly for
+            // every language rather than always claiming a Russian library.
+            val relatedPhraseNote = when {
+                curatedRelatedSupported ->
+                    "Related-phrase suggestions come from the curated ${targetLanguage.displayName} library."
+                nextSuggestionSupported ->
+                    "Related-phrase suggestions for ${targetLanguage.displayName} come from on-device AI generation."
+                else ->
+                    "Related-phrase suggestions aren't available yet for ${targetLanguage.displayName}."
+            }
             Text(
-                "What English translates into, the voice that reads it back, and what Lisa Assistant listens for. Related-phrase suggestions still come from the Russian library for now.",
+                "What English translates into, the voice that reads it back, and what Lisa Assistant listens for. $relatedPhraseNote",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -207,6 +216,40 @@ fun SettingsScreen(
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
             )
+        }
+    }
+}
+
+/** Height of [SettingsHeaderBar], reserved as a spacer at the top of
+ * [SettingsScreen]'s scrolling content so the fixed header never covers it. */
+private val SETTINGS_HEADER_HEIGHT = 64.dp
+
+/**
+ * A fixed header bar for the Settings page -- rendered by the caller as a
+ * sibling layered on top of [SettingsScreen]'s scrolling content (inside the
+ * same Box), rather than as part of that scrolling Column, so "Settings" and
+ * the close button stay visible no matter how far the caregiver has scrolled
+ * down the settings list. Replaces the old back-arrow-in-the-flow header.
+ */
+@Composable
+fun SettingsHeaderBar(onClose: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.background,
+        shadowElevation = 3.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(SETTINGS_HEADER_HEIGHT)
+                .padding(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            IconButton(onClick = onClose) {
+                Icon(Icons.Filled.Close, contentDescription = "Close settings")
+            }
         }
     }
 }
