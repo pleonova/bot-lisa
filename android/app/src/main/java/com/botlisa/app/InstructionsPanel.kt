@@ -176,7 +176,7 @@ fun InstructionsPanel(
                         .padding(start = 10.dp),
                 ) {
                     Text(
-                        "Use voice commands",
+                        "How to use voice commands",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )

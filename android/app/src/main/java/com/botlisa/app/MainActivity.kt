@@ -1214,10 +1214,13 @@ fun LisaScreen(
         }
     }
 
-    // Tapping the fox logo returns the screen to its opening state -- stops
-    // hands-free, clears the field/result/errors and any expanded panels.
-    // Persistent settings (server, language, trigger phrases) are left alone.
-    fun resetToStart() {
+    // Tapping the fox logo or the "Assistant Lisa" title both return the
+    // screen to its opening state -- stops hands-free, clears the
+    // field/result/errors and any expanded panels. Persistent settings
+    // (server, language, trigger phrases) are left alone. Only the logo also
+    // brings back the intro popup ([showIntroPopup]) -- the title alone just
+    // clears the page.
+    fun resetToStart(showIntroPopup: Boolean = false) {
         stopHandsFree()
         // Drop focus so the field isn't left selected -- a focused field
         // hides the "start typing" helper under the buttons.
@@ -1232,7 +1235,7 @@ fun LisaScreen(
         commandsDismissed = false
         showInstructions = true
         showSettings = false
-        showIntro = true
+        if (showIntroPopup) showIntro = true
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -1284,7 +1287,7 @@ fun LisaScreen(
                     modifier = Modifier
                         .size(48.dp)
                         .clip(CircleShape)
-                        .clickable { resetToStart() },
+                        .clickable { resetToStart(showIntroPopup = true) },
                 )
                 IconButton(onClick = { showSettings = true }) {
                     Icon(Icons.Filled.Settings, contentDescription = "Settings")
@@ -1357,7 +1360,16 @@ fun LisaScreen(
                 commandsDismissed = false // caregiver typing -> chips come back
                 wordFromTranslateCapture = false
             },
-            placeholder = { Text("Enter English or ${targetLanguage.displayName} Text") },
+            placeholder = {
+                // Same size as the voice-command instructions
+                // (InstructionsPanel's header subtitle), and lighter than
+                // regular field text so it reads as a hint, not content.
+                Text(
+                    "Enter English or ${targetLanguage.displayName} Text",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                )
+            },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             trailingIcon = {
                 // Reads aloud: the translation if there is one, otherwise
