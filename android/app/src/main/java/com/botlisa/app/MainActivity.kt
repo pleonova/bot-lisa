@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -37,9 +38,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.IOException
+import kotlin.coroutines.coroutineContext
 
 /**
  * Single-screen caregiver-assist front end for bot-lisa.
@@ -307,6 +310,13 @@ fun LisaScreen(
     // and running. Found via a real device test where the spinner never
     // showed and "No related phrases" sat there for the whole generation.
     var onDeviceGenerating by remember { mutableStateOf(false) }
+
+    // The coroutine currently running generateWhatElse() -- from either the
+    // eager prefetch effect or requestWhatElse()'s on-demand call, whichever
+    // is in flight -- so the "X" on the generating card can cancel it
+    // outright instead of just hiding the spinner while the model keeps
+    // grinding in the background.
+    var activeWhatElseJob by remember { mutableStateOf<Job?>(null) }
 
     // True once the caregiver has explicitly asked "what else?" for
     // lastUtterance (spoken trigger, or tapping its chip/button) -- only
@@ -758,13 +768,14 @@ fun LisaScreen(
             return
         }
         val language = targetLanguage
-        scope.launch {
+        activeWhatElseJob = scope.launch {
             eagerSkippedForHeat = false // an explicit ask always tries, heat or not
             if (tryAi) {
                 onDeviceGenerating = true
                 val generated = runCatching {
                     OnDeviceLlm.generateWhatElse(context, utterance, language.code)
                 }
+                activeWhatElseJob = null
                 onDeviceRelated = generated.getOrNull()
                 onDeviceGenerating = false
                 // Model marked READY but generation itself blew up (corrupt/
@@ -797,6 +808,18 @@ fun LisaScreen(
             }
             speakNextSuggestionWhenReady()
         }
+    }
+
+    // Lets the caregiver back out of a generation that's taking too long,
+    // via the "X" on the generating card -- cancels whichever coroutine is
+    // actually running it (eager prefetch or an on-demand requestWhatElse()
+    // call) and resets state as if it had never started, so the card
+    // disappears rather than sitting on a spinner for a request nobody's
+    // waiting on anymore.
+    fun cancelWhatElseGeneration() {
+        activeWhatElseJob?.cancel()
+        activeWhatElseJob = null
+        onDeviceGenerating = false
     }
 
     // Reads one specific related phrase aloud -- the trailing speaker button
@@ -988,9 +1011,11 @@ fun LisaScreen(
                 eagerSkippedForHeat = true
             } else {
                 onDeviceGenerating = true
+                activeWhatElseJob = coroutineContext[Job]
                 val generated = runCatching {
                     OnDeviceLlm.generateWhatElse(context, lastUtterance, targetLanguage.code)
                 }
+                activeWhatElseJob = null
                 onDeviceRelated = generated.getOrNull()
                 onDeviceGenerating = false
                 // Same reasoning as requestWhatElse()'s equivalent comment --
@@ -1517,7 +1542,10 @@ fun LisaScreen(
                             )
                             RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
                         }
-                        aiPending -> GeneratingRow("Generating AI suggestions for \"${r.input}\"…")
+                        aiPending -> GeneratingRow(
+                            "Generating AI suggestions for \"${r.input}\"…",
+                            onCancel = ::cancelWhatElseGeneration,
+                        )
                         else -> Text(
                             "No related phrases for \"${r.input}\".",
                             style = MaterialTheme.typography.bodyMedium,
@@ -1581,7 +1609,10 @@ fun LisaScreen(
                             )
                             RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
                         }
-                        aiPending -> GeneratingRow("Generating suggestions for “$lastUtterance”…")
+                        aiPending -> GeneratingRow(
+                            "Generating suggestions for “$lastUtterance”…",
+                            onCancel = ::cancelWhatElseGeneration,
+                        )
                         eagerSkippedForHeat ->
                             Text(
                                 "Skipped generating suggestions for “$lastUtterance” -- " +
@@ -1749,10 +1780,13 @@ fun LisaScreen(
 }
 
 /** A small spinner + label -- the "AI is still generating" state, so a slow
- * on-device model reads as "working" rather than "broken" or "empty". */
+ * on-device model reads as "working" rather than "broken" or "empty". An
+ * optional trailing "X" lets the caregiver cancel a generation that's
+ * dragging on instead of waiting it out. */
 @Composable
-private fun GeneratingRow(label: String) {
+private fun GeneratingRow(label: String, onCancel: (() -> Unit)? = null) {
     Row(
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -1761,7 +1795,21 @@ private fun GeneratingRow(label: String) {
             strokeWidth = 2.dp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        if (onCancel != null) {
+            IconButton(onClick = onCancel, modifier = Modifier.size(24.dp)) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "Cancel generating suggestions",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 
