@@ -66,10 +66,10 @@ object TriggerPhraseDetector {
      * SpeechAssistant.kt's onPartialResults) rather than waiting for a
      * final result.
      *
-     * Requires at least half of [phrase] (3 characters minimum) to already
-     * be present before attempting a fuzzy comparison at all -- a handful
-     * of characters fuzzy-matches almost anything, which would fire the
-     * trigger on unrelated speech that happens to start similarly.
+     * Requires at least a third of [phrase] (3 characters minimum) to
+     * already be present before attempting a fuzzy comparison at all -- a
+     * handful of characters fuzzy-matches almost anything, which would fire
+     * the trigger on unrelated speech that happens to start similarly.
      */
     fun matchesPrefix(partial: String, phrase: String, threshold: Double = 0.75): Boolean {
         if (phrase.isBlank() || partial.isBlank()) return false
@@ -85,7 +85,7 @@ object TriggerPhraseDetector {
             return matches(partial, phrase, threshold)
         }
 
-        val minPartialLength = (normalizedPhrase.length / 2).coerceAtLeast(3)
+        val minPartialLength = (normalizedPhrase.length / 3).coerceAtLeast(3)
         if (normalizedPartial.length < minPartialLength) return false
 
         val phrasePrefix = normalizedPhrase.substring(0, normalizedPartial.length)

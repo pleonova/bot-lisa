@@ -141,7 +141,7 @@ class SpeechAssistant(
 
     private fun beep() {
         runCatching {
-            val t = tone ?: ToneGenerator(AudioManager.STREAM_MUSIC, 80).also { tone = it }
+            val t = tone ?: ToneGenerator(AudioManager.STREAM_MUSIC, 100).also { tone = it }
             t.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
         }
     }
@@ -352,8 +352,8 @@ class SpeechAssistant(
             // acceptable trade for a snappy trigger.
             if (!stoppedByUser && !switchingToWord && state == State.LISTENING_DEFAULT &&
                 (
-                    TriggerPhraseDetector.matchesPrefix(partial, getTranslateTriggerPhrase(), threshold = 0.6) ||
-                        TriggerPhraseDetector.matchesPrefix(partial, TriggerPhraseConfig.TRANSLATE_TRIGGER_EN, threshold = 0.6)
+                    TriggerPhraseDetector.matchesPrefix(partial, getTranslateTriggerPhrase(), threshold = 0.5) ||
+                        TriggerPhraseDetector.matchesPrefix(partial, TriggerPhraseConfig.TRANSLATE_TRIGGER_EN, threshold = 0.5)
                     )
             ) {
                 switchingToWord = true
