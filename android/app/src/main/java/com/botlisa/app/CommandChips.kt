@@ -135,12 +135,12 @@ private fun CommandItem(spec: CommandChipSpec, modifier: Modifier = Modifier) {
             textAlign = TextAlign.Center,
         )
         Text(
-            // Same capitalisation + "?" treatment as the phrase above it,
-            // parenthesised to read as its English translation.
-            "(${formatCommand(spec.caption)})",
+            // Same capitalisation + "?" treatment as the phrase above it.
+            // Same light grey as the instructions panel's own translations.
+            formatCommand(spec.caption),
             style = MaterialTheme.typography.bodyMedium,
             fontStyle = FontStyle.Italic,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = bubbleContentColor(),
             textAlign = TextAlign.Center,
         )
     }

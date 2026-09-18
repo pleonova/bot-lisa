@@ -405,10 +405,12 @@ private fun bubbleSurfaceColor(): Color =
     lerp(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surfaceVariant, 0.75f)
 
 /** A lighter grey than `onSurfaceVariant` on its own -- shared by
- * [SpeakerBubble]'s text and command-card translations so bubble content
- * doesn't pull the eye the way a full-strength `onSurfaceVariant` did. */
+ * [SpeakerBubble]'s text, command-card translations, and (internal, so
+ * [CommandChips] can match it) the homepage reminder chips' own
+ * translations, so none of them pull the eye the way a full-strength
+ * `onSurfaceVariant` did. */
 @Composable
-private fun bubbleContentColor(): Color =
+internal fun bubbleContentColor(): Color =
     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
 
 /** Lighter still than [bubbleContentColor] -- tried matching the bubbles'
