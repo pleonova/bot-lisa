@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Lightbulb
@@ -85,6 +86,7 @@ fun InstructionsPanel(
     onSpeakMeaning: () -> Unit,
     onSpeakNext: () -> Unit,
     onSpeakAnswer: () -> Unit,
+    onSpeakBubble: (String) -> Unit,
     wordExampleEn: String,
     wordExampleTranslated: String,
     phraseExampleHeard: String,
@@ -175,13 +177,13 @@ fun InstructionsPanel(
                 ) {
                     Text(
                         "Use voice commands",
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp,
                     )
                     Text(
                         "Say these phrases in hands-free mode.",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontStyle = FontStyle.Italic,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -202,7 +204,7 @@ fun InstructionsPanel(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     sections.forEachIndexed { i, section ->
                         if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        SectionBlock(number = i + 1, section = section)
+                        SectionBlock(number = i + 1, section = section, onSpeakBubble = onSpeakBubble)
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Row(
@@ -258,7 +260,7 @@ private sealed class FlowItem {
 }
 
 @Composable
-private fun SectionBlock(number: Int, section: Section) {
+private fun SectionBlock(number: Int, section: Section, onSpeakBubble: (String) -> Unit) {
     Column(modifier = Modifier.padding(20.dp)) {
         Row {
             Box(
@@ -291,7 +293,7 @@ private fun SectionBlock(number: Int, section: Section) {
         }
         Spacer(Modifier.height(14.dp))
         section.flow.forEachIndexed { i, item ->
-            if (i > 0) Spacer(Modifier.height(10.dp))
+            if (i > 0) Spacer(Modifier.height(6.dp))
             when (item) {
                 is FlowItem.CardItem -> CommandCard(item.spec, section.color)
                 is FlowItem.BubbleItem -> if (item.speaker == Speaker.FOX) {
@@ -299,10 +301,10 @@ private fun SectionBlock(number: Int, section: Section) {
                     // a chat conversation -- the caregiver's own bubbles
                     // (cards, USER examples) stay on the left.
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                        SpeakerBubble(item.speaker, item.text, item.gloss)
+                        SpeakerBubble(item.speaker, item.text, item.gloss) { onSpeakBubble(item.text) }
                     }
                 } else {
-                    SpeakerBubble(item.speaker, item.text, item.gloss)
+                    SpeakerBubble(item.speaker, item.text, item.gloss) { onSpeakBubble(item.text) }
                 }
             }
         }
@@ -346,15 +348,36 @@ private fun rememberSpeechBubbleShape(tailOnRight: Boolean = false): Shape {
     }
 }
 
+/** Just the rounded-rect body of [rememberSpeechBubbleShape], without its
+ * tail -- used to keep a border stroke off the tail so the tail reads as a
+ * plain, fully filled-in pointer instead of an outlined sliver. */
+@Composable
+private fun rememberSpeechBubbleBodyShape(tailOnRight: Boolean = false): Shape {
+    val density = LocalDensity.current
+    return remember(density, tailOnRight) {
+        val cornerPx = with(density) { SPEAKER_BUBBLE_CORNER.toPx() }
+        val tailWidthPx = with(density) { SPEAKER_BUBBLE_TAIL_WIDTH.toPx() }
+        GenericShape { size, _ ->
+            if (tailOnRight) {
+                addRoundRect(RoundRect(0f, 0f, size.width - tailWidthPx, size.height, cornerPx, cornerPx))
+            } else {
+                addRoundRect(RoundRect(tailWidthPx, 0f, size.width, size.height, cornerPx, cornerPx))
+            }
+        }
+    }
+}
+
 /** Who said [text] (and its English [gloss]): the caregiver or Lisa. Renders
  * as a grey speech bubble with a tail pointing at a same-grey speaker icon --
  * the fox logo (Lisa's own icon, see MainActivity's "Start over" button) or a
  * person glyph, both tinted to match the bubble so neither clashes with the
  * section's accent colour. Lisa's bubbles mirror to the right (icon on the
  * right, tail pointing right), like the other side of a chat conversation;
- * the caregiver's stay on the left. */
+ * the caregiver's stay on the left. Tapping the bubble speaks [text] aloud
+ * ([onClick]) -- no extra speaker icon here, that's reserved for the
+ * trigger-phrase command cards (see CommandCard). */
 @Composable
-private fun SpeakerBubble(speaker: Speaker, text: String, gloss: String?) {
+private fun SpeakerBubble(speaker: Speaker, text: String, gloss: String?, onClick: () -> Unit) {
     val isFox = speaker == Speaker.FOX
     val shape = rememberSpeechBubbleShape(tailOnRight = isFox)
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -363,6 +386,7 @@ private fun SpeakerBubble(speaker: Speaker, text: String, gloss: String?) {
             modifier = Modifier
                 .clip(shape)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
+                .clickable(onClick = onClick)
                 .padding(
                     start = if (isFox) 14.dp else 14.dp + SPEAKER_BUBBLE_TAIL_WIDTH,
                     end = if (isFox) 14.dp + SPEAKER_BUBBLE_TAIL_WIDTH else 14.dp,
@@ -430,6 +454,10 @@ private val COMMAND_CARD_BORDER = 2.5.dp
 @Composable
 private fun CommandCard(card: CardSpec, color: Color) {
     val shape = rememberSpeechBubbleShape()
+    // Border traces only the rounded body, not the tail -- stroking the tail
+    // too left it looking like a thin hollow outline instead of a solid,
+    // fully filled-in pointer.
+    val bodyShape = rememberSpeechBubbleBodyShape()
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -443,9 +471,9 @@ private fun CommandCard(card: CardSpec, color: Color) {
                 .weight(1f)
                 .clip(shape)
                 .background(color.copy(alpha = 0.08f))
-                .border(COMMAND_CARD_BORDER, color.copy(alpha = 0.7f), shape)
+                .border(COMMAND_CARD_BORDER, color.copy(alpha = 0.7f), bodyShape)
                 .clickable(onClick = card.onClick)
-                .padding(start = 14.dp + SPEAKER_BUBBLE_TAIL_WIDTH, top = 14.dp, bottom = 14.dp, end = 14.dp),
+                .padding(start = 14.dp + SPEAKER_BUBBLE_TAIL_WIDTH, top = 10.dp, bottom = 10.dp, end = 14.dp),
         ) {
             Box {
                 Icon(card.icon, contentDescription = null, tint = color, modifier = Modifier.size(32.dp))
@@ -461,7 +489,7 @@ private fun CommandCard(card: CardSpec, color: Color) {
                     )
                 }
             }
-            Column(modifier = Modifier.padding(start = 14.dp)) {
+            Column(modifier = Modifier.weight(1f).padding(start = 14.dp)) {
                 Text(
                     formatCommand(card.phrase),
                     style = MaterialTheme.typography.titleMedium,
@@ -475,6 +503,17 @@ private fun CommandCard(card: CardSpec, color: Color) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            // Marks this bubble specifically as "tap to hear" -- the worked-
+            // example bubbles above don't get this icon, only trigger-phrase
+            // commands do.
+            Icon(
+                Icons.AutoMirrored.Filled.VolumeUp,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier
+                    .padding(start = 6.dp)
+                    .size(18.dp),
+            )
         }
     }
 }

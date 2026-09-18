@@ -1316,20 +1316,22 @@ fun LisaScreen(
             }
         }
 
-        AssistantButton(
-            phase = uiPhase,
-            onClick = { onToggleAssistant() },
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .padding(vertical = 8.dp),
-        )
-        Text(
-            uiPhase.subtitle(),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.align(Alignment.CenterHorizontally),
-        )
+        ) {
+            AssistantButton(
+                phase = uiPhase,
+                onClick = { onToggleAssistant() },
+            )
+            Text(
+                uiPhase.subtitle(),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
 
         assistantError?.let {
             Text(
@@ -1355,7 +1357,6 @@ fun LisaScreen(
                 commandsDismissed = false // caregiver typing -> chips come back
                 wordFromTranslateCapture = false
             },
-            placeholder = { Text("Enter English or ${targetLanguage.displayName} Text") },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             trailingIcon = {
                 // Reads aloud: the translation if there is one, otherwise
@@ -1401,6 +1402,19 @@ fun LisaScreen(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { onSend() }),
         )
+
+        if (input.isBlank()) {
+            // Was the field's own placeholder -- moved below the box so it
+            // stays visible (a placeholder disappears the instant a live
+            // transcript lands in the field) and reads at the same size as
+            // the translation gloss below.
+            Text(
+                "Enter English or ${targetLanguage.displayName} Text",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp),
+            )
+        }
 
         transcriptGloss?.let { gloss ->
             // Purple box directly beneath the search bar. Grows with the text
@@ -1664,6 +1678,7 @@ fun LisaScreen(
             onSpeakAnswer = {
                 if (hasUtteranceToActOn) requestAnswerSuggestions() else speakTriggerPhrase(answerTriggerPhrase)
             },
+            onSpeakBubble = { text -> speaker?.speak(text) },
             wordExampleEn = wordExample.en,
             wordExampleTranslated = wordExample.translated,
             phraseExampleHeard = phraseExample.heard,
