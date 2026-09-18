@@ -135,8 +135,9 @@ private fun CommandItem(spec: CommandChipSpec, modifier: Modifier = Modifier) {
             textAlign = TextAlign.Center,
         )
         Text(
-            // Same capitalisation + "?" treatment as the phrase above it.
-            formatCommand(spec.caption),
+            // Same capitalisation + "?" treatment as the phrase above it,
+            // parenthesised to read as its English translation.
+            "(${formatCommand(spec.caption)})",
             style = MaterialTheme.typography.bodyMedium,
             fontStyle = FontStyle.Italic,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

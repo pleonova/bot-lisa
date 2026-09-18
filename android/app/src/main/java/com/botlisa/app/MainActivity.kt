@@ -1526,7 +1526,7 @@ fun LisaScreen(
                         Spacer(Modifier.height(4.dp))
                     }
                     when {
-                        relatedForDisplay.isNotEmpty() -> {
+                        relatedForDisplay.isNotEmpty() || aiPending -> {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -1542,25 +1542,32 @@ fun LisaScreen(
                                     color = MaterialTheme.colorScheme.secondaryContainer,
                                 ) {
                                     Text(
-                                        if (usingAiSuggestions) "AI" else "Library",
+                                        // aiPending is only ever true mid-AI-generation, so
+                                        // it reads as "AI" even before onDeviceRelated (and
+                                        // therefore usingAiSuggestions) has anything in it.
+                                        if (usingAiSuggestions || aiPending) "AI" else "Library",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                     )
                                 }
                             }
-                            Text(
-                                r.input,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontStyle = FontStyle.Italic,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
+                            if (relatedForDisplay.isNotEmpty()) {
+                                Text(
+                                    r.input,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontStyle = FontStyle.Italic,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
+                            } else {
+                                // Same heading + phrase as the finished state above --
+                                // the phrase and its spinner share one line instead of
+                                // stacking, and there's no second "Generating
+                                // suggestions for ..." sentence repeating the phrase.
+                                PhrasePendingRow(r.input, onCancel = ::cancelWhatElseGeneration)
+                            }
                         }
-                        aiPending -> GeneratingRow(
-                            "Generating AI suggestions for \"${r.input}\"…",
-                            onCancel = ::cancelWhatElseGeneration,
-                        )
                         else -> Text(
                             "No related phrases for \"${r.input}\".",
                             style = MaterialTheme.typography.bodyMedium,
@@ -1624,10 +1631,12 @@ fun LisaScreen(
                             )
                             RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
                         }
-                        aiPending -> GeneratingRow(
-                            "Generating suggestions for “$lastUtterance”…",
-                            onCancel = ::cancelWhatElseGeneration,
-                        )
+                        aiPending ->
+                            // Same heading + phrase as the finished state above --
+                            // the phrase and its spinner share one line instead of
+                            // stacking, and there's no second "Generating
+                            // suggestions for ..." sentence repeating the phrase.
+                            PhrasePendingRow(lastUtterance, onCancel = ::cancelWhatElseGeneration)
                         eagerSkippedForHeat ->
                             Text(
                                 "Skipped generating suggestions for “$lastUtterance” -- " +
@@ -1795,27 +1804,30 @@ fun LisaScreen(
     }
 }
 
-/** A small spinner + label -- the "AI is still generating" state, so a slow
- * on-device model reads as "working" rather than "broken" or "empty". An
- * optional trailing "X" lets the caregiver cancel a generation that's
- * dragging on instead of waiting it out. */
+/** The phrase being generated for, styled the same as the finished state's
+ * heading (italic, primary), plus a small spinner sharing that same line --
+ * the "AI is still generating" state, so a slow on-device model reads as
+ * "working" rather than "broken" or "empty", without a second sentence
+ * repeating the phrase. An optional trailing "X" lets the caregiver cancel a
+ * generation that's dragging on instead of waiting it out. */
 @Composable
-private fun GeneratingRow(label: String, onCancel: (() -> Unit)? = null) {
+private fun PhrasePendingRow(phrase: String, onCancel: (() -> Unit)? = null) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        Text(
+            phrase,
+            style = MaterialTheme.typography.titleMedium,
+            fontStyle = FontStyle.Italic,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.weight(1f),
+        )
         CircularProgressIndicator(
             modifier = Modifier.size(16.dp),
             strokeWidth = 2.dp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f),
         )
         if (onCancel != null) {
             IconButton(onClick = onCancel, modifier = Modifier.size(24.dp)) {

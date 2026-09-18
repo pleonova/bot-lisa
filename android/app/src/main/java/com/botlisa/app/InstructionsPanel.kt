@@ -494,7 +494,8 @@ private fun CommandCard(card: CardSpec, color: Color) {
                     color = color,
                 )
                 Text(
-                    formatCommand(card.caption),
+                    // Parenthesised to read as the phrase's English translation.
+                    "(${formatCommand(card.caption)})",
                     style = MaterialTheme.typography.bodyMedium,
                     fontStyle = FontStyle.Italic,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
