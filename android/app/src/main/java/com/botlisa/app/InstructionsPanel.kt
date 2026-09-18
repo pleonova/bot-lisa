@@ -405,20 +405,27 @@ private fun bubbleSurfaceColor(): Color =
     lerp(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surfaceVariant, 0.75f)
 
 /** A lighter grey than `onSurfaceVariant` on its own -- shared by
- * [SpeakerIcon] and [SpeakerBubble]'s text so neither the icons nor their
- * bubble text pull the eye the way a full-strength `onSurfaceVariant` did. */
+ * [SpeakerBubble]'s text and command-card translations so bubble content
+ * doesn't pull the eye the way a full-strength `onSurfaceVariant` did. */
 @Composable
 private fun bubbleContentColor(): Color =
     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
 
+/** Lighter still than [bubbleContentColor] -- tried matching the bubbles'
+ * own fill exactly, but sitting on the panel (not on a bubble) that made
+ * the icons nearly invisible. This sits between the two: quiet, but still
+ * a legible icon shape against the panel. */
+@Composable
+private fun iconTintColor(): Color =
+    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+
 /** The fox logo (Lisa) or a person glyph (the caregiver) -- a bare glyph, no
- * background or border, tinted with [bubbleContentColor] (the same lighter
- * grey as the bubble text) so it reads correctly in both light and dark
- * mode without needing its own coloured disc. The fox is sized a little
- * larger than the person glyph. */
+ * background or border, tinted with [iconTintColor] so the icons stay quiet
+ * rather than drawing the eye, while still reading in both light and dark
+ * mode. The fox is sized a little larger than the person glyph. */
 @Composable
 private fun SpeakerIcon(speaker: Speaker, modifier: Modifier = Modifier) {
-    val tint = bubbleContentColor()
+    val tint = iconTintColor()
     when (speaker) {
         Speaker.USER -> Icon(
             Icons.Filled.Person,
@@ -494,11 +501,13 @@ private fun CommandCard(card: CardSpec, color: Color) {
                     color = color,
                 )
                 Text(
-                    // Parenthesised to read as the phrase's English translation.
+                    // Parenthesised to read as the phrase's English
+                    // translation -- same size and light grey as the
+                    // example bubbles' own gloss text.
                     "(${formatCommand(card.caption)})",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     fontStyle = FontStyle.Italic,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = bubbleContentColor(),
                 )
             }
             // Marks this bubble specifically as "tap to hear" -- the worked-
