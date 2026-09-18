@@ -167,12 +167,19 @@ fun InstructionsPanel(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    // A touch greyer than the panel's own surfaceVariant --
-                    // just enough for the header to read as its own strip,
-                    // without the stronger tonal step used before. Clipped
-                    // to the Surface's own top corners for free, since this
-                    // is the first thing in its content.
-                    .background(lerp(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant, 0.08f))
+                    // Collapsed: same grey as the record button's idle fill
+                    // (i.e. the panel's own colour), so it reads as part of
+                    // one quiet bar. Expanded: a touch greyer -- just enough
+                    // for the header to read as its own strip. Clipped to
+                    // the Surface's own top corners for free, since this is
+                    // the first thing in its content.
+                    .background(
+                        if (expanded) {
+                            lerp(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant, 0.08f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                    )
                     // Only while expanded -- outlines this header bar on
                     // three sides (top + left + right), left open on the
                     // bottom since the divider/sections continue directly
