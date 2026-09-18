@@ -1756,6 +1756,10 @@ fun LisaScreen(
             phraseExampleResponseGloss = phraseExample.responseGloss,
             showNextSuggestionStep = nextSuggestionSupported,
             showAnswerStep = curatedRelatedSupported,
+            // Extra room on top of the Column's own 14dp gap -- the search
+            // box sits right above this in the common (empty-result) case,
+            // and the panel reads too crowded against it otherwise.
+            modifier = Modifier.padding(top = 12.dp),
         )
 
         CommandChips(
