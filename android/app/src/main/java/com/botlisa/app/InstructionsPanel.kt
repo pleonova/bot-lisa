@@ -7,6 +7,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
@@ -36,18 +36,15 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -149,7 +146,8 @@ fun InstructionsPanel(
 
     Surface(
         shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surface,
+        // Same grey as the record button's idle fill.
+        color = MaterialTheme.colorScheme.surfaceVariant,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = modifier.fillMaxWidth(),
     ) {
@@ -167,7 +165,9 @@ fun InstructionsPanel(
                 Icon(
                     Icons.Filled.AutoAwesome,
                     null,
-                    tint = MaterialTheme.colorScheme.onSurface,
+                    // Same dark grey as the header text, the mic icon, and
+                    // the bubble text/icons below.
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp),
                 )
                 Column(
@@ -311,75 +311,75 @@ private fun SectionBlock(number: Int, section: Section, onSpeakBubble: (String) 
     }
 }
 
-// Fixed geometry for the speech-bubble tail shared by SpeakerBubble and
-// CommandCard -- kept as constants so the shape (drawn in px, no Density
-// receiver) and each caller's content padding (which must leave room for the
-// tail so content never renders under it) agree.
-private val SPEAKER_BUBBLE_CORNER = 12.dp
-private val SPEAKER_BUBBLE_TAIL_WIDTH = 10.dp
-private val SPEAKER_BUBBLE_TAIL_HEIGHT = 14.dp
+private val SPEAKER_BUBBLE_CORNER = 16.dp
+// The corner nearest the speaker avatar -- small instead of fully rounded,
+// so that corner alone reads as a "pointer" toward whoever's talking. Same
+// device real chat apps (iMessage, WhatsApp, Google Messages) use instead of
+// a separate triangular tail glued onto a plain rounded box.
+private val SPEAKER_BUBBLE_POINT_CORNER = 4.dp
+private val SPEAKER_BUBBLE_GAP = 6.dp
 private val SPEAKER_ICON_SIZE = 28.dp
 
-/** A rounded-rect body with a small triangular tail pointing at whatever
- * speaker icon sits beside it -- on the left edge by default, or the right
- * edge when [tailOnRight] (Lisa's replies, which sit on the right). */
-@Composable
-private fun rememberSpeechBubbleShape(tailOnRight: Boolean = false): Shape {
-    val density = LocalDensity.current
-    return remember(density, tailOnRight) {
-        val cornerPx = with(density) { SPEAKER_BUBBLE_CORNER.toPx() }
-        val tailWidthPx = with(density) { SPEAKER_BUBBLE_TAIL_WIDTH.toPx() }
-        val tailHeightPx = with(density) { SPEAKER_BUBBLE_TAIL_HEIGHT.toPx() }
-        GenericShape { size, _ ->
-            if (tailOnRight) {
-                val bodyRight = size.width - tailWidthPx
-                addRoundRect(RoundRect(0f, 0f, bodyRight, size.height, cornerPx, cornerPx))
-                moveTo(bodyRight - 1f, size.height / 2f - tailHeightPx / 2f)
-                lineTo(size.width, size.height / 2f)
-                lineTo(bodyRight - 1f, size.height / 2f + tailHeightPx / 2f)
-            } else {
-                val bodyLeft = tailWidthPx
-                addRoundRect(RoundRect(bodyLeft, 0f, size.width, size.height, cornerPx, cornerPx))
-                moveTo(bodyLeft + 1f, size.height / 2f - tailHeightPx / 2f)
-                lineTo(0f, size.height / 2f)
-                lineTo(bodyLeft + 1f, size.height / 2f + tailHeightPx / 2f)
-            }
-        }
+/** A rounded-rect body, fully rounded on three corners and near-square on
+ * the fourth -- the bottom corner nearest the speaker avatar, which sits
+ * beside it at the bottom ([SpeakerBubble] and [CommandCard] both
+ * bottom-align their icon against this corner). On the left edge by
+ * default, or the right edge when [tailOnRight] (Lisa's replies, which sit
+ * on the right). */
+private fun speechBubbleShape(tailOnRight: Boolean = false): Shape =
+    if (tailOnRight) {
+        RoundedCornerShape(
+            topStart = SPEAKER_BUBBLE_CORNER,
+            topEnd = SPEAKER_BUBBLE_CORNER,
+            bottomEnd = SPEAKER_BUBBLE_POINT_CORNER,
+            bottomStart = SPEAKER_BUBBLE_CORNER,
+        )
+    } else {
+        RoundedCornerShape(
+            topStart = SPEAKER_BUBBLE_CORNER,
+            topEnd = SPEAKER_BUBBLE_CORNER,
+            bottomEnd = SPEAKER_BUBBLE_CORNER,
+            bottomStart = SPEAKER_BUBBLE_POINT_CORNER,
+        )
     }
-}
 
 /** Who said [text] (and its English [gloss]): the caregiver or Lisa. Renders
- * as a grey speech bubble with a tail pointing at a same-grey speaker icon --
+ * as a real chat-style speech bubble -- rounded on three corners, pointed on
+ * the fourth toward a same-toned speaker avatar sitting at its bottom edge --
  * the fox logo (Lisa's own icon, see MainActivity's "Start over" button) or a
- * person glyph, both tinted to match the bubble so neither clashes with the
- * section's accent colour. Lisa's bubbles mirror to the right (icon on the
- * right, tail pointing right), like the other side of a chat conversation;
+ * person glyph. Lisa's bubbles mirror to the right (icon on the right,
+ * pointed corner on the right), like the other side of a chat conversation;
  * the caregiver's stay on the left. Tapping the bubble speaks [text] aloud
  * ([onClick]) -- no extra speaker icon here, that's reserved for the
  * trigger-phrase command cards (see CommandCard). */
 @Composable
 private fun SpeakerBubble(speaker: Speaker, text: String, gloss: String?, onClick: () -> Unit) {
     val isFox = speaker == Speaker.FOX
-    val shape = rememberSpeechBubbleShape(tailOnRight = isFox)
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    val shape = speechBubbleShape(tailOnRight = isFox)
+    Row(
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(SPEAKER_BUBBLE_GAP),
+    ) {
         if (!isFox) SpeakerIcon(speaker)
         Column(
             modifier = Modifier
                 .clip(shape)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+                // `surface`, not a fixed white -- it's a light card in light
+                // mode and a dark one in dark mode, always a tone apart from
+                // the panel's `surfaceVariant` behind it either way.
+                .background(MaterialTheme.colorScheme.surface)
+                // Same border as the panel that holds it.
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
                 .clickable(onClick = onClick)
-                .padding(
-                    start = if (isFox) 14.dp else 14.dp + SPEAKER_BUBBLE_TAIL_WIDTH,
-                    end = if (isFox) 14.dp + SPEAKER_BUBBLE_TAIL_WIDTH else 14.dp,
-                    top = 6.dp,
-                    bottom = 6.dp,
-                ),
+                .padding(horizontal = 14.dp, vertical = 8.dp),
         ) {
             Text(
                 text,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
+                // Same dark grey as the instructions' own body text and the
+                // mic button's idle icon, not the stronger onSurface.
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (gloss != null) {
                 Text(
@@ -394,52 +394,61 @@ private fun SpeakerBubble(speaker: Speaker, text: String, gloss: String?, onClic
     }
 }
 
-/** The fox logo (Lisa) or a person glyph (the caregiver), both tinted the
- * same grey as a speech bubble's background so the icon reads as a neutral
- * "who said this" marker rather than competing branding. */
+/** The fox logo (Lisa) or a person glyph (the caregiver) -- a small round
+ * avatar chip: a `surface` disc (matching the speech bubbles) holding an
+ * `onSurfaceVariant` glyph -- the same dark grey as the bubble text, the
+ * instructions' own body text, and the mic button's idle icon -- bordered
+ * the same way as the panel and the bubbles. Using theme colour roles
+ * instead of a fixed white/dark pair means it reads correctly in both light
+ * and dark mode, the same as the bubbles. */
 @Composable
 private fun SpeakerIcon(speaker: Speaker, modifier: Modifier = Modifier) {
-    val tint = MaterialTheme.colorScheme.surfaceVariant
+    val chip = Modifier
+        .size(SPEAKER_ICON_SIZE)
+        .clip(CircleShape)
+        .background(MaterialTheme.colorScheme.surface)
+        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+        .padding(3.dp)
+    val tint = MaterialTheme.colorScheme.onSurfaceVariant
     when (speaker) {
         Speaker.USER -> Icon(
             Icons.Filled.Person,
             contentDescription = null,
             tint = tint,
-            modifier = modifier.size(SPEAKER_ICON_SIZE),
+            modifier = modifier.then(chip),
         )
         Speaker.FOX -> Image(
             painter = painterResource(R.drawable.lisa_fox),
             contentDescription = null,
             colorFilter = ColorFilter.tint(tint, BlendMode.SrcIn),
-            modifier = modifier
-                .size(SPEAKER_ICON_SIZE)
-                .clip(CircleShape),
+            modifier = modifier.then(chip),
         )
     }
 }
 
-// Bolder than SpeakerBubble's own (borderless) style -- a command card keeps
-// its section colour, so its outline needs to read clearly against that
-// tint, not just a hairline.
+// Bolder than SpeakerBubble's own outlineVariant hairline -- a command card
+// keeps its section colour, so its outline needs to read clearly against
+// that tint.
 private val COMMAND_CARD_BORDER = 2.5.dp
 
 /** A trigger phrase the caregiver says -- rendered as a speech bubble
- * pointing at the grey person icon on its left, like the example bubbles,
- * but keeping the section's accent colour as a bold outline + tint so it's
- * still identifiable as a command. Tapping it speaks the phrase in Lisa's
- * voice, as a demo -- a separate affordance from who says it during actual
- * hands-free use. Stops short of the right edge by a speaker icon's width
- * plus a bubble tail's width -- lining its right edge up with the rounded
- * body of Lisa's reply bubbles on the right (whose tail + icon occupy that
- * same margin), so neither side's bubbles ever reach edge to edge. */
+ * pointing at the person avatar at its bottom-left, like the example
+ * bubbles, but keeping the section's accent colour as a bold outline + tint
+ * so it's still identifiable as a command. Tapping it speaks the phrase in
+ * Lisa's voice, as a demo -- a separate affordance from who says it during
+ * actual hands-free use. Stops short of the right edge by a speaker icon's
+ * width plus the icon-bubble gap -- lining its right edge up with the
+ * rounded body of Lisa's reply bubbles on the right (whose icon occupies
+ * that same margin), so neither side's bubbles ever reach edge to edge. */
 @Composable
 private fun CommandCard(card: CardSpec, color: Color) {
-    val shape = rememberSpeechBubbleShape()
+    val shape = speechBubbleShape()
     Row(
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(SPEAKER_BUBBLE_GAP),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(end = SPEAKER_ICON_SIZE + SPEAKER_BUBBLE_TAIL_WIDTH),
+            .padding(end = SPEAKER_ICON_SIZE + SPEAKER_BUBBLE_GAP),
     ) {
         SpeakerIcon(Speaker.USER)
         Row(
@@ -450,7 +459,7 @@ private fun CommandCard(card: CardSpec, color: Color) {
                 .background(color.copy(alpha = 0.08f))
                 .border(COMMAND_CARD_BORDER, color.copy(alpha = 0.7f), shape)
                 .clickable(onClick = card.onClick)
-                .padding(start = 14.dp + SPEAKER_BUBBLE_TAIL_WIDTH, top = 10.dp, bottom = 10.dp, end = 14.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
             Box {
                 Icon(card.icon, contentDescription = null, tint = color, modifier = Modifier.size(32.dp))
