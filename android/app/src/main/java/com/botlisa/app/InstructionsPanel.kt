@@ -161,20 +161,29 @@ fun InstructionsPanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(onClick = onToggle)
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                    // Same 20dp inset as each numbered section's own
+                    // padding, so the sparkle lines up under the number
+                    // badges below.
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
             ) {
-                Icon(
-                    Icons.Filled.AutoAwesome,
-                    null,
-                    // Same dark grey as the header text, the mic icon, and
-                    // the bubble text/icons below.
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp),
-                )
+                // Same 28dp footprint as a numbered section's circle badge --
+                // the icon itself stays 20dp, just centred in that slot --
+                // so the title text after it lines up with each section's
+                // own heading text.
+                Box(modifier = Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Filled.AutoAwesome,
+                        null,
+                        // Same dark grey as the header text, the mic icon,
+                        // and the bubble text/icons below.
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(start = 10.dp),
+                        .padding(start = 14.dp),
                 ) {
                     Text(
                         "How to use voice commands",
