@@ -19,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
@@ -1417,21 +1418,31 @@ fun LisaScreen(
         )
 
         transcriptGloss?.let { gloss ->
-            // Purple box directly beneath the search bar. Grows with the text
-            // so a long gloss stays fully visible.
-            Surface(
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                shape = RoundedCornerShape(12.dp),
+            // No background -- just the book icon (same one/tint as the
+            // "what does that mean?" chip, greyed instead of orange) plus
+            // the gloss, styled like every other English translation in the
+            // app. 12.dp start padding matches TextFieldImpl's internal
+            // HorizontalIconPadding so the book icon lines up with the
+            // search field's leading magnifying-glass icon above it.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 4.dp),
             ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.MenuBook,
+                    contentDescription = null,
+                    tint = bubbleContentColor(),
+                    modifier = Modifier
+                        .padding(start = 12.dp, end = 8.dp)
+                        .size(18.dp),
+                )
                 Text(
                     gloss,
                     style = MaterialTheme.typography.bodySmall,
                     fontStyle = FontStyle.Italic,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    color = bubbleContentColor(),
                 )
             }
         }
@@ -1873,7 +1884,8 @@ private fun RelatedPhraseList(
                     Text(
                         phrase.glossEn,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontStyle = FontStyle.Italic,
+                        color = bubbleContentColor(),
                     )
                 }
                 IconButton(onClick = { onSpeak(index) }) {
