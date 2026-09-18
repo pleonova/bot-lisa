@@ -159,6 +159,15 @@ fun LisaScreen(
     // one-time model download over cellular data instead of waiting for wifi.
     var offerCellularDownloadRetry by rememberSaveable { mutableStateOf(false) }
     var result by rememberSaveable { mutableStateOf<AssistResult?>(null) }
+    // True right after a "how to say?" voice capture has filled `input`
+    // with the captured word and spoken its translation. Lets a second tap
+    // of the chip (see onTranslateChipTap) tell "the field still holds
+    // last round's captured word" apart from "the caregiver typed this
+    // word to translate it" -- both leave `input` non-blank, but only the
+    // former should be cleared and re-listened rather than re-spoken.
+    // Cleared as soon as `input` changes for any other reason (typing, or
+    // the live transcript picking up new speech).
+    var wordFromTranslateCapture by rememberSaveable { mutableStateOf(false) }
 
     // Which related/suggested phrase the next-suggestion trigger should
     // speak. Reset to 0 every time a fresh /assist result comes back, so
@@ -889,6 +898,7 @@ fun LisaScreen(
             if (state == SpeechAssistant.State.LISTENING_FOR_WORD) {
                 input = text
                 commandsDismissed = false
+                wordFromTranslateCapture = true
                 onSend()
             }
         }
@@ -1007,6 +1017,7 @@ fun LisaScreen(
     val handleTranscript = rememberUpdatedState<(String) -> Unit> { text ->
         if (assistantState != SpeechAssistant.State.IDLE && !inputFocused && text.isNotBlank()) {
             input = text
+            wordFromTranslateCapture = false
         }
     }
 
@@ -1142,13 +1153,22 @@ fun LisaScreen(
     }
 
     // "How to say?" chip: text already in the field -> that IS the word to
-    // translate, same as pressing the keyboard's Search key. Otherwise there's
-    // nothing to translate yet, so the chip's job is to open the English mic
-    // -- start hands-free landing straight in LISTENING_FOR_WORD if it wasn't
-    // running, or fast-switch an already-running DEFAULT session into it
-    // (same as if the target-language trigger phrase had just been spoken).
+    // translate, same as pressing the keyboard's Search key. But if that
+    // text is only sitting there because a *previous* "how to say?" round
+    // captured and spoke it (wordFromTranslateCapture), re-running onSend()
+    // on it would just re-speak the same old word -- so clear it first and
+    // fall through to opening the mic for a new one instead. Otherwise
+    // there's nothing to translate yet, so the chip's job is to open the
+    // English mic -- start hands-free landing straight in LISTENING_FOR_WORD
+    // if it wasn't running, or fast-switch an already-running DEFAULT
+    // session into it (same as if the target-language trigger phrase had
+    // just been spoken).
     fun onTranslateChipTap() {
-        if (input.isNotBlank()) {
+        if (wordFromTranslateCapture) {
+            input = ""
+            result = null
+            wordFromTranslateCapture = false
+        } else if (input.isNotBlank()) {
             onSend()
             return
         }
@@ -1179,6 +1199,7 @@ fun LisaScreen(
         focusManager.clearFocus()
         input = ""
         result = null
+        wordFromTranslateCapture = false
         onDeviceRelated = null
         errorText = null
         assistantError = null
@@ -1306,6 +1327,7 @@ fun LisaScreen(
             onValueChange = {
                 input = it
                 commandsDismissed = false // caregiver typing -> chips come back
+                wordFromTranslateCapture = false
             },
             placeholder = { Text("Enter English or ${targetLanguage.displayName} Text") },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
