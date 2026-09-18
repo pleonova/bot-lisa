@@ -1296,6 +1296,7 @@ fun LisaScreen(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
                 textAlign = TextAlign.Center,
+                modifier = Modifier.clickable { resetToStart() },
             )
             Row(
                 verticalAlignment = Alignment.CenterVertically,

@@ -156,38 +156,40 @@ fun InstructionsPanel(
             // in order -- here: take full width, then make the whole row
             // tappable, then add padding.
             Row(
-                verticalAlignment = Alignment.Top,
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(onClick = onToggle)
-                    .padding(horizontal = 20.dp, vertical = 18.dp),
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
             ) {
                 Icon(
                     Icons.Filled.AutoAwesome,
                     null,
                     tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(28.dp),
+                    modifier = Modifier.size(20.dp),
                 )
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(start = 14.dp),
+                        .padding(start = 10.dp),
                 ) {
                     Text(
                         "Use voice commands",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
                         "Say these phrases in hands-free mode.",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Icon(
                     Icons.Filled.ExpandMore,
                     contentDescription = if (expanded) "Collapse" else "Expand",
-                    modifier = Modifier.rotate(chevronRotation),
+                    modifier = Modifier
+                        .size(20.dp)
+                        .rotate(chevronRotation),
                 )
             }
 
