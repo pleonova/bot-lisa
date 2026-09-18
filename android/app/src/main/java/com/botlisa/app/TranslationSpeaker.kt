@@ -40,14 +40,35 @@ class TranslationSpeaker(
     private var isSpeaking = false
     private var currentText: String? = null
 
+    // Per-utterance onComplete callbacks (see speak() below) -- keyed by
+    // utteranceId rather than held in one shared var, so an interruption
+    // (a newer speak() flushing this one, or an explicit stop()) can drop
+    // *this* utterance's callback without clobbering whatever the new
+    // utterance just registered for itself.
+    private val completions = mutableMapOf<String, () -> Unit>()
+
     private val progressListener = object : UtteranceProgressListener() {
-        private fun stopped() { isSpeaking = false; mainHandler.post { onSpeakingChanged(false) } }
+        private fun stopped(utteranceId: String?) {
+            isSpeaking = false
+            utteranceId?.let { completions.remove(it) }
+            mainHandler.post { onSpeakingChanged(false) }
+        }
         override fun onStart(utteranceId: String?) { isSpeaking = true; mainHandler.post { onSpeakingChanged(true) } }
-        override fun onDone(utteranceId: String?) = stopped()
+        // Only a natural finish runs onComplete -- an interruption (flushed
+        // by a newer speak(), or stop()) should not chain into whatever the
+        // caller wanted to happen next.
+        override fun onDone(utteranceId: String?) {
+            isSpeaking = false
+            val completion = utteranceId?.let { completions.remove(it) }
+            mainHandler.post {
+                onSpeakingChanged(false)
+                completion?.invoke()
+            }
+        }
 
         @Deprecated("Deprecated in Java", ReplaceWith("onError(utteranceId, errorCode)"))
-        override fun onError(utteranceId: String?) = stopped()
-        override fun onStop(utteranceId: String?, interrupted: Boolean) = stopped()
+        override fun onError(utteranceId: String?) = stopped(utteranceId)
+        override fun onStop(utteranceId: String?, interrupted: Boolean) = stopped(utteranceId)
     }
 
     private val tts: TextToSpeech = TextToSpeech(context.applicationContext) { status ->
@@ -68,15 +89,21 @@ class TranslationSpeaker(
      * if playback was actually (re)started, false if nothing is playing now
      * (not ready, blank text, or this call just stopped it) -- callers use
      * this to avoid leaving UI stuck "playing".
+     *
+     * [onComplete], if given, runs once this utterance finishes on its own
+     * (not if it's interrupted or stopped) -- e.g. "speak the demo, then
+     * start listening" for the "How to say?" chip.
      */
-    fun speak(text: String): Boolean {
+    fun speak(text: String, onComplete: (() -> Unit)? = null): Boolean {
         if (!isReady || text.isBlank()) return false
         if (isSpeaking && text == currentText) {
             stop()
             return false
         }
         currentText = text
-        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "bot_lisa_${utteranceCount++}")
+        val utteranceId = "bot_lisa_${utteranceCount++}"
+        if (onComplete != null) completions[utteranceId] = onComplete
+        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         return true
     }
 

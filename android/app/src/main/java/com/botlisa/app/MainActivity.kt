@@ -848,8 +848,8 @@ fun LisaScreen(
     // Reads a trigger phrase aloud in the target-language voice -- tapping
     // a command chip or an instruction step. Drop a trailing "?" so TTS
     // doesn't over-emphasise it.
-    fun speakTriggerPhrase(phrase: String) {
-        speaker?.speak(phrase.trimEnd('?', ' '))
+    fun speakTriggerPhrase(phrase: String, onComplete: (() -> Unit)? = null) {
+        if (speaker?.speak(phrase.trimEnd('?', ' '), onComplete) != true) onComplete?.invoke()
     }
 
     // "what does that mean?" -- translate the previous target-language
@@ -1090,7 +1090,7 @@ fun LisaScreen(
     // Hands-free needs a foreground service running alongside SpeechAssistant
     // -- since Android 9, a backgrounded process can't touch the microphone
     // at all without one. See ListeningForegroundService.kt.
-    fun startHandsFree() {
+    fun startHandsFree(listenForWordFirst: Boolean = false) {
         assistantError = null
         // Drop focus from the input field if switching straight from typing
         // mode -- handleTranscript guards writes on !inputFocused (so live
@@ -1110,7 +1110,7 @@ fun LisaScreen(
         // follow-up voice commands.
         lastUtterance = ""
         result = null
-        assistant.start()
+        assistant.start(listenForWordFirst)
         ListeningForegroundService.start(context)
         // Pre-load the on-device model + system prompt now, while the
         // caregiver is still settling into hands-free mode, rather than
@@ -1161,6 +1161,22 @@ fun LisaScreen(
         }
     }
 
+    // Same as assistantMicPermissionLauncher, but for the "How to say?" chip
+    // when hands-free wasn't already running -- lands straight in
+    // LISTENING_FOR_WORD (English) instead of LISTENING_DEFAULT, fired once
+    // permission is granted from the middle of onTranslateChipTap's demo
+    // speech (see its onComplete callback below).
+    val translateWordMicPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            requestNotificationPermissionIfNeeded()
+            startHandsFree(listenForWordFirst = true)
+        } else {
+            assistantError = "Microphone permission is required for Lisa Assistant."
+        }
+    }
+
     fun onToggleAssistant() {
         if (assistantState != SpeechAssistant.State.IDLE) {
             stopHandsFree()
@@ -1184,13 +1200,12 @@ fun LisaScreen(
     // on it would just re-speak the same old word -- so clear it first.
     // Otherwise there's nothing to translate yet: while hands-free is
     // already running, fast-switch it into LISTENING_FOR_WORD (same as if
-    // the target-language trigger phrase had just been spoken); while
-    // IDLE, this is the same "nothing to act on yet" case the other three
-    // command cards handle by demoing their trigger phrase aloud (see
-    // hasUtteranceToActOn below) -- do the same here rather than silently
-    // starting a whole hands-free session from a tap meant to demo the
-    // command. Starting hands-free to actually capture a word is still one
-    // tap away via the mic button, then this chip (or the spoken trigger).
+    // the target-language trigger phrase had just been spoken); while IDLE,
+    // speak the trigger phrase aloud first -- same demo-on-tap the other
+    // three command cards do -- and only then start hands-free landing
+    // straight in LISTENING_FOR_WORD, so the record button lighting up
+    // follows the caregiver actually hearing the command instead of firing
+    // silently the instant they tap.
     fun onTranslateChipTap() {
         if (wordFromTranslateCapture) {
             input = ""
@@ -1201,7 +1216,26 @@ fun LisaScreen(
             return
         }
         when (assistantState) {
-            SpeechAssistant.State.IDLE -> speakTriggerPhrase(translateTriggerPhrase)
+            SpeechAssistant.State.IDLE -> speakTriggerPhrase(translateTriggerPhrase) {
+                // The demo phrase takes a moment to play out, and this
+                // fires once it's done -- if the caregiver tapped "Assistant
+                // Lisa" (or anything else that moved the assistant on) while
+                // it was still speaking, assistantState won't be IDLE
+                // anymore by the time we get here. Starting hands-free
+                // anyway would silently undo that reset. Only proceed if
+                // nothing's changed since the tap.
+                if (assistantState == SpeechAssistant.State.IDLE) {
+                    val granted = ContextCompat.checkSelfPermission(
+                        context, Manifest.permission.RECORD_AUDIO
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (granted) {
+                        requestNotificationPermissionIfNeeded()
+                        startHandsFree(listenForWordFirst = true)
+                    } else {
+                        translateWordMicPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                }
+            }
             SpeechAssistant.State.LISTENING_DEFAULT -> assistant.switchToListeningForWord()
             SpeechAssistant.State.LISTENING_FOR_WORD -> Unit // already there
         }
