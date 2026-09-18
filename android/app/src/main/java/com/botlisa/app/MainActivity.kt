@@ -1583,69 +1583,77 @@ fun LisaScreen(
             }
         }
 
-        result?.let { r ->
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    // The related-phrases section below (relatedForDisplay)
-                    // already folds in the Russian-only curated-library
-                    // fallback via curatedRelatedSupported, and the AI path
-                    // works for any target language -- so translate mode
-                    // shares the exact same related-phrases rendering as
-                    // expand mode instead of a separate, library-only,
-                    // Russian-only block. This is what lets a typed phrase's
-                    // eager/on-demand "what else?" suggestions actually show
-                    // up here, the same as a spoken utterance's.
-                    when {
-                        relatedForDisplay.isNotEmpty() || aiPending -> {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                Text("Related phrases for:", style = MaterialTheme.typography.labelLarge)
-                                // Deliberately plain-text, not a subtler icon --
-                                // the user explicitly wants it obvious which
-                                // source answered, not a detail you have to
-                                // notice. See ON_DEVICE_LLM_PLAN.md Phase 7.
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.primary,
+        // ON_DEMAND stays hidden until the caregiver actually asks, so a
+        // premature "No related phrases" doesn't pop up unprompted the
+        // moment a result with no library/AI suggestions comes back --
+        // mirrors the standalone AI card's own eagerMode/whatElseRequested
+        // gate below (which this val is now shared with).
+        val eagerMode = OnDeviceLlmConfig.getPrefetchMode(context) == OnDeviceLlmConfig.PrefetchMode.EAGER
+        if (relatedForDisplay.isNotEmpty() || aiPending || eagerMode || whatElseRequested) {
+            result?.let { r ->
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        // The related-phrases section below (relatedForDisplay)
+                        // already folds in the Russian-only curated-library
+                        // fallback via curatedRelatedSupported, and the AI path
+                        // works for any target language -- so translate mode
+                        // shares the exact same related-phrases rendering as
+                        // expand mode instead of a separate, library-only,
+                        // Russian-only block. This is what lets a typed phrase's
+                        // eager/on-demand "what else?" suggestions actually show
+                        // up here, the same as a spoken utterance's.
+                        when {
+                            relatedForDisplay.isNotEmpty() || aiPending -> {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
+                                    Text("Related phrases for:", style = MaterialTheme.typography.labelLarge)
+                                    // Deliberately plain-text, not a subtler icon --
+                                    // the user explicitly wants it obvious which
+                                    // source answered, not a detail you have to
+                                    // notice. See ON_DEVICE_LLM_PLAN.md Phase 7.
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.primary,
+                                    ) {
+                                        Text(
+                                            // aiPending is only ever true mid-AI-generation, so
+                                            // it reads as "AI" even before onDeviceRelated (and
+                                            // therefore usingAiSuggestions) has anything in it.
+                                            if (usingAiSuggestions || aiPending) "AI" else "Library",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        )
+                                    }
+                                }
+                                if (relatedForDisplay.isNotEmpty()) {
                                     Text(
-                                        // aiPending is only ever true mid-AI-generation, so
-                                        // it reads as "AI" even before onDeviceRelated (and
-                                        // therefore usingAiSuggestions) has anything in it.
-                                        if (usingAiSuggestions || aiPending) "AI" else "Library",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color.White,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        r.input,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontStyle = FontStyle.Italic,
+                                        color = MaterialTheme.colorScheme.primary,
                                     )
+                                    RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
+                                } else {
+                                    // Same heading + phrase as the finished state above --
+                                    // the phrase and its spinner share one line instead of
+                                    // stacking, and there's no second "Generating
+                                    // suggestions for ..." sentence repeating the phrase.
+                                    PhrasePendingRow(r.input, onCancel = ::cancelWhatElseGeneration)
                                 }
                             }
-                            if (relatedForDisplay.isNotEmpty()) {
-                                Text(
-                                    r.input,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontStyle = FontStyle.Italic,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                                RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
-                            } else {
-                                // Same heading + phrase as the finished state above --
-                                // the phrase and its spinner share one line instead of
-                                // stacking, and there's no second "Generating
-                                // suggestions for ..." sentence repeating the phrase.
-                                PhrasePendingRow(r.input, onCancel = ::cancelWhatElseGeneration)
-                            }
+                            else -> Text(
+                                "No related phrases for \"${r.input}\".",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
-                        else -> Text(
-                            "No related phrases for \"${r.input}\".",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                     }
                 }
             }
@@ -1666,8 +1674,9 @@ fun LisaScreen(
         // whatElseRequested for that mode. aiAttempted (or
         // eagerSkippedForHeat) still decides *which* state to show once
         // visible (see below), and also keeps the card from flickering away
-        // mid-generation (see onDeviceGenerating's comment).
-        val eagerMode = OnDeviceLlmConfig.getPrefetchMode(context) == OnDeviceLlmConfig.PrefetchMode.EAGER
+        // mid-generation (see onDeviceGenerating's comment). eagerMode itself
+        // is computed once, above, and shared with the backend-result card's
+        // own identical gate.
         if (result == null && lastUtterance.isNotBlank() && (eagerMode || whatElseRequested) &&
             (aiAttempted || eagerSkippedForHeat)
         ) {
