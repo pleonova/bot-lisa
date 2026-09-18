@@ -167,10 +167,11 @@ fun InstructionsPanel(
                     // since this is the first thing in its content.
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable(onClick = onToggle)
-                    // Same 20dp inset as each numbered section's own
-                    // padding, so the sparkle lines up under the number
-                    // badges below.
-                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                    // Same 20dp horizontal inset as each numbered section's
+                    // own padding, so the sparkle lines up under the number
+                    // badges below. More vertical breathing room than a
+                    // section, since this is the panel's own title bar.
+                    .padding(horizontal = 20.dp, vertical = 18.dp),
             ) {
                 // Same 28dp footprint as a numbered section's circle badge --
                 // the icon itself stays 20dp, just centred in that slot --
@@ -187,9 +188,12 @@ fun InstructionsPanel(
                     )
                 }
                 Text(
-                    "Using voice commands",
-                    style = MaterialTheme.typography.titleLarge,
+                    "Use voice commands",
+                    // Same typeface/weight/letter-spacing as each numbered
+                    // section's own heading below.
+                    style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp,
                     modifier = Modifier
                         .weight(1f)
                         .padding(start = 14.dp),
