@@ -348,25 +348,6 @@ private fun rememberSpeechBubbleShape(tailOnRight: Boolean = false): Shape {
     }
 }
 
-/** Just the rounded-rect body of [rememberSpeechBubbleShape], without its
- * tail -- used to keep a border stroke off the tail so the tail reads as a
- * plain, fully filled-in pointer instead of an outlined sliver. */
-@Composable
-private fun rememberSpeechBubbleBodyShape(tailOnRight: Boolean = false): Shape {
-    val density = LocalDensity.current
-    return remember(density, tailOnRight) {
-        val cornerPx = with(density) { SPEAKER_BUBBLE_CORNER.toPx() }
-        val tailWidthPx = with(density) { SPEAKER_BUBBLE_TAIL_WIDTH.toPx() }
-        GenericShape { size, _ ->
-            if (tailOnRight) {
-                addRoundRect(RoundRect(0f, 0f, size.width - tailWidthPx, size.height, cornerPx, cornerPx))
-            } else {
-                addRoundRect(RoundRect(tailWidthPx, 0f, size.width, size.height, cornerPx, cornerPx))
-            }
-        }
-    }
-}
-
 /** Who said [text] (and its English [gloss]): the caregiver or Lisa. Renders
  * as a grey speech bubble with a tail pointing at a same-grey speaker icon --
  * the fox logo (Lisa's own icon, see MainActivity's "Start over" button) or a
@@ -390,8 +371,8 @@ private fun SpeakerBubble(speaker: Speaker, text: String, gloss: String?, onClic
                 .padding(
                     start = if (isFox) 14.dp else 14.dp + SPEAKER_BUBBLE_TAIL_WIDTH,
                     end = if (isFox) 14.dp + SPEAKER_BUBBLE_TAIL_WIDTH else 14.dp,
-                    top = 10.dp,
-                    bottom = 10.dp,
+                    top = 6.dp,
+                    bottom = 6.dp,
                 ),
         ) {
             Text(
@@ -454,10 +435,6 @@ private val COMMAND_CARD_BORDER = 2.5.dp
 @Composable
 private fun CommandCard(card: CardSpec, color: Color) {
     val shape = rememberSpeechBubbleShape()
-    // Border traces only the rounded body, not the tail -- stroking the tail
-    // too left it looking like a thin hollow outline instead of a solid,
-    // fully filled-in pointer.
-    val bodyShape = rememberSpeechBubbleBodyShape()
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -471,7 +448,7 @@ private fun CommandCard(card: CardSpec, color: Color) {
                 .weight(1f)
                 .clip(shape)
                 .background(color.copy(alpha = 0.08f))
-                .border(COMMAND_CARD_BORDER, color.copy(alpha = 0.7f), bodyShape)
+                .border(COMMAND_CARD_BORDER, color.copy(alpha = 0.7f), shape)
                 .clickable(onClick = card.onClick)
                 .padding(start = 14.dp + SPEAKER_BUBBLE_TAIL_WIDTH, top = 10.dp, bottom = 10.dp, end = 14.dp),
         ) {
