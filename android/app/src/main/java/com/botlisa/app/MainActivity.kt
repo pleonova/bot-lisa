@@ -1350,6 +1350,7 @@ fun LisaScreen(
         // italic + muted so it reads as "being heard", not "typed".
         val assistantOwnsField = assistantState != SpeechAssistant.State.IDLE &&
             !inputFocused && input.isNotBlank()
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         OutlinedTextField(
             value = input,
             onValueChange = {
@@ -1412,8 +1413,10 @@ fun LisaScreen(
                 "Enter English or ${targetLanguage.displayName} Text",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 4.dp),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
             )
+        }
         }
 
         transcriptGloss?.let { gloss ->
