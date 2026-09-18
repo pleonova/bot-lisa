@@ -39,6 +39,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -789,8 +790,15 @@ fun LisaScreen(
                 // library can still answer (tryLibrary below), don't let
                 // this failure block that, but it's still worth knowing
                 // about, so only skip showing it when the library already
-                // did the job silently.
+                // did the job silently. A CancellationException here just
+                // means this job got superseded or cancelled (a newer
+                // utterance, the "X" button, leaving the screen) -- not a
+                // real failure, so rethrow it instead of reporting it as one
+                // (runCatching would otherwise swallow it like any other
+                // exception and surface "The coroutine scope left the
+                // composition" as if generation itself had broken).
                 generated.exceptionOrNull()?.let { e ->
+                    if (e is CancellationException) throw e
                     if (!tryLibrary) errorText = "\"What else?\" generation failed: ${e.message ?: e::class.simpleName}"
                 }
             }
@@ -1023,8 +1031,12 @@ fun LisaScreen(
                 // a failure here used to vanish silently, and since this is
                 // the *background* prefetch, it could fail minutes before
                 // the caregiver ever says "what else?", with nothing to show
-                // for it when they do.
+                // for it when they do. But a CancellationException here is
+                // this LaunchedEffect getting superseded by a newer
+                // utterance (its key) or the composable leaving composition
+                // -- routine, not a failure -- so rethrow rather than report.
                 generated.exceptionOrNull()?.let { e ->
+                    if (e is CancellationException) throw e
                     errorText = "\"What else?\" generation failed: ${e.message ?: e::class.simpleName}"
                 }
                 if (speakWhenReady) {
@@ -1417,7 +1429,12 @@ fun LisaScreen(
             keyboardActions = KeyboardActions(onSearch = { onSend() }),
         )
 
+        // Suppressed once a translate-mode result is showing -- its own card
+        // (below) already displays this same English text, so repeating it
+        // here right under the search box would just be noise.
+        val suppressTranscriptGloss = result?.mode == "translate" && result?.translation != null
         transcriptGloss?.let { gloss ->
+            if (suppressTranscriptGloss) return@let
             // No background -- just the book icon (same one/tint as the
             // "what does that mean?" chip, greyed instead of orange) plus
             // the gloss, styled like every other English translation in the
@@ -1495,6 +1512,45 @@ fun LisaScreen(
             }
         }
 
+        // Translate mode gets its own card, separate from the related-
+        // phrases card below -- the two are different kinds of content
+        // (a direct answer vs. a list of suggestions) and merging them into
+        // one card read as if the phrases belonged to the translation.
+        if (result?.mode == "translate" && result?.translation != null) {
+            val r = result!!
+            val translation = r.translation!!
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("Translation:", style = MaterialTheme.typography.labelLarge)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { speaker?.speak(translation.ru) }) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.VolumeUp,
+                                contentDescription = "Play translation",
+                                tint = if (translationSpeaking) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                modifier = Modifier.pulse(translationSpeaking),
+                            )
+                        }
+                        Column {
+                            Text(translation.ru, style = MaterialTheme.typography.headlineSmall)
+                            Text(
+                                r.input,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontStyle = FontStyle.Italic,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         result?.let { r ->
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
@@ -1510,32 +1566,6 @@ fun LisaScreen(
                     // Russian-only block. This is what lets a typed phrase's
                     // eager/on-demand "what else?" suggestions actually show
                     // up here, the same as a spoken utterance's.
-                    if (r.mode == "translate" && r.translation != null) {
-                        Text("Translation:", style = MaterialTheme.typography.labelLarge)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { speaker?.speak(r.translation.ru) }) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.VolumeUp,
-                                    contentDescription = "Play translation",
-                                    tint = if (translationSpeaking) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                    modifier = Modifier.pulse(translationSpeaking),
-                                )
-                            }
-                            Column {
-                                Text(r.translation.ru, style = MaterialTheme.typography.headlineSmall)
-                                Text(
-                                    "\"${r.input}\"",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontStyle = FontStyle.Italic,
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(4.dp))
-                    }
                     when {
                         relatedForDisplay.isNotEmpty() || aiPending -> {
                             Row(
