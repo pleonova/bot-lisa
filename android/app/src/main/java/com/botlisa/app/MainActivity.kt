@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -1545,7 +1546,14 @@ fun LisaScreen(
                                 color = bubbleContentColor(),
                             )
                         }
-                        IconButton(onClick = { speaker?.speak(translation.ru) }) {
+                        // Offsets past IconButton's own 12.dp touch-target
+                        // padding so the icon itself lands 16.dp from the
+                        // card edge -- same visual inset as the "read aloud"
+                        // icon in the search box above.
+                        IconButton(
+                            onClick = { speaker?.speak(translation.ru) },
+                            modifier = Modifier.offset(x = 12.dp),
+                        ) {
                             Icon(
                                 Icons.AutoMirrored.Filled.VolumeUp,
                                 contentDescription = "Play translation",
@@ -1591,7 +1599,7 @@ fun LisaScreen(
                                 // notice. See ON_DEVICE_LLM_PLAN.md Phase 7.
                                 Surface(
                                     shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                    color = MaterialTheme.colorScheme.primary,
                                 ) {
                                     Text(
                                         // aiPending is only ever true mid-AI-generation, so
@@ -1599,7 +1607,7 @@ fun LisaScreen(
                                         // therefore usingAiSuggestions) has anything in it.
                                         if (usingAiSuggestions || aiPending) "AI" else "Library",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        color = Color.White,
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                     )
                                 }
@@ -1663,12 +1671,12 @@ fun LisaScreen(
                         Text("Related phrases for:", style = MaterialTheme.typography.labelLarge)
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            color = MaterialTheme.colorScheme.primary,
                         ) {
                             Text(
                                 "AI",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                color = Color.White,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             )
                         }
@@ -1918,7 +1926,7 @@ private fun RelatedPhraseList(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(vertical = 4.dp, horizontal = 8.dp),
+                modifier = Modifier.padding(vertical = 4.dp),
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(phrase.ru, style = MaterialTheme.typography.bodyMedium)
@@ -1929,7 +1937,13 @@ private fun RelatedPhraseList(
                         color = bubbleContentColor(),
                     )
                 }
-                IconButton(onClick = { onSpeak(index) }) {
+                // Same 12.dp offset as the translation card's speaker icon --
+                // both land 16.dp from the card edge, matching the search
+                // box's "read aloud" icon.
+                IconButton(
+                    onClick = { onSpeak(index) },
+                    modifier = Modifier.offset(x = 12.dp),
+                ) {
                     Icon(
                         Icons.AutoMirrored.Filled.VolumeUp,
                         contentDescription = "Play phrase",
