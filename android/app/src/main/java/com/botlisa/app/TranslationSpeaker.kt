@@ -31,9 +31,18 @@ class TranslationSpeaker(
     private var utteranceCount = 0
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    // Tracks what's currently playing so a second speak() call for the exact
+    // same text can be treated as "stop" instead of restarting it -- see
+    // speak() below. Both read from the main thread (speak()) and written
+    // from whatever thread the TTS engine calls the listener back on; a
+    // stray race just means one tap reads a stale value, which at worst
+    // restarts instead of stopping (or vice versa) -- not worth locking for.
+    private var isSpeaking = false
+    private var currentText: String? = null
+
     private val progressListener = object : UtteranceProgressListener() {
-        private fun stopped() { mainHandler.post { onSpeakingChanged(false) } }
-        override fun onStart(utteranceId: String?) { mainHandler.post { onSpeakingChanged(true) } }
+        private fun stopped() { isSpeaking = false; mainHandler.post { onSpeakingChanged(false) } }
+        override fun onStart(utteranceId: String?) { isSpeaking = true; mainHandler.post { onSpeakingChanged(true) } }
         override fun onDone(utteranceId: String?) = stopped()
 
         @Deprecated("Deprecated in Java", ReplaceWith("onError(utteranceId, errorCode)"))
@@ -53,14 +62,27 @@ class TranslationSpeaker(
     }
 
     /**
-     * Speaks [text] immediately, interrupting anything already being spoken.
-     * Returns true if playback was actually started (engine ready, text
-     * non-blank) -- callers use this to avoid leaving UI stuck "playing".
+     * Speaks [text] immediately, interrupting anything already being spoken
+     * -- unless [text] is the exact thing already playing, in which case
+     * this is a stop instead (tap-to-speak, tap-again-to-stop). Returns true
+     * if playback was actually (re)started, false if nothing is playing now
+     * (not ready, blank text, or this call just stopped it) -- callers use
+     * this to avoid leaving UI stuck "playing".
      */
     fun speak(text: String): Boolean {
         if (!isReady || text.isBlank()) return false
+        if (isSpeaking && text == currentText) {
+            stop()
+            return false
+        }
+        currentText = text
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "bot_lisa_${utteranceCount++}")
         return true
+    }
+
+    /** Stops whatever's currently playing, if anything. */
+    fun stop() {
+        tts.stop()
     }
 
     /** Call when the owning screen (or language setting) goes away to free the TTS engine. */

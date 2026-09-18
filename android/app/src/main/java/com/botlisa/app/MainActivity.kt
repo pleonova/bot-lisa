@@ -1090,7 +1090,7 @@ fun LisaScreen(
     // Hands-free needs a foreground service running alongside SpeechAssistant
     // -- since Android 9, a backgrounded process can't touch the microphone
     // at all without one. See ListeningForegroundService.kt.
-    fun startHandsFree(listenForWordFirst: Boolean = false) {
+    fun startHandsFree() {
         assistantError = null
         // Drop focus from the input field if switching straight from typing
         // mode -- handleTranscript guards writes on !inputFocused (so live
@@ -1110,7 +1110,7 @@ fun LisaScreen(
         // follow-up voice commands.
         lastUtterance = ""
         result = null
-        assistant.start(listenForWordFirst)
+        assistant.start()
         ListeningForegroundService.start(context)
         // Pre-load the on-device model + system prompt now, while the
         // caregiver is still settling into hands-free mode, rather than
@@ -1161,20 +1161,6 @@ fun LisaScreen(
         }
     }
 
-    // Same as assistantMicPermissionLauncher, but for the "How to say?" chip
-    // when hands-free wasn't already running -- lands straight in
-    // LISTENING_FOR_WORD (English) instead of LISTENING_DEFAULT.
-    val translateWordMicPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            requestNotificationPermissionIfNeeded()
-            startHandsFree(listenForWordFirst = true)
-        } else {
-            assistantError = "Microphone permission is required for Lisa Assistant."
-        }
-    }
-
     fun onToggleAssistant() {
         if (assistantState != SpeechAssistant.State.IDLE) {
             stopHandsFree()
@@ -1195,13 +1181,16 @@ fun LisaScreen(
     // translate, same as pressing the keyboard's Search key. But if that
     // text is only sitting there because a *previous* "how to say?" round
     // captured and spoke it (wordFromTranslateCapture), re-running onSend()
-    // on it would just re-speak the same old word -- so clear it first and
-    // fall through to opening the mic for a new one instead. Otherwise
-    // there's nothing to translate yet, so the chip's job is to open the
-    // English mic -- start hands-free landing straight in LISTENING_FOR_WORD
-    // if it wasn't running, or fast-switch an already-running DEFAULT
-    // session into it (same as if the target-language trigger phrase had
-    // just been spoken).
+    // on it would just re-speak the same old word -- so clear it first.
+    // Otherwise there's nothing to translate yet: while hands-free is
+    // already running, fast-switch it into LISTENING_FOR_WORD (same as if
+    // the target-language trigger phrase had just been spoken); while
+    // IDLE, this is the same "nothing to act on yet" case the other three
+    // command cards handle by demoing their trigger phrase aloud (see
+    // hasUtteranceToActOn below) -- do the same here rather than silently
+    // starting a whole hands-free session from a tap meant to demo the
+    // command. Starting hands-free to actually capture a word is still one
+    // tap away via the mic button, then this chip (or the spoken trigger).
     fun onTranslateChipTap() {
         if (wordFromTranslateCapture) {
             input = ""
@@ -1212,17 +1201,7 @@ fun LisaScreen(
             return
         }
         when (assistantState) {
-            SpeechAssistant.State.IDLE -> {
-                val granted = ContextCompat.checkSelfPermission(
-                    context, Manifest.permission.RECORD_AUDIO
-                ) == PackageManager.PERMISSION_GRANTED
-                if (granted) {
-                    requestNotificationPermissionIfNeeded()
-                    startHandsFree(listenForWordFirst = true)
-                } else {
-                    translateWordMicPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                }
-            }
+            SpeechAssistant.State.IDLE -> speakTriggerPhrase(translateTriggerPhrase)
             SpeechAssistant.State.LISTENING_DEFAULT -> assistant.switchToListeningForWord()
             SpeechAssistant.State.LISTENING_FOR_WORD -> Unit // already there
         }

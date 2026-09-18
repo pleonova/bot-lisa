@@ -160,12 +160,7 @@ class SpeechAssistant(
             onStateChanged(value)
         }
 
-    /**
-     * @param listenForWordFirst Land straight in LISTENING_FOR_WORD (English)
-     * instead of the usual LISTENING_DEFAULT -- for the "How to say?" chip's
-     * tap-to-invoke path when hands-free wasn't already running.
-     */
-    fun start(listenForWordFirst: Boolean = false) {
+    fun start() {
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
             onError("Speech recognition isn't available on this device.")
             return
@@ -176,13 +171,8 @@ class SpeechAssistant(
         recognizer?.destroy()
         recognizer = newRecognizer()
         resetSilenceTimeout()
-        if (listenForWordFirst) {
-            state = State.LISTENING_FOR_WORD
-            listenOnce(translateLanguageCode)
-        } else {
-            state = State.LISTENING_DEFAULT
-            listenOnce(getDefaultLanguageCode())
-        }
+        state = State.LISTENING_DEFAULT
+        listenOnce(getDefaultLanguageCode())
     }
 
     /**
@@ -191,8 +181,7 @@ class SpeechAssistant(
      * phrase takes (see onPartialResults) -- for the "How to say?" chip's
      * tap-to-invoke path when hands-free is already running. No-op if not
      * currently in plain DEFAULT listening (already mid-switch, already
-     * listening for the word, or not running at all -- use
-     * start(listenForWordFirst = true) in that last case).
+     * listening for the word, or not running at all).
      */
     fun switchToListeningForWord() {
         if (stoppedByUser || state != State.LISTENING_DEFAULT || switchingToWord) return
