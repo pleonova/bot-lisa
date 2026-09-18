@@ -1526,6 +1526,14 @@ fun LisaScreen(
                 ) {
                     Text("Translation:", style = MaterialTheme.typography.labelLarge)
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(translation.ru, style = MaterialTheme.typography.headlineSmall)
+                            Text(
+                                r.input,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontStyle = FontStyle.Italic,
+                            )
+                        }
                         IconButton(onClick = { speaker?.speak(translation.ru) }) {
                             Icon(
                                 Icons.AutoMirrored.Filled.VolumeUp,
@@ -1536,14 +1544,6 @@ fun LisaScreen(
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 },
                                 modifier = Modifier.pulse(translationSpeaking),
-                            )
-                        }
-                        Column {
-                            Text(translation.ru, style = MaterialTheme.typography.headlineSmall)
-                            Text(
-                                r.input,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontStyle = FontStyle.Italic,
                             )
                         }
                     }
