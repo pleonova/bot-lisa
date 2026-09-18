@@ -188,9 +188,9 @@ fun InstructionsPanel(
                     )
                 }
                 Text(
-                    "Use voice commands",
-                    // Same typeface/weight/letter-spacing as each numbered
-                    // section's own heading below.
+                    "USE VOICE COMMANDS...",
+                    // Same typeface/weight/letter-spacing/uppercase as each
+                    // numbered section's own heading below.
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.5.sp,
