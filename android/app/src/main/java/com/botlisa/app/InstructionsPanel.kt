@@ -160,20 +160,12 @@ fun InstructionsPanel(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    // Collapsed: same grey as the record button's idle fill
-                    // (i.e. the panel's own colour, so it reads as part of
-                    // one quiet bar). Expanded: a tonal step darker, so the
-                    // header still reads as its own bar once the numbered
-                    // sections are open below it. Clipped to the Surface's
-                    // own top corners for free, since this is the first
-                    // thing in its content.
-                    .background(
-                        if (expanded) {
-                            lerp(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant, 0.15f)
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        },
-                    )
+                    // Same grey as the record button's idle fill and the
+                    // expanded content below it, so the header reads as part
+                    // of one continuous panel rather than its own bar.
+                    // Clipped to the Surface's own top corners for free,
+                    // since this is the first thing in its content.
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable(onClick = onToggle)
                     // Same 20dp inset as each numbered section's own
                     // padding, so the sparkle lines up under the number
@@ -194,22 +186,14 @@ fun InstructionsPanel(
                         modifier = Modifier.size(20.dp),
                     )
                 }
-                Column(
+                Text(
+                    "Using voice commands",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier
                         .weight(1f)
                         .padding(start = 14.dp),
-                ) {
-                    Text(
-                        "How to use voice commands",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        "Say these phrases in hands-free mode.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                )
                 Icon(
                     Icons.Filled.ExpandMore,
                     contentDescription = if (expanded) "Collapse" else "Expand",
