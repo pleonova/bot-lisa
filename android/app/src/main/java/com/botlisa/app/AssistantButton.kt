@@ -7,6 +7,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -91,6 +92,8 @@ fun AssistantButton(
                 .size(84.dp)
                 .clip(CircleShape)
                 .background(fill)
+                // Same outline as the voice-commands panel, so the two line up.
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
                 .clickable(onClick = onClick),
         ) {
             Icon(
