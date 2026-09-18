@@ -341,6 +341,10 @@ set, which it isn't.
 
 - **Swap primary ↔ secondary language** — flip the "from" and "to"; today
   it's always English → target.
+- **Configurable primary language** — today the primary side is hardcoded
+  to English (`LanguageConfig.kt`); let it be set to any supported
+  language too, so both sides of the pair are user-chosen, not just which
+  target language fills the secondary slot.
 - **Generalize expand mode past Russian** — related-phrase suggestions are
   Russian-only (curated library + `_has_cyrillic()` in
   `services/orchestration_service/main.py`); needs curated content for a

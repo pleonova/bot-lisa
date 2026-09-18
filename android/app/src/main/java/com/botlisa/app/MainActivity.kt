@@ -635,6 +635,21 @@ fun LisaScreen(
         }
     }
 
+    // The eager prefetch effect and requestWhatElse()'s own on-demand
+    // generation below both call back into speakNextSuggestion() once a
+    // generation they kicked off finishes -- but that call happens from
+    // inside a coroutine that can outlive many recompositions. Calling
+    // speakNextSuggestion() directly there would invoke whichever closure
+    // was captured when that coroutine started, which read relatedForDisplay
+    // as it was *then* (still empty -- the generation it's waiting on hadn't
+    // produced anything yet), so the TTS call silently saw an empty list and
+    // no-op'd. Routing through rememberUpdatedState (same pattern already
+    // used for SpeechAssistant's voice-trigger callbacks below) makes the
+    // call land on the latest recomposition's speakNextSuggestion, which
+    // sees the suggestions that generation just produced -- found as "what
+    // else?" needing to be asked twice to actually hear anything.
+    val speakNextSuggestionWhenReady by rememberUpdatedState { speakNextSuggestion() }
+
     // Handles the "what else?" command end to end, covering both
     // PrefetchMode settings:
     //   - EAGER, already prefetched -> speak immediately (fast path, same
@@ -771,7 +786,7 @@ fun LisaScreen(
                     errorText = "\"What else?\" library lookup failed: ${e.message ?: e::class.simpleName}"
                 }
             }
-            speakNextSuggestion()
+            speakNextSuggestionWhenReady()
         }
     }
 
@@ -978,7 +993,7 @@ fun LisaScreen(
                 }
                 if (speakWhenReady) {
                     speakWhenReady = false
-                    speakNextSuggestion()
+                    speakNextSuggestionWhenReady()
                 }
             }
         }

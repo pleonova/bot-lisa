@@ -633,5 +633,11 @@ private fun ModelDownloadStatus(context: Context) {
         Button(onClick = { ModelDownloadWorker.enqueue(context) }) {
             Text("Download model (2.7GB, WiFi only)")
         }
+    } else {
+        Text(
+            "Model ready — used automatically for on-device \"what else?\" suggestions.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
