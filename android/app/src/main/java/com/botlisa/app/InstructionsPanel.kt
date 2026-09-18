@@ -166,6 +166,22 @@ fun InstructionsPanel(
                     // Clipped to the Surface's own top corners for free,
                     // since this is the first thing in its content.
                     .background(MaterialTheme.colorScheme.surfaceVariant)
+                    // Only while expanded -- outlines this whole header bar
+                    // as the open panel's own title strip. Matches the
+                    // Surface's own top corners; square on the bottom since
+                    // the divider/sections continue directly below. Same
+                    // dark grey as the header text itself.
+                    .then(
+                        if (expanded) {
+                            Modifier.border(
+                                1.dp,
+                                MaterialTheme.colorScheme.onSurfaceVariant,
+                                RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
+                            )
+                        } else {
+                            Modifier
+                        },
+                    )
                     .clickable(onClick = onToggle)
                     // Same 20dp horizontal inset as each numbered section's
                     // own padding, so the sparkle lines up under the number
