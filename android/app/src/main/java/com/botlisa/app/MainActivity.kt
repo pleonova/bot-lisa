@@ -1805,10 +1805,12 @@ fun LisaScreen(
 }
 
 /** The phrase being generated for, styled the same as the finished state's
- * heading (italic, primary), plus a small spinner sharing that same line --
- * the "AI is still generating" state, so a slow on-device model reads as
- * "working" rather than "broken" or "empty", without a second sentence
- * repeating the phrase. An optional trailing "X" lets the caregiver cancel a
+ * heading (italic, primary), plus a "Loading…" label + spinner sharing that
+ * same line -- the "AI is still generating" state, so a slow on-device model
+ * reads as "working" rather than "broken" or "empty", without a second
+ * sentence repeating the phrase. Sized and tinted `primary` (bigger than a
+ * bare spinner would be) so it actually catches the eye instead of blending
+ * into the row. An optional trailing "X" lets the caregiver cancel a
  * generation that's dragging on instead of waiting it out. */
 @Composable
 private fun PhrasePendingRow(phrase: String, onCancel: (() -> Unit)? = null) {
@@ -1825,9 +1827,14 @@ private fun PhrasePendingRow(phrase: String, onCancel: (() -> Unit)? = null) {
             modifier = Modifier.weight(1f),
         )
         CircularProgressIndicator(
-            modifier = Modifier.size(16.dp),
-            strokeWidth = 2.dp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+            strokeWidth = 2.5.dp,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            "Loading…",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
         )
         if (onCancel != null) {
             IconButton(onClick = onCancel, modifier = Modifier.size(24.dp)) {
