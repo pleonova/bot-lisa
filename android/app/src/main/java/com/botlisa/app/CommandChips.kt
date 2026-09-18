@@ -136,11 +136,17 @@ private fun CommandItem(spec: CommandChipSpec, modifier: Modifier = Modifier) {
         )
         Text(
             // Same capitalisation + "?" treatment as the phrase above it.
-            // Same light grey as the instructions panel's own translations.
+            // "What does that mean?" gets a light-orange caption (same hue
+            // as its book icon/phrase above, just faded) instead of the
+            // usual grey, so it stands out as the meaning-lookup command.
             formatCommand(spec.caption),
             style = MaterialTheme.typography.bodyMedium,
             fontStyle = FontStyle.Italic,
-            color = bubbleContentColor(),
+            color = if (spec.kind == CommandKind.MEANING) {
+                color.copy(alpha = 0.75f)
+            } else {
+                bubbleContentColor()
+            },
             textAlign = TextAlign.Center,
         )
     }
