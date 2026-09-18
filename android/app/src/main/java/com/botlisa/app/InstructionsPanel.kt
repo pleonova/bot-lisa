@@ -39,11 +39,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
@@ -102,6 +106,9 @@ fun InstructionsPanel(
     val teal = MaterialTheme.colorScheme.tertiary
     val purple = MaterialTheme.colorScheme.primary
     val orange = MaterialTheme.colorScheme.secondary
+    // Captured here (not inside drawBehind below, which isn't @Composable)
+    // -- same dark grey as the header text itself.
+    val instructionsHeaderOutlineColor = MaterialTheme.colorScheme.onSurfaceVariant
 
     val sections = buildList {
         add(
@@ -160,28 +167,18 @@ fun InstructionsPanel(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    // Same grey as the record button's idle fill and the
-                    // expanded content below it, so the header reads as part
-                    // of one continuous panel rather than its own bar.
-                    // Clipped to the Surface's own top corners for free,
-                    // since this is the first thing in its content.
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    // Only while expanded -- outlines this whole header bar
-                    // as the open panel's own title strip. Matches the
-                    // Surface's own top corners; square on the bottom since
-                    // the divider/sections continue directly below. Same
-                    // dark grey as the header text itself.
-                    .then(
-                        if (expanded) {
-                            Modifier.border(
-                                1.dp,
-                                MaterialTheme.colorScheme.onSurfaceVariant,
-                                RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
-                            )
-                        } else {
-                            Modifier
-                        },
-                    )
+                    // A touch greyer than the panel's own surfaceVariant --
+                    // just enough for the header to read as its own strip,
+                    // without the stronger tonal step used before. Clipped
+                    // to the Surface's own top corners for free, since this
+                    // is the first thing in its content.
+                    .background(lerp(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant, 0.08f))
+                    // Only while expanded -- outlines this header bar on
+                    // three sides (top + left + right), left open on the
+                    // bottom since the divider/sections continue directly
+                    // below and a closed box there would double up as two
+                    // lines. Same dark grey as the header text itself.
+                    .then(if (expanded) Modifier.drawBehind { drawHeaderOutline(instructionsHeaderOutlineColor) } else Modifier)
                     .clickable(onClick = onToggle)
                     // Same 20dp horizontal inset as each numbered section's
                     // own padding, so the sparkle lines up under the number
@@ -258,6 +255,28 @@ fun InstructionsPanel(
             }
         }
     }
+}
+
+// Same 18dp radius as the panel's own Surface corners, so the header outline
+// (below) traces the same curve where it meets them.
+private val INSTRUCTIONS_HEADER_OUTLINE_CORNER = 18.dp
+
+/** Strokes the header bar's top-left corner, across the top, and down the
+ * top-right corner and both sides -- deliberately open on the bottom, since
+ * a closed box there would double up against the divider/sections directly
+ * below. Used by [InstructionsPanel]'s header only while expanded. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawHeaderOutline(color: Color) {
+    val strokeWidth = 1.dp.toPx()
+    val r = INSTRUCTIONS_HEADER_OUTLINE_CORNER.toPx()
+    val path = Path().apply {
+        moveTo(0f, size.height)
+        lineTo(0f, r)
+        arcTo(Rect(0f, 0f, r * 2, r * 2), 180f, 90f, false)
+        lineTo(size.width - r, 0f)
+        arcTo(Rect(size.width - r * 2, 0f, size.width, r * 2), 270f, 90f, false)
+        lineTo(size.width, size.height)
+    }
+    drawPath(path, color = color, style = Stroke(width = strokeWidth))
 }
 
 private data class Section(
