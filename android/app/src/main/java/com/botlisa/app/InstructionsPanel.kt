@@ -233,9 +233,19 @@ fun InstructionsPanel(
             AnimatedVisibility(visible = expanded) {
                 Column {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    sections.forEachIndexed { i, section ->
-                        if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        SectionBlock(number = i + 1, section = section, onSpeakBubble = onSpeakBubble)
+                    // Each section renders as its own white card (see
+                    // SectionBlock) rather than sitting directly on this
+                    // panel's tinted background, so the number badge,
+                    // heading, description and example bubbles read as one
+                    // scannable unit per step instead of blending into the
+                    // grey panel and into each other.
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        sections.forEachIndexed { i, section ->
+                            SectionBlock(number = i + 1, section = section, onSpeakBubble = onSpeakBubble)
+                        }
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Row(
@@ -314,50 +324,60 @@ private sealed class FlowItem {
 
 @Composable
 private fun SectionBlock(number: Int, section: Section, onSpeakBubble: (String) -> Unit) {
-    Column(modifier = Modifier.padding(20.dp)) {
-        Row {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(section.color),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    number.toString(),
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        // A real white/surface card -- deliberately starker than
+        // bubbleSurfaceColor()'s soft step-up, so each step reads as a
+        // clearly separate, scannable unit against the panel's grey.
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(section.color),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        number.toString(),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Column(modifier = Modifier.padding(start = 14.dp)) {
+                    Text(
+                        section.heading.uppercase(),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp,
+                    )
+                    Text(
+                        section.body,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
-            Column(modifier = Modifier.padding(start = 14.dp)) {
-                Text(
-                    section.heading.uppercase(),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.5.sp,
-                )
-                Text(
-                    section.body,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        section.flow.forEachIndexed { i, item ->
-            if (i > 0) Spacer(Modifier.height(6.dp))
-            when (item) {
-                is FlowItem.CardItem -> CommandCard(item.spec, section.color)
-                is FlowItem.BubbleItem -> if (item.speaker == Speaker.FOX) {
-                    // Lisa's replies sit on the right, like the other side of
-                    // a chat conversation -- the caregiver's own bubbles
-                    // (cards, USER examples) stay on the left.
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+            Spacer(Modifier.height(14.dp))
+            section.flow.forEachIndexed { i, item ->
+                if (i > 0) Spacer(Modifier.height(6.dp))
+                when (item) {
+                    is FlowItem.CardItem -> CommandCard(item.spec, section.color)
+                    is FlowItem.BubbleItem -> if (item.speaker == Speaker.FOX) {
+                        // Lisa's replies sit on the right, like the other side of
+                        // a chat conversation -- the caregiver's own bubbles
+                        // (cards, USER examples) stay on the left.
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                            SpeakerBubble(item.speaker, item.text, item.gloss) { onSpeakBubble(item.text) }
+                        }
+                    } else {
                         SpeakerBubble(item.speaker, item.text, item.gloss) { onSpeakBubble(item.text) }
                     }
-                } else {
-                    SpeakerBubble(item.speaker, item.text, item.gloss) { onSpeakBubble(item.text) }
                 }
             }
         }
