@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
@@ -319,6 +320,8 @@ private val SPEAKER_BUBBLE_CORNER = 16.dp
 private val SPEAKER_BUBBLE_POINT_CORNER = 4.dp
 private val SPEAKER_BUBBLE_GAP = 6.dp
 private val SPEAKER_ICON_SIZE = 28.dp
+// The fox (Lisa) reads a little larger than the plain person glyph.
+private val SPEAKER_FOX_ICON_SIZE = 34.dp
 
 /** A rounded-rect body, fully rounded on three corners and near-square on
  * the fourth -- the bottom corner nearest the speaker avatar, which sits
@@ -364,10 +367,11 @@ private fun SpeakerBubble(speaker: Speaker, text: String, gloss: String?, onClic
         Column(
             modifier = Modifier
                 .clip(shape)
-                // `surface`, not a fixed white -- it's a light card in light
-                // mode and a dark one in dark mode, always a tone apart from
-                // the panel's `surfaceVariant` behind it either way.
-                .background(MaterialTheme.colorScheme.surface)
+                // Halfway between `surface` and the panel's own
+                // `surfaceVariant` -- still a tone apart so the bubble reads
+                // as its own card, but nowhere near as stark as a flat
+                // white/near-black fill sitting on the grey panel.
+                .background(bubbleSurfaceColor())
                 // Same border as the panel that holds it.
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
                 .clickable(onClick = onClick)
@@ -377,16 +381,14 @@ private fun SpeakerBubble(speaker: Speaker, text: String, gloss: String?, onClic
                 text,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
-                // Same dark grey as the instructions' own body text and the
-                // mic button's idle icon, not the stronger onSurface.
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = bubbleContentColor(),
             )
             if (gloss != null) {
                 Text(
                     "($gloss)",
                     style = MaterialTheme.typography.bodySmall,
                     fontStyle = FontStyle.Italic,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = bubbleContentColor(),
                 )
             }
         }
@@ -394,34 +396,41 @@ private fun SpeakerBubble(speaker: Speaker, text: String, gloss: String?, onClic
     }
 }
 
-/** The fox logo (Lisa) or a person glyph (the caregiver) -- a small round
- * avatar chip: a `surface` disc (matching the speech bubbles) holding an
- * `onSurfaceVariant` glyph -- the same dark grey as the bubble text, the
- * instructions' own body text, and the mic button's idle icon -- bordered
- * the same way as the panel and the bubbles. Using theme colour roles
- * instead of a fixed white/dark pair means it reads correctly in both light
- * and dark mode, the same as the bubbles. */
+/** Mostly the panel's own `surfaceVariant`, leaning just slightly toward
+ * `surface` -- the shared fill for [SpeakerBubble] and [SpeakerIcon], soft
+ * enough that they read as a gentle step up from the panel rather than a
+ * stark white-on-grey (or near-black-on-grey in dark mode) card. */
+@Composable
+private fun bubbleSurfaceColor(): Color =
+    lerp(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surfaceVariant, 0.75f)
+
+/** A lighter grey than `onSurfaceVariant` on its own -- shared by
+ * [SpeakerIcon] and [SpeakerBubble]'s text so neither the icons nor their
+ * bubble text pull the eye the way a full-strength `onSurfaceVariant` did. */
+@Composable
+private fun bubbleContentColor(): Color =
+    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+
+/** The fox logo (Lisa) or a person glyph (the caregiver) -- a bare glyph, no
+ * background or border, tinted with [bubbleContentColor] (the same lighter
+ * grey as the bubble text) so it reads correctly in both light and dark
+ * mode without needing its own coloured disc. The fox is sized a little
+ * larger than the person glyph. */
 @Composable
 private fun SpeakerIcon(speaker: Speaker, modifier: Modifier = Modifier) {
-    val chip = Modifier
-        .size(SPEAKER_ICON_SIZE)
-        .clip(CircleShape)
-        .background(MaterialTheme.colorScheme.surface)
-        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-        .padding(3.dp)
-    val tint = MaterialTheme.colorScheme.onSurfaceVariant
+    val tint = bubbleContentColor()
     when (speaker) {
         Speaker.USER -> Icon(
             Icons.Filled.Person,
             contentDescription = null,
             tint = tint,
-            modifier = modifier.then(chip),
+            modifier = modifier.size(SPEAKER_ICON_SIZE),
         )
         Speaker.FOX -> Image(
             painter = painterResource(R.drawable.lisa_fox),
             contentDescription = null,
             colorFilter = ColorFilter.tint(tint, BlendMode.SrcIn),
-            modifier = modifier.then(chip),
+            modifier = modifier.size(SPEAKER_FOX_ICON_SIZE),
         )
     }
 }
@@ -448,7 +457,9 @@ private fun CommandCard(card: CardSpec, color: Color) {
         horizontalArrangement = Arrangement.spacedBy(SPEAKER_BUBBLE_GAP),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(end = SPEAKER_ICON_SIZE + SPEAKER_BUBBLE_GAP),
+            // Matches the fox icon's (larger) size, not the person glyph's --
+            // it's Lisa's reply bubbles on the right this lines up with.
+            .padding(end = SPEAKER_FOX_ICON_SIZE + SPEAKER_BUBBLE_GAP),
     ) {
         SpeakerIcon(Speaker.USER)
         Row(
