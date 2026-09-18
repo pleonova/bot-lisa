@@ -1465,7 +1465,10 @@ fun LisaScreen(
         }
 
         if (isLoading) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            LinearProgressIndicator(
+                color = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
 
         errorText?.let {
@@ -1527,11 +1530,16 @@ fun LisaScreen(
                     Text("Translation:", style = MaterialTheme.typography.labelLarge)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(translation.ru, style = MaterialTheme.typography.headlineSmall)
+                            Text(
+                                translation.ru,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.tertiary,
+                            )
                             Text(
                                 r.input,
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.labelSmall,
                                 fontStyle = FontStyle.Italic,
+                                color = bubbleContentColor(),
                             )
                         }
                         IconButton(onClick = { speaker?.speak(translation.ru) }) {
@@ -1913,7 +1921,7 @@ private fun RelatedPhraseList(
                     Text(phrase.ru, style = MaterialTheme.typography.bodyMedium)
                     Text(
                         phrase.glossEn,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.labelSmall,
                         fontStyle = FontStyle.Italic,
                         color = bubbleContentColor(),
                     )
