@@ -119,7 +119,7 @@ fun InstructionsPanel(
         add(
             Section(
                 color = teal,
-                heading = "When you've forgotten a word",
+                heading = "FORGOTTEN A WORD?",
                 body = "Say the command, wait for the beep, then say the English word to translate.",
                 flow = listOf(
                     FlowItem.CardItem(CardSpec(Icons.Filled.Translate, false, translateTriggerPhrase, TriggerPhraseConfig.TRANSLATE_TRIGGER_EN, onSpeakTranslate)),
@@ -132,7 +132,7 @@ fun InstructionsPanel(
             add(
                 Section(
                     color = purple,
-                    heading = "While you're speaking",
+                    heading = "NEED SOMETHING ELSE TO SAY?",
                     body = "Get contextual suggestions on what to say next based on what you just said.",
                     flow = listOf(
                         FlowItem.BubbleItem(phraseExampleHeard, phraseExampleHeardGloss, speaker = Speaker.USER),
@@ -145,7 +145,7 @@ fun InstructionsPanel(
         add(
             Section(
                 color = orange,
-                heading = "After hearing $spokenLanguage",
+                heading = "NOT SURE HOW TO RESPOND?",
                 // "...or how to respond" only makes sense once the "how to
                 // answer?" card below is actually shown -- see showAnswerStep.
                 body = if (showAnswerStep) {
