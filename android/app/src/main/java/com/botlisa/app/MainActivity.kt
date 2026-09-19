@@ -1103,7 +1103,21 @@ fun LisaScreen(
     // (those never reach onUtterance).
     val handleTranscript = rememberUpdatedState<(String) -> Unit> { text ->
         if (assistantState != SpeechAssistant.State.IDLE && !inputFocused && text.isNotBlank()) {
-            input = text
+            // Each recognizer session's own transcript starts from nothing
+            // (see SpeechAssistant.listenOnce), and a natural mid-sentence
+            // breath pause is enough to end one (its silence timeout is a
+            // snappy 450ms, tuned for trigger-phrase detection) and start a
+            // fresh one via rearm() -- so displaying `text` on its own looks
+            // like the field suddenly clearing back to just the new
+            // fragment. Prepending pendingUtterance -- the same
+            // not-yet-committed accumulation lastUtterance's own debounce
+            // uses (see its declaration above) -- keeps the field showing
+            // the whole sentence-so-far across that restart instead.
+            input = if (assistantState == SpeechAssistant.State.LISTENING_DEFAULT && pendingUtterance.isNotBlank()) {
+                "$pendingUtterance $text"
+            } else {
+                text
+            }
             wordFromTranslateCapture = false
         }
     }
