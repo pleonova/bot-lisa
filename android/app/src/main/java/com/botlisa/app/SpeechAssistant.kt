@@ -7,6 +7,7 @@ import android.media.ToneGenerator
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -103,6 +104,16 @@ class SpeechAssistant(
         // at all in a long while -- auto-stop rather than drain battery
         // listening to an empty room.
         private const val SILENCE_TIMEOUT_MS = 3 * 60 * 1000L
+
+        // onPartialResults can fire many times a second while the caregiver
+        // is speaking -- reported live as the transcript field "refreshing
+        // too fast" (visibly flickering/jittering). Only forwarding a
+        // partial to onTranscript once this much time has passed since the
+        // last one smooths that out to a still-live but readable update
+        // rate, without touching the trigger-matching logic below (which
+        // keeps running on every raw partial regardless, so responsiveness
+        // there is unaffected).
+        private const val PARTIAL_TRANSCRIPT_THROTTLE_MS = 150L
     }
 
     private var recognizer: SpeechRecognizer? = null
@@ -117,6 +128,7 @@ class SpeechAssistant(
     private var consecutiveErrors = 0
     private val mainHandler = Handler(Looper.getMainLooper())
     private var tone: ToneGenerator? = null
+    private var lastPartialTranscriptAtMs = 0L
 
     // Fires if resetSilenceTimeout() isn't called again within
     // SILENCE_TIMEOUT_MS -- i.e. ten minutes pass with no speech (not even
@@ -173,6 +185,7 @@ class SpeechAssistant(
         stoppedByUser = false
         switchingToWord = false
         consecutiveErrors = 0
+        lastPartialTranscriptAtMs = 0L
         recognizer?.destroy()
         recognizer = newRecognizer()
         resetSilenceTimeout()
@@ -352,7 +365,11 @@ class SpeechAssistant(
                 .orEmpty()
             if (partial.isBlank()) return
             resetSilenceTimeout()
-            onTranscript(partial)
+            val now = SystemClock.uptimeMillis()
+            if (now - lastPartialTranscriptAtMs >= PARTIAL_TRANSCRIPT_THROTTLE_MS) {
+                lastPartialTranscriptAtMs = now
+                onTranscript(partial)
+            }
             // Fast path: beep + switch to English-word mode as soon as a
             // partial looks like the *start* of the translate trigger -- not
             // once it contains the whole thing. matches() compares full
