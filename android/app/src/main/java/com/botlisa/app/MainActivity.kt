@@ -1544,13 +1544,16 @@ fun LisaScreen(
         )
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            // Same 14dp gap as the outer page Column uses between this whole
-            // block and whatever comes next (the search box, in the common
-            // no-error case) -- so the hint text sits centered in the
-            // whitespace between the button and the search box, evenly
-            // spaced from both, instead of hugging the button.
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            modifier = Modifier.align(Alignment.CenterHorizontally),
+            // Tighter than the old "centered between button and search box"
+            // spacing -- this hint reads as belonging to the button right
+            // above it, not as a floating line hovering between the two.
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            // Extra room below, on top of the outer page Column's own 14dp
+            // gap to the search box -- separate from the spacedBy above,
+            // which only controls the button-to-text gap.
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .padding(bottom = 12.dp),
         ) {
             AssistantButton(
                 phase = uiPhase,
