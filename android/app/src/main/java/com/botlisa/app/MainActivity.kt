@@ -165,6 +165,10 @@ fun LisaScreen(
     // one-time model download over cellular data instead of waiting for wifi.
     var offerCellularDownloadRetry by rememberSaveable { mutableStateOf(false) }
     var result by rememberSaveable { mutableStateOf<AssistResult?>(null) }
+    // Set by speakMeaningOfLast() -- (source utterance, English translation) --
+    // so the "meaning" command gets its own result card, same as translate's
+    // and next-suggestion's. Null until the caregiver actually asks.
+    var meaningResult by rememberSaveable { mutableStateOf<Pair<String, String>?>(null) }
     // True right after a "how to say?" voice capture has filled `input`
     // with the captured word and spoken its translation. Lets a second tap
     // of the chip (see onTranslateChipTap) tell "the field still holds
@@ -881,7 +885,10 @@ fun LisaScreen(
             val english = runCatching {
                 OnDeviceTranslator.translateToEnglish(text, targetLanguage)
             }.getOrNull()
-            if (!english.isNullOrBlank()) englishSpeaker?.speak(english)
+            if (!english.isNullOrBlank()) {
+                meaningResult = text to english
+                englishSpeaker?.speak(english)
+            }
         }
     }
 
@@ -934,6 +941,7 @@ fun LisaScreen(
                 // pendingUtterance's own comment for why.
                 pendingUtterance = if (pendingUtterance.isBlank()) text else "$pendingUtterance $text"
                 result = null
+                meaningResult = null
                 commandsDismissed = false // fresh utterance -> chips come back
             }
             // The English word after the translate trigger always runs a
@@ -1767,6 +1775,56 @@ fun LisaScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                    }
+                }
+            }
+        }
+
+        // The "what does that mean?" command gets its own card, same shape as
+        // the translate card above -- an English gloss is its own kind of
+        // result, not a related phrase, and previously only got spoken aloud
+        // with nothing left on screen to glance back at.
+        meaningResult?.let { (source, english) ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("Meaning:", style = MaterialTheme.typography.labelLarge)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                english,
+                                style = MaterialTheme.typography.titleMedium,
+                                // Same orange as the "meaning" command chip
+                                // itself (CommandChips.kt) -- teal/purple/orange
+                                // consistently mark translate/next-suggestion/
+                                // meaning-or-answer across chips and result cards.
+                                color = MaterialTheme.colorScheme.secondary,
+                            )
+                            Text(
+                                source,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontStyle = FontStyle.Italic,
+                                fontWeight = FontWeight.Normal,
+                                color = bubbleContentColor(),
+                            )
+                        }
+                        IconButton(
+                            onClick = { englishSpeaker?.speak(english) },
+                            modifier = Modifier.offset(x = 12.dp),
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.VolumeUp,
+                                contentDescription = "Play meaning",
+                                tint = if (englishSpeaking) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                modifier = Modifier.pulse(englishSpeaking),
+                            )
+                        }
                     }
                 }
             }
