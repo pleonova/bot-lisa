@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -77,6 +78,14 @@ fun SettingsScreen(
     // parameter, so this is how they reach it (needed here to read/write
     // SharedPreferences-backed settings like GenderConfig, OnDeviceLlmConfig).
     val context = LocalContext.current
+
+    // Captured once, at this SettingsScreen instance's first composition --
+    // not read directly off expandVoiceCommandsInitially each time, since
+    // MainActivity flips that back to false right after the scroll lands
+    // (see its LaunchedEffect), and this needs to keep reserving room for
+    // the rest of this Settings session, not just the one frame the jump
+    // happens on.
+    val reserveScrollRoomForVoiceCommands = remember { expandVoiceCommandsInitially }
 
     // No own verticalScroll/fillMaxSize here: this renders inside
     // MainActivity's LisaScreen, whose outer Column is already
@@ -226,6 +235,20 @@ fun SettingsScreen(
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
             )
+        }
+
+        if (reserveScrollRoomForVoiceCommands) {
+            // Guarantees there's enough content below "Voice commands" for
+            // MainActivity's scrollTo (see its LaunchedEffect) to actually
+            // bring that section's top edge all the way up to the header --
+            // without this, if the sections after it don't add up to a full
+            // screen's worth, the scroll clamps short and Voice commands
+            // ends up somewhere mid-screen instead of the first thing seen.
+            // Oversized on purpose (a full screen height, however far
+            // "Voice commands" actually sits from the bottom) rather than
+            // computed exactly, since the exact deficit would need this
+            // same spacer's own size to compute maxValue in the first place.
+            Spacer(Modifier.height(LocalConfiguration.current.screenHeightDp.dp))
         }
     }
 }
