@@ -72,9 +72,10 @@ import kotlin.coroutines.coroutineContext
  * listening in the target language (Russian by default). Two independently
  * editable, per-language trigger phrases (Settings -> "Trigger phrase
  * (translate)" / "Trigger phrase (next suggestion)") drive it:
- *   - say the translate trigger (Russian "как сказать?" by default), pause,
- *     then an English word -- that word is sent to /assist as translate-mode.
- *   - say the next-suggestion trigger (Russian "что ещё?"; Russian target
+ *   - say the translate trigger (Russian "Лиза, как сказать?" by default),
+ *     pause, then an English word -- that word is sent to /assist as
+ *     translate-mode.
+ *   - say the next-suggestion trigger (Russian "Лиза, что ещё?"; Russian target
  *     only) to have the app read the next related/suggested phrase from the
  *     most recent lookup aloud; say it again to hear the next in that list.
  *   - anything else defaults to a normal target-language utterance, sent to
