@@ -61,7 +61,7 @@ import androidx.compose.ui.unit.sp
 
 /**
  * Collapsible "Use voice commands" card. Tap the header to expand three
- * numbered, colour-coded sections -- stuck speaking (teal), while speaking
+ * numbered, colour-coded sections -- forgotten word (teal), while speaking
  * (purple), after hearing [spokenLanguage] (orange) -- each holding one or
  * two tappable command cards showing the phrase (verbatim from Settings) and
  * its English caption. Tapping a card speaks the phrase. The first two
@@ -119,7 +119,7 @@ fun InstructionsPanel(
         add(
             Section(
                 color = teal,
-                heading = "When you're stuck speaking",
+                heading = "When you've forgotten a word in $spokenLanguage",
                 body = "Say the $spokenLanguage command, as shown in green, wait for the beep and then say a word in English. I'll translate it into $spokenLanguage.",
                 flow = listOf(
                     FlowItem.CardItem(CardSpec(Icons.Filled.Translate, false, translateTriggerPhrase, TriggerPhraseConfig.TRANSLATE_TRIGGER_EN, onSpeakTranslate)),
