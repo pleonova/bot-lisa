@@ -56,7 +56,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.IOException
 import kotlin.coroutines.coroutineContext
-import kotlin.math.roundToInt
 
 /**
  * Single-screen caregiver-assist front end for bot-lisa.
@@ -1565,7 +1564,9 @@ fun LisaScreen(
             animationSpec = infiniteRepeatable(tween(1500, easing = FastOutSlowInEasing), RepeatMode.Reverse),
             label = "idle-hint-pulse",
         )
-        val idleHintWeight = FontWeight((300 + 400 * idleHintPulse).roundToInt())
+        // Bold throughout -- only the color pulses (grey to grey, or grey to
+        // a command's accent); no thin end to the pulse at all.
+        val idleHintWeight = FontWeight.Bold
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             // Tighter than the old "centered between button and search box"
