@@ -8,6 +8,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -1523,6 +1529,17 @@ fun LisaScreen(
             }
         }
 
+        // Loops the idle hint's opacity between fully visible and faded --
+        // draws the eye to "Tap and speak $language" as the CTA it is,
+        // rather than sitting as flat, easy-to-skip-over text. Same
+        // rememberInfiniteTransition + animateFloat pattern as the record
+        // button's own pulsing ring (AssistantButton.kt).
+        val idleHintAlpha by rememberInfiniteTransition(label = "idle-hint-pulse").animateFloat(
+            initialValue = 1f,
+            targetValue = 0.4f,
+            animationSpec = infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "idle-hint-alpha",
+        )
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             // Same 14dp gap as the outer page Column uses between this whole
@@ -1541,14 +1558,16 @@ fun LisaScreen(
             Text(
                 uiPhase.subtitle(targetLanguage.displayName),
                 style = MaterialTheme.typography.bodyLarge,
-                // IDLE keeps its own purple CTA color regardless of the
-                // record button's (grey) fill -- every other phase matches
-                // the button's own fill color instead of a fixed grey, so
-                // e.g. "Now say the English word" reads in the same teal the
-                // button turns, and a specific command's own accent color
-                // while it's the one speaking (see buttonFillColor()).
+                // IDLE reads in the same dark grey as the rest of the app's
+                // muted text/icons (the mic icon, panel header, chevron),
+                // pulsing between full and faded to draw the eye as a CTA --
+                // every other phase matches the button's own fill color
+                // instead, so e.g. "Now say the English word" reads in the
+                // same teal the button turns, and a specific command's own
+                // accent color while it's the one speaking (see
+                // buttonFillColor()).
                 color = if (uiPhase == UiPhase.IDLE) {
-                    MaterialTheme.colorScheme.primary
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = idleHintAlpha)
                 } else {
                     uiPhase.buttonFillColor(speakingCommand)
                 },
