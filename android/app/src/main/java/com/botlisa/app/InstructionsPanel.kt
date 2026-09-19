@@ -115,7 +115,7 @@ fun InstructionsPanel(
             Section(
                 color = teal,
                 heading = "When you've forgotten a word",
-                body = "Say the $spokenLanguage command, wait for the beep and then say a word in English. I'll translate it into $spokenLanguage.",
+                body = "Say the $spokenLanguage command, wait for the beep and then say a word in English. Lisa will translate it into $spokenLanguage.",
                 flow = listOf(
                     FlowItem.CardItem(CardSpec(Icons.Filled.Translate, false, translateTriggerPhrase, TriggerPhraseConfig.TRANSLATE_TRIGGER_EN, onSpeakTranslate)),
                     FlowItem.BubbleItem(wordExampleEn, gloss = null, speaker = Speaker.USER),
