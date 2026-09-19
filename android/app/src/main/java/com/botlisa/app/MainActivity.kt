@@ -1535,12 +1535,7 @@ fun LisaScreen(
         }
 
         assistantError?.let {
-            Text(
-                it,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            )
+            WarningCard(it)
         }
 
         // Shared field: the caregiver types here, AND Lisa Assistant's live
@@ -1657,17 +1652,21 @@ fun LisaScreen(
         }
 
         errorText?.let {
-            Column {
-                Text(it, color = MaterialTheme.colorScheme.error)
-                if (offerCellularDownloadRetry) {
-                    TextButton(
-                        onClick = { onSend(allowCellularDownload = true) },
-                        contentPadding = PaddingValues(0.dp),
-                    ) {
-                        Text("Download over cellular data")
+            WarningCard(
+                it,
+                actions = if (offerCellularDownloadRetry) {
+                    {
+                        TextButton(
+                            onClick = { onSend(allowCellularDownload = true) },
+                            contentPadding = PaddingValues(0.dp),
+                        ) {
+                            Text("Download over cellular data")
+                        }
                     }
-                }
-            }
+                } else {
+                    null
+                },
+            )
         }
 
         // Persists independently of errorText (which clears on the next
@@ -1675,12 +1674,9 @@ fun LisaScreen(
         // after whatever triggered this notice -- stays up, with an action,
         // until the caregiver dismisses it or the download actually starts.
         if (modelDownloadNeedsWifi && OnDeviceLlmConfig.getModelState(context) != OnDeviceLlmConfig.ModelState.READY) {
-            Column {
-                Text(
-                    "The on-device \"what else?\" model needs WiFi to download (~2.7GB).",
-                    color = MaterialTheme.colorScheme.error,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            WarningCard(
+                "The on-device \"what else?\" model needs WiFi to download (~2.7GB).",
+                actions = {
                     TextButton(
                         onClick = {
                             ModelDownloadWorker.enqueue(context, allowCellular = true)
@@ -1696,8 +1692,8 @@ fun LisaScreen(
                     ) {
                         Text("Not now")
                     }
-                }
-            }
+                },
+            )
         }
 
         // Translate mode gets its own card, separate from the related-
