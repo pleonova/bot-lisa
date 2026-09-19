@@ -143,6 +143,18 @@ fun LisaScreen(
 ) {
     val scope = rememberCoroutineScope()
 
+    // Hoisted (not created inline on the Column below) so voice-command
+    // button handlers further up in this function -- onTranslateChipTap(),
+    // speakMeaningOfLast(), requestWhatElse(), requestAnswerSuggestions(),
+    // speakTriggerPhrase() -- can scroll back to it. A caregiver who's
+    // scrolled down to tap a command card/chip otherwise has no way to see
+    // the result card appearing, or the record button lighting up, back up
+    // at the top of the screen.
+    val mainScrollState = rememberScrollState()
+    fun scrollToTop() {
+        scope.launch { mainScrollState.animateScrollTo(0) }
+    }
+
     // rememberSaveable (not plain remember) for anything the user would be upset to lose on
     // an Activity recreation -- most commonly a screen rotation. Plain `remember` state is
     // wiped when the Activity is destroyed and recreated, which is what was happening here:
@@ -711,6 +723,7 @@ fun LisaScreen(
     //     "few seconds of wait" trade-off for not pre-generating on every
     //     phrase -- see OnDeviceLlmConfig.PrefetchMode's own doc comment.
     fun requestWhatElse() {
+        scrollToTop()
         // Marks that the trigger has actually been used for lastUtterance --
         // the AI result card (see below) stays hidden until this is true,
         // even if EAGER prefetch already has (or is still generating)
@@ -875,12 +888,14 @@ fun LisaScreen(
     // a command chip or an instruction step. Drop a trailing "?" so TTS
     // doesn't over-emphasise it.
     fun speakTriggerPhrase(phrase: String, onComplete: (() -> Unit)? = null) {
+        scrollToTop()
         if (speaker?.speak(phrase.trimEnd('?', ' '), onComplete) != true) onComplete?.invoke()
     }
 
     // "what does that mean?" -- translate the previous target-language
     // utterance into English and read it aloud (English voice).
     fun speakMeaningOfLast() {
+        scrollToTop()
         // See requestWhatElse()'s utterance comment for why the `input`
         // fallback is IDLE-only.
         val text = if (assistantState == SpeechAssistant.State.IDLE) {
@@ -907,6 +922,7 @@ fun LisaScreen(
     // surface a generic "server unreachable" error, which reads as broken
     // rather than "not built yet". Say so plainly and immediately instead.
     fun requestAnswerSuggestions() {
+        scrollToTop()
         // See requestWhatElse()'s utterance comment for why the `input`
         // fallback is IDLE-only.
         val text = if (assistantState == SpeechAssistant.State.IDLE) {
@@ -1284,6 +1300,7 @@ fun LisaScreen(
     // follows the caregiver actually hearing the command instead of firing
     // silently the instant they tap.
     fun onTranslateChipTap() {
+        scrollToTop()
         if (wordFromTranslateCapture) {
             input = ""
             result = null
@@ -1346,7 +1363,7 @@ fun LisaScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(mainScrollState)
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
