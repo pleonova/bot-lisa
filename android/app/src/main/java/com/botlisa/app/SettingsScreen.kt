@@ -15,9 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -67,25 +65,21 @@ fun SettingsScreen(
     onApiKeyChange: (String) -> Unit,
     // Set when the caregiver got here via the instructions panel's "go to
     // settings" row (see MainActivity's onOpenSettings) rather than the
-    // header's own gear icon -- expands "Voice commands" immediately instead
-    // of the usual collapsed-by-default, and onVoiceCommandsSectionPositioned
-    // reports where it landed so the caller can scroll straight to it.
+    // header's own gear icon -- moves "Voice commands" to the very top of
+    // this list (see below) and expands it immediately, instead of its
+    // usual place further down, collapsed by default. A first version of
+    // this tried to leave the section in place and scroll to it instead,
+    // computed from raw LayoutCoordinates -- reordering it to the top is far
+    // simpler and can't drift out of sync with the actual layout the way
+    // that hand-rolled scroll-offset math did (it was landing at the bottom
+    // of the page instead of at the section).
     expandVoiceCommandsInitially: Boolean = false,
-    onVoiceCommandsSectionPositioned: (LayoutCoordinates) -> Unit = {},
 ) {
     // LocalContext.current retrieves the Context for use inside a
     // Composable -- Compose functions don't take Context as an ordinary
     // parameter, so this is how they reach it (needed here to read/write
     // SharedPreferences-backed settings like GenderConfig, OnDeviceLlmConfig).
     val context = LocalContext.current
-
-    // Captured once, at this SettingsScreen instance's first composition --
-    // not read directly off expandVoiceCommandsInitially each time, since
-    // MainActivity flips that back to false right after the scroll lands
-    // (see its LaunchedEffect), and this needs to keep reserving room for
-    // the rest of this Settings session, not just the one frame the jump
-    // happens on.
-    val reserveScrollRoomForVoiceCommands = remember { expandVoiceCommandsInitially }
 
     // No own verticalScroll/fillMaxSize here: this renders inside
     // MainActivity's LisaScreen, whose outer Column is already
@@ -99,6 +93,23 @@ fun SettingsScreen(
         // Reserves room for the fixed SettingsHeaderBar the caller overlays
         // on top of this scrolling content -- see that composable's height.
         Spacer(Modifier.height(SETTINGS_HEADER_HEIGHT))
+
+        if (expandVoiceCommandsInitially) {
+            VoiceCommandsSection(
+                targetLanguage = targetLanguage,
+                translateTriggerPhrase = translateTriggerPhrase,
+                onTranslateTriggerPhraseChange = onTranslateTriggerPhraseChange,
+                meaningTriggerPhrase = meaningTriggerPhrase,
+                onMeaningTriggerPhraseChange = onMeaningTriggerPhraseChange,
+                nextSuggestionTriggerPhrase = nextSuggestionTriggerPhrase,
+                onNextSuggestionTriggerPhraseChange = onNextSuggestionTriggerPhraseChange,
+                nextSuggestionSupported = nextSuggestionSupported,
+                answerTriggerPhrase = answerTriggerPhrase,
+                onAnswerTriggerPhraseChange = onAnswerTriggerPhraseChange,
+                curatedRelatedSupported = curatedRelatedSupported,
+                initiallyExpanded = true,
+            )
+        }
 
         SettingsSection("Language") {
             LanguagePicker(targetLanguage, onTargetLanguageChange)
@@ -163,45 +174,21 @@ fun SettingsScreen(
             }
         }
 
-        Box(modifier = Modifier.onGloballyPositioned(onVoiceCommandsSectionPositioned)) {
-            SettingsSection("Voice commands", initiallyExpanded = expandVoiceCommandsInitially) {
-                OutlinedTextField(
-                    value = translateTriggerPhrase,
-                    onValueChange = onTranslateTriggerPhraseChange,
-                    label = { Text("Translate") },
-                    supportingText = { Text("Say this, pause, then an English word, to have Lisa Assistant translate it instead of treating it as ${targetLanguage.displayName}.") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = meaningTriggerPhrase,
-                    onValueChange = onMeaningTriggerPhraseChange,
-                    label = { Text("What does that mean?") },
-                    supportingText = { Text("Say this to hear an English translation of the last thing you said, spoken aloud.") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-                if (nextSuggestionSupported) {
-                    OutlinedTextField(
-                        value = nextSuggestionTriggerPhrase,
-                        onValueChange = onNextSuggestionTriggerPhraseChange,
-                        label = { Text("Next suggestion") },
-                        supportingText = { Text("Say this to have Lisa Assistant read the next suggested phrase aloud. Say it again for the next one in the list.") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                    )
-                }
-                if (curatedRelatedSupported) {
-                    OutlinedTextField(
-                        value = answerTriggerPhrase,
-                        onValueChange = onAnswerTriggerPhraseChange,
-                        label = { Text("How to answer?") },
-                        supportingText = { Text("Say this to look up phrases you could say back to what you just heard.") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                    )
-                }
-            }
+        if (!expandVoiceCommandsInitially) {
+            VoiceCommandsSection(
+                targetLanguage = targetLanguage,
+                translateTriggerPhrase = translateTriggerPhrase,
+                onTranslateTriggerPhraseChange = onTranslateTriggerPhraseChange,
+                meaningTriggerPhrase = meaningTriggerPhrase,
+                onMeaningTriggerPhraseChange = onMeaningTriggerPhraseChange,
+                nextSuggestionTriggerPhrase = nextSuggestionTriggerPhrase,
+                onNextSuggestionTriggerPhraseChange = onNextSuggestionTriggerPhraseChange,
+                nextSuggestionSupported = nextSuggestionSupported,
+                answerTriggerPhrase = answerTriggerPhrase,
+                onAnswerTriggerPhraseChange = onAnswerTriggerPhraseChange,
+                curatedRelatedSupported = curatedRelatedSupported,
+                initiallyExpanded = false,
+            )
         }
 
         // Split out from the "What else?" section above and collapsed by
@@ -236,19 +223,67 @@ fun SettingsScreen(
                 visualTransformation = PasswordVisualTransformation(),
             )
         }
+    }
+}
 
-        if (reserveScrollRoomForVoiceCommands) {
-            // Guarantees there's enough content below "Voice commands" for
-            // MainActivity's scrollTo (see its LaunchedEffect) to actually
-            // bring that section's top edge all the way up to the header --
-            // without this, if the sections after it don't add up to a full
-            // screen's worth, the scroll clamps short and Voice commands
-            // ends up somewhere mid-screen instead of the first thing seen.
-            // Oversized on purpose (a full screen height, however far
-            // "Voice commands" actually sits from the bottom) rather than
-            // computed exactly, since the exact deficit would need this
-            // same spacer's own size to compute maxValue in the first place.
-            Spacer(Modifier.height(LocalConfiguration.current.screenHeightDp.dp))
+/**
+ * The trigger-phrase editors -- pulled out of [SettingsScreen]'s main body so
+ * it can render either in its usual spot (collapsed by default, after the
+ * "what else?" sections) or promoted to the very top of the list when the
+ * caregiver got here via the instructions panel's "go to settings" row (see
+ * expandVoiceCommandsInitially), without duplicating these four fields.
+ */
+@Composable
+private fun VoiceCommandsSection(
+    targetLanguage: TargetLanguage,
+    translateTriggerPhrase: String,
+    onTranslateTriggerPhraseChange: (String) -> Unit,
+    meaningTriggerPhrase: String,
+    onMeaningTriggerPhraseChange: (String) -> Unit,
+    nextSuggestionTriggerPhrase: String,
+    onNextSuggestionTriggerPhraseChange: (String) -> Unit,
+    nextSuggestionSupported: Boolean,
+    answerTriggerPhrase: String,
+    onAnswerTriggerPhraseChange: (String) -> Unit,
+    curatedRelatedSupported: Boolean,
+    initiallyExpanded: Boolean,
+) {
+    SettingsSection("Voice commands", initiallyExpanded = initiallyExpanded) {
+        OutlinedTextField(
+            value = translateTriggerPhrase,
+            onValueChange = onTranslateTriggerPhraseChange,
+            label = { Text("Translate") },
+            supportingText = { Text("Say this, pause, then an English word, to have Lisa Assistant translate it instead of treating it as ${targetLanguage.displayName}.") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        OutlinedTextField(
+            value = meaningTriggerPhrase,
+            onValueChange = onMeaningTriggerPhraseChange,
+            label = { Text("What does that mean?") },
+            supportingText = { Text("Say this to hear an English translation of the last thing you said, spoken aloud.") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        if (nextSuggestionSupported) {
+            OutlinedTextField(
+                value = nextSuggestionTriggerPhrase,
+                onValueChange = onNextSuggestionTriggerPhraseChange,
+                label = { Text("Next suggestion") },
+                supportingText = { Text("Say this to have Lisa Assistant read the next suggested phrase aloud. Say it again for the next one in the list.") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+        }
+        if (curatedRelatedSupported) {
+            OutlinedTextField(
+                value = answerTriggerPhrase,
+                onValueChange = onAnswerTriggerPhraseChange,
+                label = { Text("How to answer?") },
+                supportingText = { Text("Say this to look up phrases you could say back to what you just heard.") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
         }
     }
 }

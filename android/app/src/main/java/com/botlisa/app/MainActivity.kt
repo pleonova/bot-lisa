@@ -32,10 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -169,17 +166,13 @@ fun LisaScreen(
         scope.launch { mainScrollState.animateScrollTo(0) }
     }
 
-    // Coordinates of the outer scroll Column itself (captured below) and of
-    // the Settings "Voice commands" section (captured by SettingsScreen's
-    // own onVoiceCommandsSectionPositioned callback) -- both needed to work
-    // out that section's scroll offset (see the LaunchedEffect near the
-    // bottom of this function) when the instructions panel's settings icon
-    // jumps straight to it.
-    var mainColumnCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    var voiceCommandsSectionCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     // Set true only by the instructions panel's "go to settings" row --
     // opening Settings any other way (the header's own gear icon) leaves
-    // this false, so that section stays collapsed and no auto-scroll fires.
+    // this false. SettingsScreen reads it to promote "Voice commands" to the
+    // top of the list and expand it immediately, instead of scrolling to
+    // find it in its usual spot further down -- see SettingsScreen's own
+    // expandVoiceCommandsInitially doc for why reordering replaced an
+    // earlier, more fragile scroll-to-offset approach.
     var openSettingsAtVoiceCommands by remember { mutableStateOf(false) }
 
     // rememberSaveable (not plain remember) for anything the user would be upset to lose on
@@ -1035,23 +1028,20 @@ fun LisaScreen(
         }
     }
 
-    // Jumps straight to the "Voice commands" settings section once the
-    // instructions panel's "go to settings" row opens it there (see
-    // onOpenSettings above) -- waits for both the outer scroll Column's and
-    // that section's own coordinates to land (SettingsScreen only reports
-    // the latter once it's actually composed/expanded, a beat after
-    // showSettings flips true), then converts the section's position
-    // relative to the scroll Column into an absolute scroll offset (undoing
-    // the current scroll position, since localPositionOf already reflects
-    // it) and animates there. Resets the trigger flag after, so reopening
-    // Settings normally (the header's own gear icon) doesn't keep re-firing
-    // this on stale coordinates from the last time.
-    LaunchedEffect(openSettingsAtVoiceCommands, mainColumnCoordinates, voiceCommandsSectionCoordinates) {
-        val column = mainColumnCoordinates
-        val section = voiceCommandsSectionCoordinates
-        if (openSettingsAtVoiceCommands && column != null && section != null && section.isAttached) {
-            val sectionOffsetInContent = column.localPositionOf(section, Offset.Zero).y + mainScrollState.value
-            mainScrollState.animateScrollTo(sectionOffsetInContent.toInt().coerceIn(0, mainScrollState.maxValue))
+    // Settings and the home screen share this one scroll Column/ScrollState
+    // (swapped via the if/else below), so without this, opening Settings
+    // from partway down the home screen left it opening partway down
+    // Settings too -- or, combined with "Voice commands" being promoted to
+    // the top of the list (see SettingsScreen's expandVoiceCommandsInitially)
+    // for the instructions panel's "go to settings" row, landing wherever
+    // the home screen happened to be scrolled to could easily read as
+    // "jumped to the bottom" instead of showing that section at the top.
+    // Reset back to false once Settings closes, so a later normal open (the
+    // header's own gear icon) doesn't promote/expand that section again.
+    LaunchedEffect(showSettings) {
+        if (showSettings) {
+            mainScrollState.scrollTo(0)
+        } else {
             openSettingsAtVoiceCommands = false
         }
     }
@@ -1427,8 +1417,7 @@ fun LisaScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(mainScrollState)
-            .padding(20.dp)
-            .onGloballyPositioned { mainColumnCoordinates = it },
+            .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         if (showSettings) {
@@ -1455,7 +1444,6 @@ fun LisaScreen(
                 apiKey = apiKey,
                 onApiKeyChange = ::onApiKeyChange,
                 expandVoiceCommandsInitially = openSettingsAtVoiceCommands,
-                onVoiceCommandsSectionPositioned = { voiceCommandsSectionCoordinates = it },
             )
         } else {
         Column(
