@@ -32,7 +32,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -154,6 +157,19 @@ fun LisaScreen(
     fun scrollToTop() {
         scope.launch { mainScrollState.animateScrollTo(0) }
     }
+
+    // Coordinates of the outer scroll Column itself (captured below) and of
+    // the Settings "Voice commands" section (captured by SettingsScreen's
+    // own onVoiceCommandsSectionPositioned callback) -- both needed to work
+    // out that section's scroll offset (see the LaunchedEffect near the
+    // bottom of this function) when the instructions panel's settings icon
+    // jumps straight to it.
+    var mainColumnCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var voiceCommandsSectionCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    // Set true only by the instructions panel's "go to settings" row --
+    // opening Settings any other way (the header's own gear icon) leaves
+    // this false, so that section stays collapsed and no auto-scroll fires.
+    var openSettingsAtVoiceCommands by remember { mutableStateOf(false) }
 
     // rememberSaveable (not plain remember) for anything the user would be upset to lose on
     // an Activity recreation -- most commonly a screen rotation. Plain `remember` state is
@@ -986,6 +1002,27 @@ fun LisaScreen(
     // inputs (speaking state, result mode) can fold in without changing callers.
     val uiPhase by remember { derivedStateOf { uiPhaseOf(assistantState) } }
 
+    // Jumps straight to the "Voice commands" settings section once the
+    // instructions panel's "go to settings" row opens it there (see
+    // onOpenSettings above) -- waits for both the outer scroll Column's and
+    // that section's own coordinates to land (SettingsScreen only reports
+    // the latter once it's actually composed/expanded, a beat after
+    // showSettings flips true), then converts the section's position
+    // relative to the scroll Column into an absolute scroll offset (undoing
+    // the current scroll position, since localPositionOf already reflects
+    // it) and animates there. Resets the trigger flag after, so reopening
+    // Settings normally (the header's own gear icon) doesn't keep re-firing
+    // this on stale coordinates from the last time.
+    LaunchedEffect(openSettingsAtVoiceCommands, mainColumnCoordinates, voiceCommandsSectionCoordinates) {
+        val column = mainColumnCoordinates
+        val section = voiceCommandsSectionCoordinates
+        if (openSettingsAtVoiceCommands && column != null && section != null && section.isAttached) {
+            val sectionOffsetInContent = column.localPositionOf(section, Offset.Zero).y + mainScrollState.value
+            mainScrollState.animateScrollTo(sectionOffsetInContent.toInt().coerceIn(0, mainScrollState.maxValue))
+            openSettingsAtVoiceCommands = false
+        }
+    }
+
     // The chips are hidden only while mid translate-command
     // (LISTENING_FOR_WORD, reached by the spoken "как сказать"). Every other
     // state -- IDLE, or LISTENING_DEFAULT -- clears the flag, so starting or
@@ -1353,7 +1390,8 @@ fun LisaScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(mainScrollState)
-            .padding(20.dp),
+            .padding(20.dp)
+            .onGloballyPositioned { mainColumnCoordinates = it },
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         if (showSettings) {
@@ -1379,6 +1417,8 @@ fun LisaScreen(
                 onServerUrlChange = ::onServerUrlChange,
                 apiKey = apiKey,
                 onApiKeyChange = ::onApiKeyChange,
+                expandVoiceCommandsInitially = openSettingsAtVoiceCommands,
+                onVoiceCommandsSectionPositioned = { voiceCommandsSectionCoordinates = it },
             )
         } else {
         Column(
@@ -1912,6 +1952,10 @@ fun LisaScreen(
                 if (hasUtteranceToActOn) requestAnswerSuggestions() else speakTriggerPhrase(answerTriggerPhrase)
             },
             onSpeakBubble = { text -> speaker?.speak(text) },
+            onOpenSettings = {
+                showSettings = true
+                openSettingsAtVoiceCommands = true
+            },
             wordExampleEn = wordExample.en,
             wordExampleTranslated = wordExample.translated,
             phraseExampleHeard = phraseExample.heard,

@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -63,6 +64,13 @@ fun SettingsScreen(
     onServerUrlChange: (String) -> Unit,
     apiKey: String,
     onApiKeyChange: (String) -> Unit,
+    // Set when the caregiver got here via the instructions panel's "go to
+    // settings" row (see MainActivity's onOpenSettings) rather than the
+    // header's own gear icon -- expands "Voice commands" immediately instead
+    // of the usual collapsed-by-default, and onVoiceCommandsSectionPositioned
+    // reports where it landed so the caller can scroll straight to it.
+    expandVoiceCommandsInitially: Boolean = false,
+    onVoiceCommandsSectionPositioned: (LayoutCoordinates) -> Unit = {},
 ) {
     // LocalContext.current retrieves the Context for use inside a
     // Composable -- Compose functions don't take Context as an ordinary
@@ -146,42 +154,44 @@ fun SettingsScreen(
             }
         }
 
-        SettingsSection("Voice commands", initiallyExpanded = false) {
-            OutlinedTextField(
-                value = translateTriggerPhrase,
-                onValueChange = onTranslateTriggerPhraseChange,
-                label = { Text("Translate") },
-                supportingText = { Text("Say this, pause, then an English word, to have Lisa Assistant translate it instead of treating it as ${targetLanguage.displayName}.") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
-            OutlinedTextField(
-                value = meaningTriggerPhrase,
-                onValueChange = onMeaningTriggerPhraseChange,
-                label = { Text("What does that mean?") },
-                supportingText = { Text("Say this to hear an English translation of the last thing you said, spoken aloud.") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
-            if (nextSuggestionSupported) {
+        Box(modifier = Modifier.onGloballyPositioned(onVoiceCommandsSectionPositioned)) {
+            SettingsSection("Voice commands", initiallyExpanded = expandVoiceCommandsInitially) {
                 OutlinedTextField(
-                    value = nextSuggestionTriggerPhrase,
-                    onValueChange = onNextSuggestionTriggerPhraseChange,
-                    label = { Text("Next suggestion") },
-                    supportingText = { Text("Say this to have Lisa Assistant read the next suggested phrase aloud. Say it again for the next one in the list.") },
+                    value = translateTriggerPhrase,
+                    onValueChange = onTranslateTriggerPhraseChange,
+                    label = { Text("Translate") },
+                    supportingText = { Text("Say this, pause, then an English word, to have Lisa Assistant translate it instead of treating it as ${targetLanguage.displayName}.") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                 )
-            }
-            if (curatedRelatedSupported) {
                 OutlinedTextField(
-                    value = answerTriggerPhrase,
-                    onValueChange = onAnswerTriggerPhraseChange,
-                    label = { Text("How to answer?") },
-                    supportingText = { Text("Say this to look up phrases you could say back to what you just heard.") },
+                    value = meaningTriggerPhrase,
+                    onValueChange = onMeaningTriggerPhraseChange,
+                    label = { Text("What does that mean?") },
+                    supportingText = { Text("Say this to hear an English translation of the last thing you said, spoken aloud.") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                 )
+                if (nextSuggestionSupported) {
+                    OutlinedTextField(
+                        value = nextSuggestionTriggerPhrase,
+                        onValueChange = onNextSuggestionTriggerPhraseChange,
+                        label = { Text("Next suggestion") },
+                        supportingText = { Text("Say this to have Lisa Assistant read the next suggested phrase aloud. Say it again for the next one in the list.") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                    )
+                }
+                if (curatedRelatedSupported) {
+                    OutlinedTextField(
+                        value = answerTriggerPhrase,
+                        onValueChange = onAnswerTriggerPhraseChange,
+                        label = { Text("How to answer?") },
+                        supportingText = { Text("Say this to look up phrases you could say back to what you just heard.") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                    )
+                }
             }
         }
 

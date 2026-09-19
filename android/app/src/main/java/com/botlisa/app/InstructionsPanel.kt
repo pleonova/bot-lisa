@@ -93,6 +93,7 @@ fun InstructionsPanel(
     onSpeakNext: () -> Unit,
     onSpeakAnswer: () -> Unit,
     onSpeakBubble: (String) -> Unit,
+    onOpenSettings: () -> Unit,
     wordExampleEn: String,
     wordExampleTranslated: String,
     phraseExampleHeard: String,
@@ -260,7 +261,10 @@ fun InstructionsPanel(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onOpenSettings)
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
                     ) {
                         Icon(
                             Icons.Filled.Settings,
