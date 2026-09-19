@@ -98,11 +98,6 @@ fun InstructionsPanel(
     modifier: Modifier = Modifier,
     showNextSuggestionStep: Boolean = true,
     showAnswerStep: Boolean = true,
-    // Set only for the one-time first-open onboarding pairing with the
-    // record button's own "STEP 2" label (see MainActivity's
-    // showFirstOpenGuidance) -- null the rest of the time, once the
-    // caregiver's tapped the record button at least once.
-    stepLabel: String? = null,
 ) {
     val chevronRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
@@ -218,25 +213,17 @@ fun InstructionsPanel(
                         modifier = Modifier.size(20.dp),
                     )
                 }
-                Column(modifier = Modifier.weight(1f).padding(start = 14.dp)) {
-                    if (stepLabel != null) {
-                        Text(
-                            stepLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.5.sp,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    Text(
-                        "USE VOICE COMMANDS...",
-                        // Same typeface/weight/letter-spacing/uppercase as each
-                        // numbered section's own heading below.
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp,
-                    )
-                }
+                Text(
+                    "USE VOICE COMMANDS...",
+                    // Same typeface/weight/letter-spacing/uppercase as each
+                    // numbered section's own heading below.
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 14.dp),
+                )
                 Icon(
                     Icons.Filled.ExpandMore,
                     contentDescription = if (expanded) "Collapse" else "Expand",

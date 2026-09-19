@@ -128,7 +128,7 @@ private fun uiPhaseOf(assistantState: SpeechAssistant.State): UiPhase = when (as
 
 // Kept short -- these render in the handwritten hint beside the mic.
 private fun UiPhase.subtitle(spokenLanguage: String): String = when (this) {
-    UiPhase.IDLE -> "Tap for hands-free mode"
+    UiPhase.IDLE -> "Tap above and start talking in $spokenLanguage"
     UiPhase.LISTENING_RU -> "Listening for $spokenLanguage…"
     UiPhase.LISTENING_EN -> "Now say the English word"
     UiPhase.SPEAKING_TRANSLATION -> "Playing the translation…"
@@ -207,13 +207,6 @@ fun LisaScreen(
     // resetToStart() (fox tap) too, matching showIntro below -- tapping the
     // header still collapses it for the rest of the session.
     var showInstructions by rememberSaveable { mutableStateOf(true) }
-
-    // True until the caregiver has tapped the record button once (see
-    // startHandsFree()) -- drives the one-time "STEP 1 / STEP 2" labels below
-    // that point first at the instructions panel, then at the record button,
-    // so a first-time caregiver knows to read the voice commands before
-    // tapping to start rather than guessing at either.
-    var showFirstOpenGuidance by rememberSaveable { mutableStateOf(!IntroConfig.hasStartedAssistant(context)) }
 
     // Full-screen intro (IntroScreen.kt): auto-shown once on first launch,
     // and again any time the fox logo is tapped (see resetToStart() below).
@@ -1179,10 +1172,6 @@ fun LisaScreen(
     // -- since Android 9, a backgrounded process can't touch the microphone
     // at all without one. See ListeningForegroundService.kt.
     fun startHandsFree(listenForWordFirst: Boolean = false) {
-        if (showFirstOpenGuidance) {
-            showFirstOpenGuidance = false
-            IntroConfig.setHasStartedAssistant(context, true)
-        }
         assistantError = null
         // Drop focus from the input field if switching straight from typing
         // mode -- handleTranscript guards writes on !inputFocused (so live
@@ -1449,15 +1438,10 @@ fun LisaScreen(
                 phase = uiPhase,
                 onClick = { onToggleAssistant() },
             )
-            // Before the caregiver's first-ever tap, this doubles as "STEP 2"
-            // of the one-time onboarding pairing with the instructions
-            // panel's own "STEP 1" label below -- see showFirstOpenGuidance.
-            val showTapAsStep2 = showFirstOpenGuidance && uiPhase == UiPhase.IDLE
             Text(
-                if (showTapAsStep2) "STEP 2 · Tap here to start" else uiPhase.subtitle(targetLanguage.displayName),
+                uiPhase.subtitle(targetLanguage.displayName),
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = if (showTapAsStep2) FontWeight.Bold else FontWeight.Normal,
-                color = if (showTapAsStep2) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
         }
@@ -1903,7 +1887,6 @@ fun LisaScreen(
         InstructionsPanel(
             expanded = showInstructions,
             onToggle = { showInstructions = !showInstructions },
-            stepLabel = if (showFirstOpenGuidance) "STEP 1" else null,
             spokenLanguage = targetLanguage.displayName,
             translateTriggerPhrase = translateTriggerPhrase,
             meaningTriggerPhrase = meaningTriggerPhrase,
