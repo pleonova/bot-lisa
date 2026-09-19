@@ -1572,12 +1572,6 @@ fun LisaScreen(
                     uiPhase.buttonFillColor(speakingCommand)
                 },
                 textAlign = TextAlign.Center,
-                // Only IDLE's own subtitle wraps onto two lines (the
-                // language name on its own line) -- every other phase is one
-                // line. minLines = 2 reserves that same two-line height
-                // regardless, so the search box and everything below it
-                // don't jump up and down as hands-free starts/stops.
-                minLines = 2,
                 // Same action as tapping the button itself -- a bigger,
                 // easier-to-hit target for starting (or stopping) hands-free
                 // than the 84dp circle alone.
