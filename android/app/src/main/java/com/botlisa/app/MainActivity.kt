@@ -428,6 +428,16 @@ fun LisaScreen(
     // command finishes, since nothing else reads it while all three
     // speaking flags are false.
     var activeSpeakingCommand by remember { mutableStateOf<CommandKind?>(null) }
+    // Set only when a "what else?"/"what does that mean?"/"how to answer?"
+    // tap had nothing to act on (see hasUtteranceToActOn below) and just
+    // played a demo instead -- replaces the idle hint under the record
+    // button, once that demo finishes, with instructions for actually using
+    // the command that was just demoed (e.g. "Tap and speak Russian then
+    // say 'Лиса, что ещё?'"), instead of going back to the generic "Tap and
+    // speak Russian". Cleared once the caregiver actually starts hands-free
+    // or returns to the opening screen, so it never lingers past the moment
+    // it's useful.
+    var idleCommandHint by remember { mutableStateOf<String?>(null) }
     // Which related-phrase row is currently being read (null = none). Cleared
     // by phraseSpeaker's onSpeakingChanged when playback ends.
     var speakingIndex by remember { mutableStateOf<Int?>(null) }
@@ -1262,6 +1272,7 @@ fun LisaScreen(
     // -- since Android 9, a backgrounded process can't touch the microphone
     // at all without one. See ListeningForegroundService.kt.
     fun startHandsFree(listenForWordFirst: Boolean = false) {
+        idleCommandHint = null
         assistantError = null
         // Drop focus from the input field if switching straight from typing
         // mode -- handleTranscript guards writes on !inputFocused (so live
@@ -1421,6 +1432,7 @@ fun LisaScreen(
     // clears the page.
     fun resetToStart(showIntroPopup: Boolean = false) {
         stopHandsFree()
+        idleCommandHint = null
         // Drop focus so the field isn't left selected -- a focused field
         // hides the "start typing" helper under the buttons.
         focusManager.clearFocus()
@@ -1554,7 +1566,17 @@ fun LisaScreen(
                 speakingCommand = speakingCommand,
             )
             Text(
-                uiPhase.subtitle(targetLanguage.displayName),
+                // idleCommandHint (set by onMeaningCommand()/
+                // onNextSuggestionCommand()/onAnswerCommand() below when a
+                // tap only played a demo) takes over the idle hint until the
+                // caregiver actually starts hands-free or resets -- teaches
+                // how to use the command that was just demoed instead of
+                // repeating the generic "Tap and speak $language".
+                if (uiPhase == UiPhase.IDLE && idleCommandHint != null) {
+                    idleCommandHint!!
+                } else {
+                    uiPhase.subtitle(targetLanguage.displayName)
+                },
                 style = MaterialTheme.typography.bodyLarge,
                 // IDLE pulses between its purple CTA color and the app's
                 // dark grey (the mic icon, panel header, chevron), bolded to
@@ -2011,6 +2033,24 @@ fun LisaScreen(
             lastUtterance.isNotBlank()
         }
 
+        // What to tell the caregiver once a demoed (not actually run --
+        // see hasUtteranceToActOn) command's phrase finishes playing, so the
+        // idle hint teaches them how to actually use it instead of going
+        // back to the generic "Tap and speak $language". "What else?" is
+        // about something the CAREGIVER just said, so it's phrased as
+        // speaking; "what does that mean?"/"how to answer?" act on
+        // something Lisa overheard someone ELSE say, so it's phrased as
+        // Lisa listening instead.
+        fun demoHintFor(kind: CommandKind, phrase: String): String {
+            val language = targetLanguage.displayName
+            val quoted = "“${formatCommand(phrase)}”"
+            return when (kind) {
+                CommandKind.NEXT_SUGGESTION -> "Tap and speak $language then say $quoted"
+                CommandKind.MEANING, CommandKind.ANSWER -> "Tap and let Lisa listen to $language then say $quoted"
+                CommandKind.TRANSLATE -> "Tap and speak $language then say $quoted"
+            }
+        }
+
         // One shared handler per command, called from both the instructions
         // panel's cards and the home screen's chips (previously duplicated
         // inline at each of those 8 call sites) -- each records itself as
@@ -2019,20 +2059,39 @@ fun LisaScreen(
         // which single card/chip to show as "speaking now" (see
         // isAnyCommandSpeaking below).
         fun onTranslateCommand() {
+            idleCommandHint = null
             activeSpeakingCommand = CommandKind.TRANSLATE
             onTranslateChipTap()
         }
         fun onMeaningCommand() {
             activeSpeakingCommand = CommandKind.MEANING
-            if (hasUtteranceToActOn) speakMeaningOfLast() else speakTriggerPhrase(meaningTriggerPhrase)
+            if (hasUtteranceToActOn) {
+                idleCommandHint = null
+                speakMeaningOfLast()
+            } else {
+                idleCommandHint = demoHintFor(CommandKind.MEANING, meaningTriggerPhrase)
+                speakTriggerPhrase(meaningTriggerPhrase)
+            }
         }
         fun onNextSuggestionCommand() {
             activeSpeakingCommand = CommandKind.NEXT_SUGGESTION
-            if (hasUtteranceToActOn) requestWhatElse() else speakTriggerPhrase(nextSuggestionTriggerPhrase)
+            if (hasUtteranceToActOn) {
+                idleCommandHint = null
+                requestWhatElse()
+            } else {
+                idleCommandHint = demoHintFor(CommandKind.NEXT_SUGGESTION, nextSuggestionTriggerPhrase)
+                speakTriggerPhrase(nextSuggestionTriggerPhrase)
+            }
         }
         fun onAnswerCommand() {
             activeSpeakingCommand = CommandKind.ANSWER
-            if (hasUtteranceToActOn) requestAnswerSuggestions() else speakTriggerPhrase(answerTriggerPhrase)
+            if (hasUtteranceToActOn) {
+                idleCommandHint = null
+                requestAnswerSuggestions()
+            } else {
+                idleCommandHint = demoHintFor(CommandKind.ANSWER, answerTriggerPhrase)
+                speakTriggerPhrase(answerTriggerPhrase)
+            }
         }
 
         InstructionsPanel(
