@@ -2108,7 +2108,20 @@ fun LisaScreen(
             activeSpeakingCommand = CommandKind.TRANSLATE
             onTranslateChipTap()
         }
+        // Tapping any command while a *different* one left hands-free stuck
+        // in LISTENING_FOR_WORD (the "how to say?" demo starts a real
+        // word-capture session -- see onTranslateChipTap) stops that stray
+        // session first. Without this, once this command's own TTS finishes,
+        // uiPhase falls back to assistantState -- still LISTENING_FOR_WORD --
+        // and the record button/subtitle silently revert to "Now say the
+        // English word" instead of settling back to idle.
+        fun cancelStrayWordCapture() {
+            if (assistantState == SpeechAssistant.State.LISTENING_FOR_WORD) {
+                stopHandsFree()
+            }
+        }
         fun onMeaningCommand() {
+            cancelStrayWordCapture()
             activeSpeakingCommand = CommandKind.MEANING
             if (hasUtteranceToActOn) {
                 idleCommandHint = null
@@ -2119,6 +2132,7 @@ fun LisaScreen(
             }
         }
         fun onNextSuggestionCommand() {
+            cancelStrayWordCapture()
             activeSpeakingCommand = CommandKind.NEXT_SUGGESTION
             if (hasUtteranceToActOn) {
                 idleCommandHint = null
@@ -2129,6 +2143,7 @@ fun LisaScreen(
             }
         }
         fun onAnswerCommand() {
+            cancelStrayWordCapture()
             activeSpeakingCommand = CommandKind.ANSWER
             if (hasUtteranceToActOn) {
                 idleCommandHint = null
