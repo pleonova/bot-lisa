@@ -148,7 +148,7 @@ fun UiPhase.buttonFillColor(speakingCommand: CommandKind? = null): Color {
 
 // Kept short -- these render in the handwritten hint beside the mic.
 private fun UiPhase.subtitle(spokenLanguage: String): String = when (this) {
-    UiPhase.IDLE -> "Tap and start speaking in\n$spokenLanguage"
+    UiPhase.IDLE -> "Tap and speak $spokenLanguage"
     UiPhase.LISTENING_RU -> "Listening for $spokenLanguage…"
     UiPhase.LISTENING_EN -> "Now say the English word"
     UiPhase.SPEAKING_TRANSLATION -> "Playing the voice command…"
