@@ -41,10 +41,13 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CancellationException
@@ -53,6 +56,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.IOException
 import kotlin.coroutines.coroutineContext
+import kotlin.math.roundToInt
 
 /**
  * Single-screen caregiver-assist front end for bot-lisa.
@@ -126,6 +130,16 @@ class MainActivity : ComponentActivity() {
  * consumers don't need reshaping when that lands.
  */
 enum class UiPhase { IDLE, LISTENING_RU, LISTENING_EN, SPEAKING_TRANSLATION, READING_RECOMMENDATION }
+
+/**
+ * Replaces the idle hint under the record button once a command was
+ * demoed instead of actually run (see LisaScreen's idleCommandHint/
+ * demoHintFor) -- [lineOne] ("Tap and speak Russian" / "Tap and let Lisa
+ * listen to Russian") is static, [phrase] (the command just demoed, e.g.
+ * "Лиса, что ещё?") renders on its own line pulsing in [kind]'s own accent
+ * color instead of the base hint's grey/purple.
+ */
+private data class IdleCommandHint(val kind: CommandKind, val lineOne: String, val phrase: String)
 
 private fun uiPhaseOf(assistantState: SpeechAssistant.State): UiPhase = when (assistantState) {
     SpeechAssistant.State.IDLE -> UiPhase.IDLE
@@ -433,7 +447,7 @@ fun LisaScreen(
     // speak Russian". Cleared once the caregiver actually starts hands-free
     // or returns to the opening screen, so it never lingers past the moment
     // it's useful.
-    var idleCommandHint by remember { mutableStateOf<String?>(null) }
+    var idleCommandHint by remember { mutableStateOf<IdleCommandHint?>(null) }
     // Which related-phrase row is currently being read (null = none). Cleared
     // by phraseSpeaker's onSpeakingChanged when playback ends.
     var speakingIndex by remember { mutableStateOf<Int?>(null) }
@@ -1527,18 +1541,21 @@ fun LisaScreen(
             }
         }
 
-        // Loops the idle hint between the app's dark grey and its purple CTA
-        // color -- draws the eye to "Tap and speak $language" as the CTA it
+        // Loops between thin/grey and bold/[color] -- draws the eye to
+        // whichever text is pulsing (the base idle hint, or just the
+        // command phrase once one's been demoed -- see below) as the CTA it
         // is, rather than sitting as flat, easy-to-skip-over text. Same
         // rememberInfiniteTransition + animateFloat pattern as the record
-        // button's own pulsing ring (AssistantButton.kt), driving a lerp
-        // fraction here instead of an alpha.
+        // button's own pulsing ring (AssistantButton.kt); FontWeight takes
+        // an arbitrary 1..1000 weight (not just the named constants), so
+        // this one fraction drives both the color lerp and the weight.
         val idleHintPulse by rememberInfiniteTransition(label = "idle-hint-pulse").animateFloat(
             initialValue = 1f,
             targetValue = 0f,
-            animationSpec = infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            animationSpec = infiniteRepeatable(tween(450, easing = FastOutSlowInEasing), RepeatMode.Reverse),
             label = "idle-hint-pulse",
         )
+        val idleHintWeight = FontWeight((300 + 400 * idleHintPulse).roundToInt())
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             // Tighter than the old "centered between button and search box"
@@ -1557,38 +1574,68 @@ fun LisaScreen(
                 onClick = { onToggleAssistant() },
                 speakingCommand = speakingCommand,
             )
-            Text(
-                // idleCommandHint (set by onMeaningCommand()/
-                // onNextSuggestionCommand()/onAnswerCommand() below when a
-                // tap only played a demo) takes over the idle hint until the
-                // caregiver actually starts hands-free or resets -- teaches
-                // how to use the command that was just demoed instead of
-                // repeating the generic "Tap and speak $language".
-                if (uiPhase == UiPhase.IDLE && idleCommandHint != null) {
-                    idleCommandHint!!
-                } else {
-                    uiPhase.subtitle(targetLanguage.displayName)
-                },
-                style = MaterialTheme.typography.bodyLarge,
-                // IDLE pulses between its purple CTA color and the app's
-                // dark grey (the mic icon, panel header, chevron), bolded to
-                // draw the eye as a CTA -- every other phase matches the
-                // button's own fill color instead (regular weight), so e.g.
-                // "Now say the English word" reads in the same teal the
-                // button turns, and a specific command's own accent color
-                // while it's the one speaking (see buttonFillColor()).
-                color = if (uiPhase == UiPhase.IDLE) {
-                    lerp(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.primary, idleHintPulse)
-                } else {
-                    uiPhase.buttonFillColor(speakingCommand)
-                },
-                fontWeight = if (uiPhase == UiPhase.IDLE) FontWeight.Bold else FontWeight.Normal,
-                textAlign = TextAlign.Center,
-                // Same action as tapping the button itself -- a bigger,
-                // easier-to-hit target for starting (or stopping) hands-free
-                // than the 84dp circle alone.
-                modifier = Modifier.clickable { onToggleAssistant() },
-            )
+            // idleCommandHint (set by onMeaningCommand()/
+            // onNextSuggestionCommand()/onAnswerCommand() below when a tap
+            // only played a demo) takes over the idle hint until the
+            // caregiver actually starts hands-free or resets -- teaches how
+            // to use the command that was just demoed instead of repeating
+            // the generic "Tap and speak $language". Its own two lines: the
+            // static instruction, then "then say [phrase]" with only the
+            // phrase itself pulsing, in that command's own accent color
+            // rather than the base hint's grey/purple.
+            val hint = idleCommandHint
+            if (uiPhase == UiPhase.IDLE && hint != null) {
+                Text(
+                    hint.lineOne,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.clickable { onToggleAssistant() },
+                )
+                Text(
+                    buildAnnotatedString {
+                        append("then say ")
+                        withStyle(
+                            SpanStyle(
+                                color = lerp(MaterialTheme.colorScheme.onSurfaceVariant, hint.kind.accentColor(), idleHintPulse),
+                                fontWeight = idleHintWeight,
+                            ),
+                        ) {
+                            append("“${hint.phrase}”")
+                        }
+                    },
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.clickable { onToggleAssistant() },
+                )
+            } else {
+                Text(
+                    uiPhase.subtitle(targetLanguage.displayName),
+                    style = MaterialTheme.typography.bodyLarge,
+                    // IDLE pulses between its purple CTA color and the
+                    // app's dark grey (the mic icon, panel header,
+                    // chevron), thin-to-bold, to draw the eye as a CTA --
+                    // every other phase matches the button's own fill color
+                    // instead (regular weight), so e.g. "Now say the
+                    // English word" reads in the same teal the button
+                    // turns, and a specific command's own accent color
+                    // while it's the one speaking (see buttonFillColor()).
+                    color = if (uiPhase == UiPhase.IDLE) {
+                        lerp(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.primary, idleHintPulse)
+                    } else {
+                        uiPhase.buttonFillColor(speakingCommand)
+                    },
+                    fontWeight = if (uiPhase == UiPhase.IDLE) idleHintWeight else FontWeight.Normal,
+                    textAlign = TextAlign.Center,
+                    // Same action as tapping the button itself -- a bigger,
+                    // easier-to-hit target for starting (or stopping)
+                    // hands-free than the 84dp circle alone.
+                    modifier = Modifier.clickable { onToggleAssistant() },
+                )
+            }
         }
 
         assistantError?.let {
@@ -2032,14 +2079,13 @@ fun LisaScreen(
         // speaking; "what does that mean?"/"how to answer?" act on
         // something Lisa overheard someone ELSE say, so it's phrased as
         // Lisa listening instead.
-        fun demoHintFor(kind: CommandKind, phrase: String): String {
+        fun demoHintFor(kind: CommandKind, phrase: String): IdleCommandHint {
             val language = targetLanguage.displayName
-            val quoted = "“${formatCommand(phrase)}”"
-            return when (kind) {
-                CommandKind.NEXT_SUGGESTION -> "Tap and speak $language then say $quoted"
-                CommandKind.MEANING, CommandKind.ANSWER -> "Tap and let Lisa listen to $language then say $quoted"
-                CommandKind.TRANSLATE -> "Tap and speak $language then say $quoted"
+            val lineOne = when (kind) {
+                CommandKind.NEXT_SUGGESTION, CommandKind.TRANSLATE -> "Tap and speak $language"
+                CommandKind.MEANING, CommandKind.ANSWER -> "Tap and let Lisa listen to $language"
             }
+            return IdleCommandHint(kind, lineOne, formatCommand(phrase))
         }
 
         // One shared handler per command, called from both the instructions
