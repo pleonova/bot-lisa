@@ -1,5 +1,6 @@
 package com.botlisa.app
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,6 +9,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -37,4 +42,33 @@ fun LanguageDropdownItem(
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
     )
+}
+
+/**
+ * A thin thumb along the right edge, sized/positioned from [state] -- the
+ * Compose Foundation `verticalScroll` this decorates has no scrollbar of its
+ * own, so with 11+ languages in [SupportedLanguages.ALL] neither dropdown
+ * (SettingsScreen's LanguagePicker, IntroScreen's InlineLanguagePicker) gave
+ * any visible hint that the list kept going below the fold. Drawn on top of
+ * the already-scrolled content rather than composing another element, so it
+ * doesn't participate in layout/scrolling itself.
+ */
+@Composable
+internal fun Modifier.languageListScrollbar(state: ScrollState): Modifier {
+    val thumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+    return drawWithContent {
+        drawContent()
+        if (state.maxValue <= 0) return@drawWithContent
+        val trackHeight = size.height
+        val contentHeight = trackHeight + state.maxValue
+        val thumbHeight = (trackHeight * trackHeight / contentHeight).coerceAtLeast(24.dp.toPx())
+        val thumbTop = (trackHeight - thumbHeight) * (state.value.toFloat() / state.maxValue)
+        val thumbWidth = 3.dp.toPx()
+        drawRoundRect(
+            color = thumbColor,
+            topLeft = Offset(size.width - thumbWidth - 2.dp.toPx(), thumbTop),
+            size = Size(thumbWidth, thumbHeight),
+            cornerRadius = CornerRadius(thumbWidth / 2),
+        )
+    }
 }

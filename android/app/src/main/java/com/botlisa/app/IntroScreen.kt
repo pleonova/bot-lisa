@@ -298,7 +298,13 @@ private fun InlineLanguagePicker(
                     tonalElevation = 0.dp,
                     shadowElevation = 3.dp,
                 ) {
-                    Column(modifier = Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
+                    val listScrollState = rememberScrollState()
+                    Column(
+                        modifier = Modifier
+                            .heightIn(max = 260.dp)
+                            .verticalScroll(listScrollState)
+                            .languageListScrollbar(listScrollState),
+                    ) {
                         SupportedLanguages.ALL.forEach { language ->
                             LanguageDropdownItem(
                                 language = language,

@@ -374,7 +374,13 @@ private fun LanguagePicker(targetLanguage: TargetLanguage, onChange: (TargetLang
                     shadowElevation = 3.dp,
                     modifier = Modifier.width(with(density) { fieldWidthPx.toDp() }),
                 ) {
-                    Column(modifier = Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
+                    val listScrollState = rememberScrollState()
+                    Column(
+                        modifier = Modifier
+                            .heightIn(max = 260.dp)
+                            .verticalScroll(listScrollState)
+                            .languageListScrollbar(listScrollState),
+                    ) {
                         SupportedLanguages.ALL.forEach { language ->
                             LanguageDropdownItem(
                                 language = language,
