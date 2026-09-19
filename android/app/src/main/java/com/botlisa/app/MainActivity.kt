@@ -1448,6 +1448,10 @@ fun LisaScreen(
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
                 textAlign = TextAlign.Center,
+                // Same action as tapping the button itself -- a bigger,
+                // easier-to-hit target for starting (or stopping) hands-free
+                // than the 84dp circle alone.
+                modifier = Modifier.clickable { onToggleAssistant() },
             )
         }
 
