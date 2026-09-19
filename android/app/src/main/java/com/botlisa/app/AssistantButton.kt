@@ -92,15 +92,14 @@ fun AssistantButton(
                 .size(84.dp)
                 .clip(CircleShape)
                 .background(fill)
-                // Purple only while idle -- a deliberate CTA outline against
-                // the grey fill, matching the bold purple "tap and start
-                // speaking" hint underneath. No border once listening/
-                // speaking -- the fill itself is already purple/teal there,
-                // so the plain neutral outline this used to keep just read
-                // as a faint, purposeless ring.
+                // Grey outline only while idle -- same outline as the
+                // voice-commands panel, so the two line up. No border once
+                // listening/speaking -- the fill itself is already
+                // purple/teal there, so the same outline just read as a
+                // faint, purposeless ring.
                 .then(
                     if (phase == UiPhase.IDLE) {
-                        Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                        Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
                     } else {
                         Modifier
                     },
