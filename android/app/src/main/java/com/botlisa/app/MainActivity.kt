@@ -1552,7 +1552,7 @@ fun LisaScreen(
         val idleHintPulse by rememberInfiniteTransition(label = "idle-hint-pulse").animateFloat(
             initialValue = 1f,
             targetValue = 0f,
-            animationSpec = infiniteRepeatable(tween(450, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            animationSpec = infiniteRepeatable(tween(700, easing = FastOutSlowInEasing), RepeatMode.Reverse),
             label = "idle-hint-pulse",
         )
         val idleHintWeight = FontWeight((300 + 400 * idleHintPulse).roundToInt())
