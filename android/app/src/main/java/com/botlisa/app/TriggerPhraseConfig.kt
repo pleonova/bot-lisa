@@ -54,8 +54,12 @@ object TriggerPhraseConfig {
     // reliably) in each target language's own script -- prefixed onto every
     // default trigger phrase below as a wake word. Falls back to the plain
     // English name for any language without a hand-authored entry.
+    //
+    // Russian is "лиса" ("fox"), not a transliteration of the name "Лиза" --
+    // matches the app's own fox mascot/branding (see lisa_fox in
+    // InstructionsPanel.kt's SpeakerIcon).
     private val LISA_NAME_BY_LANGUAGE = mapOf(
-        SupportedLanguages.RUSSIAN.code to "Лиза",
+        SupportedLanguages.RUSSIAN.code to "лиса",
         SupportedLanguages.HINDI.code to "लिसा",
         SupportedLanguages.MARATHI.code to "लिसा",
         SupportedLanguages.SPANISH.code to "Lisa",
