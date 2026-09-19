@@ -146,7 +146,13 @@ fun InstructionsPanel(
             Section(
                 color = orange,
                 heading = "After hearing $spokenLanguage",
-                body = "Ask for help with what someone said or how to respond.",
+                // "...or how to respond" only makes sense once the "how to
+                // answer?" card below is actually shown -- see showAnswerStep.
+                body = if (showAnswerStep) {
+                    "Ask for help with what someone said or how to respond."
+                } else {
+                    "Ask for help with what someone said."
+                },
                 flow = buildList {
                     add(FlowItem.CardItem(CardSpec(Icons.AutoMirrored.Filled.MenuBook, false, meaningTriggerPhrase, TriggerPhraseConfig.MEANING_TRIGGER_EN, onSpeakMeaning)))
                     if (showAnswerStep) {
