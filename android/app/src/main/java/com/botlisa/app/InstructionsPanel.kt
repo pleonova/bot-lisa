@@ -120,7 +120,7 @@ fun InstructionsPanel(
             Section(
                 color = teal,
                 heading = "When you're stuck speaking",
-                body = "Say the command, then an English word. I'll translate it into $spokenLanguage.",
+                body = "Say the $spokenLanguage command, as shown in green, wait for the beep and then say a word in English. I'll translate it into $spokenLanguage.",
                 flow = listOf(
                     FlowItem.CardItem(CardSpec(Icons.Filled.Translate, false, translateTriggerPhrase, TriggerPhraseConfig.TRANSLATE_TRIGGER_EN, onSpeakTranslate)),
                     FlowItem.BubbleItem(wordExampleEn, gloss = null, speaker = Speaker.USER),
