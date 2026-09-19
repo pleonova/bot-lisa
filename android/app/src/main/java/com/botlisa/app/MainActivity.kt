@@ -273,10 +273,6 @@ fun LisaScreen(
         }
     }
 
-    // Command-chip reminders (§3.6): hidden in hands-free once a command is
-    // used (spoken trigger), back on the next new input.
-    var commandsDismissed by remember { mutableStateOf(false) }
-
     // Declared up here (rather than down by the rest of the hands-free
     // plumbing) so requestWhatElse()/speakMeaningOfLast()/
     // requestAnswerSuggestions() above can read it -- they need to know
@@ -1007,7 +1003,6 @@ fun LisaScreen(
                 // debounce LaunchedEffect(pendingUtterance) below. See
                 // pendingUtterance's own comment for why.
                 pendingUtterance = if (pendingUtterance.isBlank()) text else "$pendingUtterance $text"
-                commandsDismissed = false // fresh utterance -> chips come back
             }
             // The English word after the translate trigger always runs a
             // lookup immediately -- that word IS the command. A plain
@@ -1021,7 +1016,6 @@ fun LisaScreen(
             // on-screen buttons -- see CommandChips' onClick handlers below.
             if (state == SpeechAssistant.State.LISTENING_FOR_WORD) {
                 input = text
-                commandsDismissed = false
                 wordFromTranslateCapture = true
                 onSend()
             }
@@ -1084,15 +1078,6 @@ fun LisaScreen(
         } else {
             openSettingsAtVoiceCommands = false
         }
-    }
-
-    // The chips are hidden only while mid translate-command
-    // (LISTENING_FOR_WORD, reached by the spoken "как сказать"). Every other
-    // state -- IDLE, or LISTENING_DEFAULT -- clears the flag, so starting or
-    // restarting hands-free always brings the reminders back even if a stale
-    // word is sitting in the field from a previous session.
-    LaunchedEffect(assistantState) {
-        commandsDismissed = assistantState == SpeechAssistant.State.LISTENING_FOR_WORD
     }
 
     // SpeechAssistant can go IDLE on its own -- not just via stopHandsFree()
@@ -1447,7 +1432,6 @@ fun LisaScreen(
         errorText = null
         assistantError = null
         suggestionIndex = 0
-        commandsDismissed = false
         showInstructions = true
         showSettings = false
         if (showIntroPopup) showIntro = true
@@ -1615,7 +1599,6 @@ fun LisaScreen(
             value = input,
             onValueChange = {
                 input = it
-                commandsDismissed = false // caregiver typing -> chips come back
                 wordFromTranslateCapture = false
             },
             placeholder = {
@@ -2127,13 +2110,6 @@ fun LisaScreen(
         )
 
         CommandChips(
-            // Hands-free: shown until a command is used (commandsDismissed).
-            // Stopping hands-free alone should NOT hide these -- the field
-            // still holding the last transcript (assistantState flips to
-            // IDLE, but the text isn't cleared) used to read as "you're
-            // typing now" and hide the chips out from under you the moment
-            // you tapped the mic to stop.
-            visible = !commandsDismissed,
             items = buildList {
                 // Nothing yet for meaning/what-else/answer to act on (fresh
                 // app start, or hands-free was stopped/never started and the

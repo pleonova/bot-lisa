@@ -50,8 +50,9 @@ data class CommandChipSpec(
  * trigger phrase + its English caption. Read-only mnemonics; tapping one
  * speaks its phrase aloud (`onSpeak`). MainActivity builds the [items] list
  * (2 base commands, plus "what else?" when on-device suggestions are
- * available for the target language, plus "how to answer?" for Russian) and
- * controls [visible].
+ * available for the target language, plus "how to answer?" for Russian).
+ * Persistent once there's anything to show -- these used to hide during the
+ * "how to say?" word-capture phase, which read as "the buttons vanished".
  */
 // FlowRow (below) is still marked experimental by Compose, so using it
 // requires explicitly opting in -- this doesn't change behavior, it just
@@ -59,14 +60,13 @@ data class CommandChipSpec(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CommandChips(
-    visible: Boolean,
     items: List<CommandChipSpec>,
     modifier: Modifier = Modifier,
 ) {
     // FlowRow lays children left-to-right and wraps to a new line once a row
     // fills up (like CSS flex-wrap) -- unlike Row, which would just overflow
     // or squeeze everything onto one line.
-    AnimatedVisibility(visible = visible && items.isNotEmpty(), modifier = modifier) {
+    AnimatedVisibility(visible = items.isNotEmpty(), modifier = modifier) {
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
