@@ -43,12 +43,16 @@ fun AssistantButton(
     phase: UiPhase,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    // Set while a specific voice command is the one currently speaking --
+    // see UiPhase.buttonFillColor()'s own doc for how this takes over the
+    // fill color (teal/purple/orange) instead of the generic purple.
+    speakingCommand: CommandKind? = null,
 ) {
     val listening = phase == UiPhase.LISTENING_RU || phase == UiPhase.LISTENING_EN
     val speaking = phase == UiPhase.SPEAKING_TRANSLATION || phase == UiPhase.READING_RECOMMENDATION
     val active = listening || speaking
 
-    val fill = phase.buttonFillColor()
+    val fill = phase.buttonFillColor(speakingCommand)
     val contentColor = if (phase == UiPhase.IDLE) MaterialTheme.colorScheme.onSurfaceVariant else Color.White
 
     // rememberInfiniteTransition + animateFloat drive a value that loops

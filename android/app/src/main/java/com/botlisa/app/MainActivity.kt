@@ -129,12 +129,21 @@ private fun uiPhaseOf(assistantState: SpeechAssistant.State): UiPhase = when (as
 // Shared with AssistantButton.kt's own `fill` -- the record button's
 // background color for each phase, so the hint text underneath it (see
 // LisaScreen's subtitle Text) can match it instead of carrying its own
-// separate color logic that could drift out of sync.
+// separate color logic that could drift out of sync. While a specific
+// command is the one speaking (SPEAKING_TRANSLATION/READING_RECOMMENDATION,
+// with [speakingCommand] set -- see LisaScreen's isAnyCommandSpeaking), its
+// own accent color (see CommandKind.accentColor()) takes over instead of the
+// generic purple, so tapping "how to say?" turns the button teal, etc.
 @Composable
-fun UiPhase.buttonFillColor(): Color = when (this) {
-    UiPhase.IDLE -> MaterialTheme.colorScheme.surfaceVariant
-    UiPhase.LISTENING_EN -> MaterialTheme.colorScheme.tertiary
-    else -> MaterialTheme.colorScheme.primary
+fun UiPhase.buttonFillColor(speakingCommand: CommandKind? = null): Color {
+    if (speakingCommand != null && (this == UiPhase.SPEAKING_TRANSLATION || this == UiPhase.READING_RECOMMENDATION)) {
+        return speakingCommand.accentColor()
+    }
+    return when (this) {
+        UiPhase.IDLE -> MaterialTheme.colorScheme.surfaceVariant
+        UiPhase.LISTENING_EN -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.primary
+    }
 }
 
 // Kept short -- these render in the handwritten hint beside the mic.
@@ -142,8 +151,8 @@ private fun UiPhase.subtitle(spokenLanguage: String): String = when (this) {
     UiPhase.IDLE -> "Tap and start speaking in\n$spokenLanguage"
     UiPhase.LISTENING_RU -> "Listening for $spokenLanguage…"
     UiPhase.LISTENING_EN -> "Now say the English word"
-    UiPhase.SPEAKING_TRANSLATION -> "Playing the translation…"
-    UiPhase.READING_RECOMMENDATION -> "Playing the suggestion…"
+    UiPhase.SPEAKING_TRANSLATION -> "Playing the voice command…"
+    UiPhase.READING_RECOMMENDATION -> "Playing the voice command…"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1027,6 +1036,12 @@ fun LisaScreen(
             }
         }
     }
+    // True while any command's reply is actually playing -- combined with
+    // activeSpeakingCommand so the record button/hint text (below) and the
+    // instructions panel/chips (further down) all agree on which single
+    // command, if any, is the one currently speaking.
+    val isAnyCommandSpeaking = translationSpeaking || englishSpeaking || relatedSpeaking
+    val speakingCommand = activeSpeakingCommand.takeIf { isAnyCommandSpeaking }
 
     // Settings and the home screen share this one scroll Column/ScrollState
     // (swapped via the if/else below), so without this, opening Settings
@@ -1507,6 +1522,7 @@ fun LisaScreen(
             AssistantButton(
                 phase = uiPhase,
                 onClick = { onToggleAssistant() },
+                speakingCommand = speakingCommand,
             )
             Text(
                 uiPhase.subtitle(targetLanguage.displayName),
@@ -1515,11 +1531,12 @@ fun LisaScreen(
                 // record button's (grey) fill -- every other phase matches
                 // the button's own fill color instead of a fixed grey, so
                 // e.g. "Now say the English word" reads in the same teal the
-                // button turns.
+                // button turns, and a specific command's own accent color
+                // while it's the one speaking (see buttonFillColor()).
                 color = if (uiPhase == UiPhase.IDLE) {
                     MaterialTheme.colorScheme.primary
                 } else {
-                    uiPhase.buttonFillColor()
+                    uiPhase.buttonFillColor(speakingCommand)
                 },
                 textAlign = TextAlign.Center,
                 // Only IDLE's own subtitle wraps onto two lines (the
@@ -1992,12 +2009,6 @@ fun LisaScreen(
             activeSpeakingCommand = CommandKind.ANSWER
             if (hasUtteranceToActOn) requestAnswerSuggestions() else speakTriggerPhrase(answerTriggerPhrase)
         }
-        // True while any command's reply is actually playing -- combined
-        // with activeSpeakingCommand (above) so only the one card/chip that
-        // started the currently-playing speech highlights, not whichever
-        // was tapped last regardless of whether it's still talking.
-        val isAnyCommandSpeaking = translationSpeaking || englishSpeaking || relatedSpeaking
-        val speakingCommand = activeSpeakingCommand.takeIf { isAnyCommandSpeaking }
 
         InstructionsPanel(
             expanded = showInstructions,

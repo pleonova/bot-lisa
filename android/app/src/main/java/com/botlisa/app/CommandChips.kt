@@ -88,13 +88,22 @@ fun CommandChips(
     }
 }
 
+/**
+ * Each command's own accent color -- teal for translate, purple for
+ * next-suggestion, orange for meaning/answer. Shared by [CommandItem] below
+ * and (so the record button and its hint text can match whichever command
+ * is currently speaking) MainActivity's own UiPhase.buttonFillColor().
+ */
+@Composable
+fun CommandKind.accentColor(): Color = when (this) {
+    CommandKind.TRANSLATE -> MaterialTheme.colorScheme.tertiary // teal
+    CommandKind.NEXT_SUGGESTION -> MaterialTheme.colorScheme.primary // purple
+    CommandKind.MEANING, CommandKind.ANSWER -> MaterialTheme.colorScheme.secondary // orange
+}
+
 @Composable
 private fun CommandItem(spec: CommandChipSpec, modifier: Modifier = Modifier) {
-    val color = when (spec.kind) {
-        CommandKind.TRANSLATE -> MaterialTheme.colorScheme.tertiary // teal
-        CommandKind.NEXT_SUGGESTION -> MaterialTheme.colorScheme.primary // purple
-        CommandKind.MEANING, CommandKind.ANSWER -> MaterialTheme.colorScheme.secondary // orange
-    }
+    val color = spec.kind.accentColor()
     val icon: ImageVector = when (spec.kind) {
         CommandKind.TRANSLATE -> Icons.Filled.Translate
         CommandKind.MEANING -> Icons.AutoMirrored.Filled.MenuBook
