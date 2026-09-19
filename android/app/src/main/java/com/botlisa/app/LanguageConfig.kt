@@ -49,9 +49,12 @@ object SupportedLanguages {
     // Add a language here to make it selectable in Settings -- everything
     // downstream (on-device translation, the spoken voice) reads from this
     // list; nothing else needs to change for translation to support it.
+    // Alphabetical by displayName -- both language dropdowns (SettingsScreen's
+    // LanguagePicker, IntroScreen's InlineLanguagePicker) list languages in
+    // this order, so a caregiver can find theirs without hunting.
     val ALL = listOf(
-        RUSSIAN, HINDI, MARATHI, SPANISH, FRENCH, GERMAN,
-        PORTUGUESE, ROMANIAN, UKRAINIAN, MANDARIN, KOREAN,
+        FRENCH, GERMAN, HINDI, KOREAN, MANDARIN,
+        MARATHI, PORTUGUESE, ROMANIAN, RUSSIAN, SPANISH, UKRAINIAN,
     )
 
     fun byCode(code: String): TargetLanguage = ALL.firstOrNull { it.code == code } ?: RUSSIAN
