@@ -1556,12 +1556,6 @@ fun LisaScreen(
             label = "idle-hint-pulse",
         )
         val idleHintWeight = FontWeight((300 + 400 * idleHintPulse).roundToInt())
-        // LISTENING_EN's own variant: rather than pulsing up from grey (there's
-        // no "idle" state to read it against -- the button's already teal),
-        // it pulses between a light and a dark shade of that same teal,
-        // staying bold throughout instead of also animating the weight.
-        val englishWordLightTeal = lerp(MaterialTheme.colorScheme.tertiary, Color.White, 0.6f)
-        val englishWordDarkTeal = lerp(MaterialTheme.colorScheme.tertiary, Color.Black, 0.3f)
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             // Tighter than the old "centered between button and search box"
@@ -1580,31 +1574,49 @@ fun LisaScreen(
                 onClick = { onToggleAssistant() },
                 speakingCommand = speakingCommand,
             )
+            // Pulses (bold, grey -> a color) exactly while the phase needs the
+            // caregiver to actually DO something -- tap to start (IDLE), or
+            // speak (LISTENING_RU/LISTENING_EN) -- so the CTA keeps drawing
+            // the eye. Once Lisa herself is the one talking
+            // (SPEAKING_TRANSLATION/READING_RECOMMENDATION) nothing is being
+            // asked of the caregiver, so it settles to a plain, non-bold,
+            // lightly-tinted line instead of continuing to pulse at them.
+            // Every color here is drawn straight from the app's own palette
+            // (MaterialTheme.colorScheme -- see Theme.kt) rather than a
+            // one-off mixed shade: outlineVariant is the app's own "light
+            // grey" (already used for the idle button outline), onSurfaceVariant
+            // its "dark grey" (already used for every other muted/hint
+            // text), and the button's own fill color for whichever phase/
+            // command this is (buttonFillColor()) is the "correct color".
+            val actionRequired = uiPhase != UiPhase.SPEAKING_TRANSLATION && uiPhase != UiPhase.READING_RECOMMENDATION
             // idleCommandHint (set by onMeaningCommand()/
             // onNextSuggestionCommand()/onAnswerCommand() below when a tap
             // only played a demo) takes over the idle hint until the
             // caregiver actually starts hands-free or resets -- teaches how
             // to use the command that was just demoed instead of repeating
             // the generic "Tap and speak $language". Its own two lines: the
-            // static instruction, then "then say [phrase]" with only the
-            // phrase itself pulsing, in that command's own accent color
-            // rather than the base hint's grey/purple.
+            // static instruction, then "then say [phrase]" -- both pulse the
+            // same grey-to-grey as the base hint below, except the phrase
+            // itself, which pulses grey to that command's own accent color.
             val hint = idleCommandHint
             if (uiPhase == UiPhase.IDLE && hint != null) {
+                val greyPulse = lerp(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.onSurfaceVariant, idleHintPulse)
                 Text(
                     hint.lineOne,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = idleHintWeight,
-                    color = lerp(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.primary, idleHintPulse),
+                    color = greyPulse,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.clickable { onToggleAssistant() },
                 )
                 Text(
                     buildAnnotatedString {
-                        append("then say ")
+                        withStyle(SpanStyle(color = greyPulse, fontWeight = idleHintWeight)) {
+                            append("then say ")
+                        }
                         withStyle(
                             SpanStyle(
-                                color = lerp(MaterialTheme.colorScheme.onSurfaceVariant, hint.kind.accentColor(), idleHintPulse),
+                                color = lerp(MaterialTheme.colorScheme.outlineVariant, hint.kind.accentColor(), idleHintPulse),
                                 fontWeight = idleHintWeight,
                             ),
                         ) {
@@ -1612,8 +1624,6 @@ fun LisaScreen(
                         }
                     },
                     style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.clickable { onToggleAssistant() },
                 )
@@ -1621,22 +1631,14 @@ fun LisaScreen(
                 Text(
                     uiPhase.subtitle(targetLanguage.displayName),
                     style = MaterialTheme.typography.bodyLarge,
-                    // Always pulsing, thin-grey to bold-and-in-color, so the
-                    // subtitle keeps drawing the eye as a CTA no matter the
-                    // phase -- IDLE pulses up to its purple CTA color,
-                    // LISTENING_RU/SPEAKING_*/READING_RECOMMENDATION pulse up
-                    // to the button's own fill color (a specific command's
-                    // accent while it's the one speaking -- see
-                    // buttonFillColor()). LISTENING_EN is the one exception:
-                    // there's no grey "idle" state to read "Now say the
-                    // English word" against, so it pulses between a light and
-                    // dark shade of its own teal instead, staying bold.
-                    color = when (uiPhase) {
-                        UiPhase.IDLE -> lerp(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.primary, idleHintPulse)
-                        UiPhase.LISTENING_EN -> lerp(englishWordLightTeal, englishWordDarkTeal, idleHintPulse)
-                        else -> lerp(MaterialTheme.colorScheme.onSurfaceVariant, uiPhase.buttonFillColor(speakingCommand), idleHintPulse)
+                    color = when {
+                        uiPhase == UiPhase.IDLE ->
+                            lerp(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.onSurfaceVariant, idleHintPulse)
+                        actionRequired ->
+                            lerp(MaterialTheme.colorScheme.outlineVariant, uiPhase.buttonFillColor(speakingCommand), idleHintPulse)
+                        else -> uiPhase.buttonFillColor(speakingCommand).copy(alpha = 0.6f)
                     },
-                    fontWeight = if (uiPhase == UiPhase.LISTENING_EN) FontWeight.Bold else idleHintWeight,
+                    fontWeight = if (actionRequired) idleHintWeight else FontWeight.Light,
                     textAlign = TextAlign.Center,
                     // Same action as tapping the button itself -- a bigger,
                     // easier-to-hit target for starting (or stopping)
