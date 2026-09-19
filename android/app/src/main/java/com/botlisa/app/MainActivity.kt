@@ -1537,8 +1537,8 @@ fun LisaScreen(
         // button's own pulsing ring (AssistantButton.kt), driving a lerp
         // fraction here instead of an alpha.
         val idleHintPulse by rememberInfiniteTransition(label = "idle-hint-pulse").animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
+            initialValue = 1f,
+            targetValue = 0f,
             animationSpec = infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse),
             label = "idle-hint-pulse",
         )
@@ -1563,18 +1563,19 @@ fun LisaScreen(
             Text(
                 uiPhase.subtitle(targetLanguage.displayName),
                 style = MaterialTheme.typography.bodyLarge,
-                // IDLE pulses between the app's dark grey (the mic icon,
-                // panel header, chevron) and its purple CTA color, to draw
-                // the eye as a CTA -- every other phase matches the button's
-                // own fill color instead, so e.g. "Now say the English word"
-                // reads in the same teal the button turns, and a specific
-                // command's own accent color while it's the one speaking
-                // (see buttonFillColor()).
+                // IDLE pulses between its purple CTA color and the app's
+                // dark grey (the mic icon, panel header, chevron), bolded to
+                // draw the eye as a CTA -- every other phase matches the
+                // button's own fill color instead (regular weight), so e.g.
+                // "Now say the English word" reads in the same teal the
+                // button turns, and a specific command's own accent color
+                // while it's the one speaking (see buttonFillColor()).
                 color = if (uiPhase == UiPhase.IDLE) {
                     lerp(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.primary, idleHintPulse)
                 } else {
                     uiPhase.buttonFillColor(speakingCommand)
                 },
+                fontWeight = if (uiPhase == UiPhase.IDLE) FontWeight.Bold else FontWeight.Normal,
                 textAlign = TextAlign.Center,
                 // Same action as tapping the button itself -- a bigger,
                 // easier-to-hit target for starting (or stopping) hands-free
