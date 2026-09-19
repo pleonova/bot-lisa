@@ -48,11 +48,7 @@ fun AssistantButton(
     val speaking = phase == UiPhase.SPEAKING_TRANSLATION || phase == UiPhase.READING_RECOMMENDATION
     val active = listening || speaking
 
-    val fill = when (phase) {
-        UiPhase.IDLE -> MaterialTheme.colorScheme.surfaceVariant
-        UiPhase.LISTENING_EN -> MaterialTheme.colorScheme.tertiary
-        else -> MaterialTheme.colorScheme.primary
-    }
+    val fill = phase.buttonFillColor()
     val contentColor = if (phase == UiPhase.IDLE) MaterialTheme.colorScheme.onSurfaceVariant else Color.White
 
     // rememberInfiniteTransition + animateFloat drive a value that loops

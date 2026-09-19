@@ -129,6 +129,17 @@ private fun uiPhaseOf(assistantState: SpeechAssistant.State): UiPhase = when (as
     SpeechAssistant.State.LISTENING_FOR_WORD -> UiPhase.LISTENING_EN
 }
 
+// Shared with AssistantButton.kt's own `fill` -- the record button's
+// background color for each phase, so the hint text underneath it (see
+// LisaScreen's subtitle Text) can match it instead of carrying its own
+// separate color logic that could drift out of sync.
+@Composable
+fun UiPhase.buttonFillColor(): Color = when (this) {
+    UiPhase.IDLE -> MaterialTheme.colorScheme.surfaceVariant
+    UiPhase.LISTENING_EN -> MaterialTheme.colorScheme.tertiary
+    else -> MaterialTheme.colorScheme.primary
+}
+
 // Kept short -- these render in the handwritten hint beside the mic.
 private fun UiPhase.subtitle(spokenLanguage: String): String = when (this) {
     UiPhase.IDLE -> "Tap and start speaking in\n$spokenLanguage"
@@ -1482,10 +1493,15 @@ fun LisaScreen(
                 uiPhase.subtitle(targetLanguage.displayName),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = if (uiPhase == UiPhase.IDLE) FontWeight.Bold else FontWeight.Normal,
+                // IDLE keeps its own bold purple CTA color regardless of the
+                // record button's (grey) fill -- every other phase matches
+                // the button's own fill color instead of a fixed grey, so
+                // e.g. "Now say the English word" reads in the same teal the
+                // button turns.
                 color = if (uiPhase == UiPhase.IDLE) {
                     MaterialTheme.colorScheme.primary
                 } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
+                    uiPhase.buttonFillColor()
                 },
                 textAlign = TextAlign.Center,
                 // Same action as tapping the button itself -- a bigger,
