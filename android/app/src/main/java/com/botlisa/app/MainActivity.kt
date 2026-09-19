@@ -1043,6 +1043,20 @@ fun LisaScreen(
     val isAnyCommandSpeaking = translationSpeaking || englishSpeaking || relatedSpeaking
     val speakingCommand = activeSpeakingCommand.takeIf { isAnyCommandSpeaking }
 
+    // Scrolls back to the top once a command's reply finishes playing --
+    // tapping the command itself already scrolls there (see scrollToTop()
+    // calls in onTranslateCommand()/onMeaningCommand()/etc. below), but if
+    // the caregiver scrolled back down while it was still talking, this
+    // brings them back up to see the result card once there's actually
+    // something to look at. Guarded on activeSpeakingCommand so this
+    // doesn't fire on first composition (isAnyCommandSpeaking starts false
+    // with nothing having played yet).
+    LaunchedEffect(isAnyCommandSpeaking) {
+        if (!isAnyCommandSpeaking && activeSpeakingCommand != null) {
+            scrollToTop()
+        }
+    }
+
     // Settings and the home screen share this one scroll Column/ScrollState
     // (swapped via the if/else below), so without this, opening Settings
     // from partway down the home screen left it opening partway down
