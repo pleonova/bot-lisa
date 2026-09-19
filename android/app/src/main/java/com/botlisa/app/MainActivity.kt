@@ -740,8 +740,12 @@ fun LisaScreen(
     // out. Triggered by the next-suggestion voice command (see
     // SpeechAssistant.kt) -- doesn't touch `input`/onSend() at all, since
     // this reads existing suggestions rather than making a new request.
-    fun speakNextSuggestion() {
-        val related = relatedForDisplay
+    // [related] defaults to relatedForDisplay for the common "suggestions
+    // already on screen" case, but the eager prefetch effect and
+    // requestWhatElse()'s own on-demand generation below both instead pass
+    // the list they *just* produced explicitly -- see the comment on that
+    // default's own limitation just below.
+    fun speakNextSuggestion(related: List<Phrase> = relatedForDisplay) {
         if (related.isEmpty()) return
         val index = suggestionIndex % related.size
         // Only claim the row / advance if TTS actually started, so a
@@ -751,21 +755,6 @@ fun LisaScreen(
             suggestionIndex = index + 1
         }
     }
-
-    // The eager prefetch effect and requestWhatElse()'s own on-demand
-    // generation below both call back into speakNextSuggestion() once a
-    // generation they kicked off finishes -- but that call happens from
-    // inside a coroutine that can outlive many recompositions. Calling
-    // speakNextSuggestion() directly there would invoke whichever closure
-    // was captured when that coroutine started, which read relatedForDisplay
-    // as it was *then* (still empty -- the generation it's waiting on hadn't
-    // produced anything yet), so the TTS call silently saw an empty list and
-    // no-op'd. Routing through rememberUpdatedState (same pattern already
-    // used for SpeechAssistant's voice-trigger callbacks below) makes the
-    // call land on the latest recomposition's speakNextSuggestion, which
-    // sees the suggestions that generation just produced -- found as "what
-    // else?" needing to be asked twice to actually hear anything.
-    val speakNextSuggestionWhenReady by rememberUpdatedState { speakNextSuggestion() }
 
     // Handles the "what else?" command end to end, covering both
     // PrefetchMode settings:
@@ -911,7 +900,25 @@ fun LisaScreen(
                     errorText = "\"What else?\" library lookup failed: ${e.message ?: e::class.simpleName}"
                 }
             }
-            speakNextSuggestionWhenReady()
+            // Passing the list explicitly (rather than letting
+            // speakNextSuggestion() read relatedForDisplay itself) is what
+            // makes this land on the very first ask instead of needing a
+            // second one: relatedForDisplay is a plain val recomputed once
+            // per recomposition, so a version of it captured by a closure
+            // from before this coroutine started stays stuck on "still
+            // empty" until Compose actually recomposes -- which this
+            // coroutine has no reason to wait for, so it would otherwise
+            // race ahead and speak nothing. onDeviceRelated/result
+            // themselves are plain state, readable immediately the instant
+            // they're assigned above, no recomposition required.
+            val justGenerated = if (!onDeviceRelated.isNullOrEmpty()) {
+                onDeviceRelated.orEmpty()
+            } else if (tryLibrary) {
+                result?.related.orEmpty()
+            } else {
+                emptyList()
+            }
+            speakNextSuggestion(justGenerated)
         }
     }
 
@@ -1208,7 +1215,10 @@ fun LisaScreen(
                 }
                 if (speakWhenReady) {
                     speakWhenReady = false
-                    speakNextSuggestionWhenReady()
+                    // Explicit list, same reasoning as requestWhatElse()'s
+                    // own completion above -- onDeviceRelated was just
+                    // assigned two lines up, no recomposition needed to see it.
+                    speakNextSuggestion(onDeviceRelated.orEmpty())
                 }
             }
         }
