@@ -178,6 +178,13 @@ class SpeechAssistant(
         resetSilenceTimeout()
         if (listenForWordFirst) {
             state = State.LISTENING_FOR_WORD
+            // Same beep-then-listen cue as switchToListeningForWord() /
+            // handleTranscript()'s own translate-trigger branch -- this is
+            // the third way into LISTENING_FOR_WORD (the "how to say?" card
+            // tapped while hands-free wasn't running yet: demo phrase plays,
+            // then this starts hands-free landing straight here), and it
+            // was the only one of the three that never beeped.
+            beep()
             listenOnce(translateLanguageCode)
         } else {
             state = State.LISTENING_DEFAULT
