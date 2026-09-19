@@ -932,24 +932,22 @@ fun LisaScreen(
         rememberUpdatedState<(String, SpeechAssistant.State) -> Unit> { text, state ->
             // Remember the last plain utterance for the meaning / what-else /
             // answer commands to act on, and bring the chips back regardless
-            // of whether this utterance runs a lookup below. Also drop any
-            // stale `result` from a previous utterance's explicit "how to
-            // answer?" (or typed search) -- onSend() itself used to do this
-            // on *every* utterance back when it ran automatically; now that
-            // it only runs on an explicit request, nothing else clears it,
-            // so a leftover non-null `result` would keep the old answer's
-            // card showing (with the wrong phrase) AND suppress the
-            // standalone AI card below for every later utterance, since that
-            // card only renders when `result == null`. Found as "eager mode
-            // doesn't seem to work" after using "как ответить?" even once.
+            // of whether this utterance runs a lookup below. Dropping the
+            // stale `result`/`meaningResult` from a previous utterance's
+            // explicit command happens once this debounces into a genuinely
+            // new lastUtterance (see the LaunchedEffect(pendingUtterance)
+            // below) rather than here on every raw fragment -- clearing it
+            // here meant a result card vanished the instant the caregiver's
+            // next sentence started, even a natural mid-sentence pause that
+            // just restarted the recognizer session (see handleTranscript's
+            // own comment on that same restart cadence), instead of actually
+            // persisting until there was something new to show.
             if (state == SpeechAssistant.State.LISTENING_DEFAULT && text.isNotBlank()) {
                 // Accumulate rather than overwrite -- lastUtterance itself is
                 // only updated once speech actually pauses for a beat, by the
                 // debounce LaunchedEffect(pendingUtterance) below. See
                 // pendingUtterance's own comment for why.
                 pendingUtterance = if (pendingUtterance.isBlank()) text else "$pendingUtterance $text"
-                result = null
-                meaningResult = null
                 commandsDismissed = false // fresh utterance -> chips come back
             }
             // The English word after the translate trigger always runs a
@@ -1027,6 +1025,17 @@ fun LisaScreen(
         delay(800)
         lastUtterance = pendingUtterance
         pendingUtterance = ""
+        // Only now -- a genuinely new, fully-debounced utterance -- drop a
+        // previous command's result card. onSend() itself used to do this
+        // on *every* utterance back when it ran automatically; now that
+        // commands only run on explicit request, nothing else clears it, so
+        // a leftover non-null `result` would keep the old answer's card
+        // showing (with the wrong phrase) AND suppress the standalone AI
+        // card below, since that card only renders when `result == null`.
+        // Found as "eager mode doesn't seem to work" after using "как
+        // ответить?" even once.
+        result = null
+        meaningResult = null
     }
 
     // Prefetch on-device "what else?" suggestions as soon as a new utterance
