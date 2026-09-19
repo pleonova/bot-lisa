@@ -295,6 +295,20 @@ fun LisaScreen(
     // the "what does that mean?" / "how to answer?" commands act on.
     var lastUtterance by remember { mutableStateOf("") }
 
+    // Raw default-mode fragments accumulate here as they're heard, and only
+    // land in lastUtterance once a short quiet period passes with nothing
+    // new -- see the debounce LaunchedEffect(pendingUtterance) below.
+    // SpeechAssistant's own session-silence timeout is tuned short (450ms,
+    // see SpeechAssistant.listenOnce) so trigger-phrase detection stays
+    // snappy, but that same short timeout means an ordinary mid-sentence
+    // breath pause can end a recognizer session before the caregiver has
+    // actually finished the sentence -- without this, lastUtterance (and the
+    // eager "what else?" generation keyed on it) would fire on a sentence
+    // fragment instead of the complete phrase. Found as "Related phrases
+    // for:" showing a stale/wrong header while the caregiver was still
+    // mid-sentence.
+    var pendingUtterance by remember { mutableStateOf("") }
+
     // On-device "что ещё" suggestions for lastUtterance, prefetched as soon
     // as it's heard (see the LaunchedEffect below) so there's no dead air
     // when the next-suggestion trigger actually fires. Null means "not
@@ -914,7 +928,11 @@ fun LisaScreen(
             // card only renders when `result == null`. Found as "eager mode
             // doesn't seem to work" after using "как ответить?" even once.
             if (state == SpeechAssistant.State.LISTENING_DEFAULT && text.isNotBlank()) {
-                lastUtterance = text
+                // Accumulate rather than overwrite -- lastUtterance itself is
+                // only updated once speech actually pauses for a beat, by the
+                // debounce LaunchedEffect(pendingUtterance) below. See
+                // pendingUtterance's own comment for why.
+                pendingUtterance = if (pendingUtterance.isBlank()) text else "$pendingUtterance $text"
                 result = null
                 commandsDismissed = false // fresh utterance -> chips come back
             }
@@ -978,6 +996,21 @@ fun LisaScreen(
         transcriptGloss = runCatching {
             OnDeviceTranslator.translateToEnglish(input, targetLanguage)
         }.getOrNull()
+    }
+
+    // Commits pendingUtterance to lastUtterance only once the caregiver
+    // actually pauses for a beat -- see pendingUtterance's own comment.
+    // Compose cancels-and-relaunches this on every new fragment (same
+    // debounce pattern as the transcriptGloss effect above), so a run of
+    // fragments arriving close together (one sentence, spoken with natural
+    // breath pauses) collapses into a single commit instead of firing -- and
+    // immediately cancelling -- the eager "what else?" generation below once
+    // per fragment.
+    LaunchedEffect(pendingUtterance) {
+        if (pendingUtterance.isBlank()) return@LaunchedEffect
+        delay(800)
+        lastUtterance = pendingUtterance
+        pendingUtterance = ""
     }
 
     // Prefetch on-device "what else?" suggestions as soon as a new utterance
@@ -1109,6 +1142,7 @@ fun LisaScreen(
         // thing heard; this only resets what counts as "in play" for the
         // follow-up voice commands.
         lastUtterance = ""
+        pendingUtterance = "" // drop any not-yet-committed fragment from a prior session too
         result = null
         assistant.start(listenForWordFirst)
         ListeningForegroundService.start(context)
