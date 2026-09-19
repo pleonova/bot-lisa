@@ -114,17 +114,15 @@ fun AssistantButton(
                 .clip(CircleShape)
                 .background(fill)
                 // Grey outline while idle -- same outline as the
-                // voice-commands panel, so the two line up. A bolder accent-
-                // colored outline while speaking, since that's the only
-                // phase whose fill is just a light tint -- without it the
-                // button would read as a plain pale circle instead of
-                // clearly accent-colored. Listening needs neither: its fill
-                // is already the solid accent color.
+                // voice-commands panel, so the two line up. No outline for
+                // any other phase: listening's fill is already the solid
+                // accent color, and speaking's light-tint fill reads clearly
+                // enough as accent-colored on its own without a border.
                 .then(
-                    when {
-                        phase == UiPhase.IDLE -> Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-                        speaking -> Modifier.border(2.dp, accent, CircleShape)
-                        else -> Modifier
+                    if (phase == UiPhase.IDLE) {
+                        Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                    } else {
+                        Modifier
                     },
                 )
                 .clickable(onClick = onClick),
