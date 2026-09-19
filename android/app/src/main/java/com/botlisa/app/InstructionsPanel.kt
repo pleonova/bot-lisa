@@ -216,14 +216,10 @@ fun InstructionsPanel(
                 Text(
                     "QUICK TIPS...",
                     // Same typeface/weight/letter-spacing/uppercase as each
-                    // numbered section's own heading below. Purple while
-                    // expanded (matches the sections' own accent colors
-                    // underneath), grey while collapsed -- same dark grey as
-                    // the header icon and chevron.
+                    // numbered section's own heading below.
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.5.sp,
-                    color = if (expanded) purple else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                         .weight(1f)
                         .padding(start = 14.dp),
