@@ -1399,6 +1399,10 @@ fun LisaScreen(
         focusManager.clearFocus()
         input = ""
         result = null
+        // The "what does that mean?" card -- entirely separate state from
+        // `result`/`onDeviceRelated` above, so it was the one card left
+        // stuck on screen after tapping back to the opening state.
+        meaningResult = null
         wordFromTranslateCapture = false
         onDeviceRelated = null
         errorText = null
