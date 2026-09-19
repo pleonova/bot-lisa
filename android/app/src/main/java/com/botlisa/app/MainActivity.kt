@@ -1009,9 +1009,23 @@ fun LisaScreen(
 
     var assistantError by remember { mutableStateOf<String?>(null) }
 
-    // Header subtitle + (later) central-button colour. derivedStateOf so more
-    // inputs (speaking state, result mode) can fold in without changing callers.
-    val uiPhase by remember { derivedStateOf { uiPhaseOf(assistantState) } }
+    // Header subtitle + central-button colour/icon. derivedStateOf so more
+    // inputs can fold in without changing callers -- takes over from the
+    // plain assistantState-based phase whenever any of the three TTS
+    // speakers is actually playing (tapping a voice command button, e.g. the
+    // instructions panel's cards or the home screen's chips, is what starts
+    // these), so the record button swaps to a speaker icon and the subtitle
+    // reads "Playing the translation…"/"Playing the suggestion…" instead of
+    // staying stuck on whatever assistantState says while Lisa talks.
+    val uiPhase by remember {
+        derivedStateOf {
+            when {
+                relatedSpeaking -> UiPhase.READING_RECOMMENDATION
+                translationSpeaking || englishSpeaking -> UiPhase.SPEAKING_TRANSLATION
+                else -> uiPhaseOf(assistantState)
+            }
+        }
+    }
 
     // Jumps straight to the "Voice commands" settings section once the
     // instructions panel's "go to settings" row opens it there (see
