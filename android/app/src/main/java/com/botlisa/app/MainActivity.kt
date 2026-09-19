@@ -1556,6 +1556,12 @@ fun LisaScreen(
             label = "idle-hint-pulse",
         )
         val idleHintWeight = FontWeight((300 + 400 * idleHintPulse).roundToInt())
+        // LISTENING_EN's own variant: rather than pulsing up from grey (there's
+        // no "idle" state to read it against -- the button's already teal),
+        // it pulses between a light and a dark shade of that same teal,
+        // staying bold throughout instead of also animating the weight.
+        val englishWordLightTeal = lerp(MaterialTheme.colorScheme.tertiary, Color.White, 0.6f)
+        val englishWordDarkTeal = lerp(MaterialTheme.colorScheme.tertiary, Color.Black, 0.3f)
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             // Tighter than the old "centered between button and search box"
@@ -1588,8 +1594,8 @@ fun LisaScreen(
                 Text(
                     hint.lineOne,
                     style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = idleHintWeight,
+                    color = lerp(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.primary, idleHintPulse),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.clickable { onToggleAssistant() },
                 )
@@ -1615,20 +1621,22 @@ fun LisaScreen(
                 Text(
                     uiPhase.subtitle(targetLanguage.displayName),
                     style = MaterialTheme.typography.bodyLarge,
-                    // IDLE pulses between its purple CTA color and the
-                    // app's dark grey (the mic icon, panel header,
-                    // chevron), thin-to-bold, to draw the eye as a CTA --
-                    // every other phase matches the button's own fill color
-                    // instead (regular weight), so e.g. "Now say the
-                    // English word" reads in the same teal the button
-                    // turns, and a specific command's own accent color
-                    // while it's the one speaking (see buttonFillColor()).
-                    color = if (uiPhase == UiPhase.IDLE) {
-                        lerp(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.primary, idleHintPulse)
-                    } else {
-                        uiPhase.buttonFillColor(speakingCommand)
+                    // Always pulsing, thin-grey to bold-and-in-color, so the
+                    // subtitle keeps drawing the eye as a CTA no matter the
+                    // phase -- IDLE pulses up to its purple CTA color,
+                    // LISTENING_RU/SPEAKING_*/READING_RECOMMENDATION pulse up
+                    // to the button's own fill color (a specific command's
+                    // accent while it's the one speaking -- see
+                    // buttonFillColor()). LISTENING_EN is the one exception:
+                    // there's no grey "idle" state to read "Now say the
+                    // English word" against, so it pulses between a light and
+                    // dark shade of its own teal instead, staying bold.
+                    color = when (uiPhase) {
+                        UiPhase.IDLE -> lerp(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.primary, idleHintPulse)
+                        UiPhase.LISTENING_EN -> lerp(englishWordLightTeal, englishWordDarkTeal, idleHintPulse)
+                        else -> lerp(MaterialTheme.colorScheme.onSurfaceVariant, uiPhase.buttonFillColor(speakingCommand), idleHintPulse)
                     },
-                    fontWeight = if (uiPhase == UiPhase.IDLE) idleHintWeight else FontWeight.Normal,
+                    fontWeight = if (uiPhase == UiPhase.LISTENING_EN) FontWeight.Bold else idleHintWeight,
                     textAlign = TextAlign.Center,
                     // Same action as tapping the button itself -- a bigger,
                     // easier-to-hit target for starting (or stopping)
