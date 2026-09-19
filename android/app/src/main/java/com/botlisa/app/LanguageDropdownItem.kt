@@ -55,7 +55,13 @@ fun LanguageDropdownItem(
  */
 @Composable
 internal fun Modifier.languageListScrollbar(state: ScrollState): Modifier {
-    val thumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+    // Bold primary-color thumb (not a subtle grey) on a faint full-height
+    // track -- a first pass at onSurfaceVariant/0.4 blended into the
+    // dropdown's own surfaceVariant background closely enough that it went
+    // unnoticed; the track gives the thumb something to visibly sit inside
+    // even when it's short.
+    val thumbColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+    val trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
     return drawWithContent {
         drawContent()
         if (state.maxValue <= 0) return@drawWithContent
@@ -63,12 +69,19 @@ internal fun Modifier.languageListScrollbar(state: ScrollState): Modifier {
         val contentHeight = trackHeight + state.maxValue
         val thumbHeight = (trackHeight * trackHeight / contentHeight).coerceAtLeast(24.dp.toPx())
         val thumbTop = (trackHeight - thumbHeight) * (state.value.toFloat() / state.maxValue)
-        val thumbWidth = 3.dp.toPx()
+        val barWidth = 5.dp.toPx()
+        val barRight = size.width - 3.dp.toPx()
+        drawRoundRect(
+            color = trackColor,
+            topLeft = Offset(barRight - barWidth, 0f),
+            size = Size(barWidth, trackHeight),
+            cornerRadius = CornerRadius(barWidth / 2),
+        )
         drawRoundRect(
             color = thumbColor,
-            topLeft = Offset(size.width - thumbWidth - 2.dp.toPx(), thumbTop),
-            size = Size(thumbWidth, thumbHeight),
-            cornerRadius = CornerRadius(thumbWidth / 2),
+            topLeft = Offset(barRight - barWidth, thumbTop),
+            size = Size(barWidth, thumbHeight),
+            cornerRadius = CornerRadius(barWidth / 2),
         )
     }
 }
