@@ -128,7 +128,7 @@ private fun uiPhaseOf(assistantState: SpeechAssistant.State): UiPhase = when (as
 
 // Kept short -- these render in the handwritten hint beside the mic.
 private fun UiPhase.subtitle(spokenLanguage: String): String = when (this) {
-    UiPhase.IDLE -> "Tap above and start talking in $spokenLanguage"
+    UiPhase.IDLE -> "Tap and start speaking in\n$spokenLanguage"
     UiPhase.LISTENING_RU -> "Listening for $spokenLanguage…"
     UiPhase.LISTENING_EN -> "Now say the English word"
     UiPhase.SPEAKING_TRANSLATION -> "Playing the translation…"
