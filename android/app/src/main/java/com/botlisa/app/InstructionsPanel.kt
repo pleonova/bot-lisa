@@ -36,6 +36,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +58,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -574,11 +578,28 @@ private fun CommandCard(card: CardSpec, color: Color) {
                 }
             }
             Column(modifier = Modifier.weight(1f).padding(start = 14.dp)) {
+                // The "Lisa"/"лиса" wake word (TriggerPhraseConfig) made
+                // these phrases long enough to wrap onto a second line at
+                // titleMedium's default size -- this compose-bom predates
+                // Text's built-in autoSize, so shrink it by hand instead:
+                // start at titleMedium and step down 10% at a time each
+                // recomposition until a line actually fits, floored at 12sp
+                // so it never shrinks into unreadable territory.
+                val defaultPhraseFontSize = MaterialTheme.typography.titleMedium.fontSize
+                var phraseFontSize by remember(card.phrase) { mutableStateOf(defaultPhraseFontSize) }
                 Text(
                     formatCommand(card.phrase),
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = phraseFontSize),
                     fontWeight = FontWeight.Bold,
                     color = color,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Clip,
+                    onTextLayout = { result ->
+                        if (result.didOverflowWidth && phraseFontSize > 12.sp) {
+                            phraseFontSize *= 0.9f
+                        }
+                    },
                 )
                 Text(
                     // Parenthesised to read as the phrase's English
