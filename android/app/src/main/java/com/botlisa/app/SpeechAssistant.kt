@@ -209,6 +209,18 @@ class SpeechAssistant(
         runCatching { recognizer?.stopListening() }
     }
 
+    // Re-cues the "now say the English word" beep without touching the
+    // recognizer or state -- for the "how to say?" card/chip tapped again
+    // while already LISTENING_FOR_WORD with nothing captured yet (see
+    // MainActivity's onTranslateChipTap()). The recognizer session just
+    // keeps quietly listening throughout; isMuted() already keeps this beep
+    // (and MainActivity's own demo-phrase replay before it) from being
+    // captured as speech, the same as it does for every other TTS playback.
+    fun replayWordPrompt() {
+        if (stoppedByUser || state != State.LISTENING_FOR_WORD) return
+        beep()
+    }
+
     fun stop() {
         stoppedByUser = true
         switchingToWord = false

@@ -1405,7 +1405,15 @@ fun LisaScreen(
                 }
             }
             SpeechAssistant.State.LISTENING_DEFAULT -> assistant.switchToListeningForWord()
-            SpeechAssistant.State.LISTENING_FOR_WORD -> Unit // already there
+            // Already listening for the word, and nothing's been captured
+            // yet (wordFromTranslateCapture is false, or the top of this
+            // function would have handled it) -- replay the demo phrase and
+            // beep again instead of silently doing nothing, so a caregiver
+            // who missed it the first time (or forgot what to say) can tap
+            // again for another cue.
+            SpeechAssistant.State.LISTENING_FOR_WORD -> speakTriggerPhrase(translateTriggerPhrase) {
+                assistant.replayWordPrompt()
+            }
         }
     }
 
