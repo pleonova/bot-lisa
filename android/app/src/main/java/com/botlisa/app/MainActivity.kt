@@ -1441,7 +1441,12 @@ fun LisaScreen(
             Text(
                 uiPhase.subtitle(targetLanguage.displayName),
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = if (uiPhase == UiPhase.IDLE) FontWeight.Bold else FontWeight.Normal,
+                color = if (uiPhase == UiPhase.IDLE) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
                 textAlign = TextAlign.Center,
             )
         }
