@@ -760,7 +760,6 @@ fun LisaScreen(
     //     "few seconds of wait" trade-off for not pre-generating on every
     //     phrase -- see OnDeviceLlmConfig.PrefetchMode's own doc comment.
     fun requestWhatElse() {
-        scrollToTop()
         // Marks that the trigger has actually been used for lastUtterance --
         // the AI result card (see below) stays hidden until this is true,
         // even if EAGER prefetch already has (or is still generating)
@@ -925,14 +924,12 @@ fun LisaScreen(
     // a command chip or an instruction step. Drop a trailing "?" so TTS
     // doesn't over-emphasise it.
     fun speakTriggerPhrase(phrase: String, onComplete: (() -> Unit)? = null) {
-        scrollToTop()
         if (speaker?.speak(phrase.trimEnd('?', ' '), onComplete) != true) onComplete?.invoke()
     }
 
     // "what does that mean?" -- translate the previous target-language
     // utterance into English and read it aloud (English voice).
     fun speakMeaningOfLast() {
-        scrollToTop()
         // See requestWhatElse()'s utterance comment for why the `input`
         // fallback is IDLE-only.
         val text = if (assistantState == SpeechAssistant.State.IDLE) {
@@ -959,7 +956,6 @@ fun LisaScreen(
     // surface a generic "server unreachable" error, which reads as broken
     // rather than "not built yet". Say so plainly and immediately instead.
     fun requestAnswerSuggestions() {
-        scrollToTop()
         // See requestWhatElse()'s utterance comment for why the `input`
         // fallback is IDLE-only.
         val text = if (assistantState == SpeechAssistant.State.IDLE) {
@@ -1050,14 +1046,12 @@ fun LisaScreen(
     val isAnyCommandSpeaking = translationSpeaking || englishSpeaking || relatedSpeaking
     val speakingCommand = activeSpeakingCommand.takeIf { isAnyCommandSpeaking }
 
-    // Scrolls back to the top once a command's reply finishes playing --
-    // tapping the command itself already scrolls there (see scrollToTop()
-    // calls in onTranslateCommand()/onMeaningCommand()/etc. below), but if
-    // the caregiver scrolled back down while it was still talking, this
-    // brings them back up to see the result card once there's actually
-    // something to look at. Guarded on activeSpeakingCommand so this
-    // doesn't fire on first composition (isAnyCommandSpeaking starts false
-    // with nothing having played yet).
+    // Scrolls to the top once a command's reply finishes playing -- not on
+    // the tap itself, so the caregiver can keep reading/tapping elsewhere
+    // while it's still talking without the page yanking them back up mid-
+    // speech. Guarded on activeSpeakingCommand so this doesn't fire on first
+    // composition (isAnyCommandSpeaking starts false with nothing having
+    // played yet).
     LaunchedEffect(isAnyCommandSpeaking) {
         if (!isAnyCommandSpeaking && activeSpeakingCommand != null) {
             scrollToTop()
@@ -1385,7 +1379,6 @@ fun LisaScreen(
     // follows the caregiver actually hearing the command instead of firing
     // silently the instant they tap.
     fun onTranslateChipTap() {
-        scrollToTop()
         if (wordFromTranslateCapture) {
             input = ""
             result = null
