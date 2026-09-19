@@ -93,6 +93,31 @@ object TriggerPhraseDetector {
         return similarityRatio(normalizedPartial, phrasePrefix) >= threshold
     }
 
+    /**
+     * Length (in normalized characters) of the longest prefix shared by
+     * every phrase in [phrases]. Every default trigger phrase now opens with
+     * a common "Lisa"/"лиса" wake word (see TriggerPhraseConfig), which
+     * defeats [matchesPrefix]'s own equal-length-prefix comparison for a
+     * short partial still inside that shared wake word -- it can (and does)
+     * exact-match the wrong command's prefix, since the first several
+     * characters of every command are identical. Callers doing a partial
+     * fast-path match across several candidate phrases (see
+     * SpeechAssistant's translate-trigger fast path) should require the
+     * partial to have grown past this length before trusting a match at
+     * all, so it's actually looking at each phrase's own distinguishing
+     * text rather than the wake word both share.
+     */
+    fun commonPrefixLength(phrases: List<String>): Int {
+        val normalized = phrases.map(::normalize).filter { it.isNotEmpty() }
+        if (normalized.size < 2) return 0
+        val shortest = normalized.minOf { it.length }
+        var i = 0
+        while (i < shortest && normalized.all { it[i] == normalized[0][i] }) {
+            i++
+        }
+        return i
+    }
+
     private fun similarityRatio(a: String, b: String): Double {
         val maxLen = maxOf(a.length, b.length)
         if (maxLen == 0) return 1.0

@@ -357,7 +357,22 @@ class SpeechAssistant(
             // then re-arms in English. A stray false-positive just means an
             // unwanted (recoverable) switch into LISTENING_FOR_WORD, an
             // acceptable trade for a snappy trigger.
-            if (!stoppedByUser && !switchingToWord && state == State.LISTENING_DEFAULT &&
+            //
+            // requirePastCommonPrefix guards against a specific false
+            // positive: every default trigger now opens with a shared
+            // "Lisa"/"лиса" wake word (TriggerPhraseConfig), so a partial
+            // still inside that wake word (e.g. just "лиса ") exact-matches
+            // the translate phrase's own equal-length prefix regardless of
+            // which command is actually being said -- reported as "как
+            // сказать" firing even while saying "что ещё". Not evaluating
+            // matchesPrefix at all until the partial has grown past what all
+            // four commands share fixes that at the source, rather than
+            // trying to tune the threshold around it.
+            val commonPrefixLength = TriggerPhraseDetector.commonPrefixLength(
+                listOf(getTranslateTriggerPhrase(), getMeaningTriggerPhrase(), getNextSuggestionTriggerPhrase(), getAnswerTriggerPhrase()),
+            )
+            val pastCommonPrefix = TriggerPhraseDetector.normalize(partial).length > commonPrefixLength
+            if (!stoppedByUser && !switchingToWord && state == State.LISTENING_DEFAULT && pastCommonPrefix &&
                 (
                     TriggerPhraseDetector.matchesPrefix(partial, getTranslateTriggerPhrase(), threshold = 0.5) ||
                         TriggerPhraseDetector.matchesPrefix(partial, TriggerPhraseConfig.TRANSLATE_TRIGGER_EN, threshold = 0.5)
