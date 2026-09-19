@@ -1545,7 +1545,7 @@ fun LisaScreen(
                 // (InstructionsPanel's header subtitle), and lighter than
                 // regular field text so it reads as a hint, not content.
                 Text(
-                    "Enter English or ${targetLanguage.displayName} Text",
+                    "Or enter English/${targetLanguage.displayName} text here",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 )
