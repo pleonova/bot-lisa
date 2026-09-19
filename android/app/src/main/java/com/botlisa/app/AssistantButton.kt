@@ -23,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 /**
@@ -31,10 +30,17 @@ import androidx.compose.ui.unit.dp
  * hands-free mode (replaces the old "Start" / "Stop" text button).
  *
  * Colour and icon follow [phase]:
- *   IDLE                    -> grey circle, mic icon (tap to start)
- *   LISTENING_RU            -> purple, mic, pulsing ring
- *   LISTENING_EN            -> teal, mic, pulsing ring
- *   SPEAKING_* (later step) -> purple, speaker icon, pulsing ring
+ *   IDLE                -> grey circle, dark grey mic icon (tap to start)
+ *   LISTENING_RU        -> light purple circle, dark purple mic, pulsing ring
+ *   LISTENING_EN        -> light teal circle, dark teal mic, pulsing ring
+ *   SPEAKING_TRANSLATION/READING_RECOMMENDATION
+ *                       -> light [speakingCommand]-accent circle, dark
+ *                          accent-colored speaker icon, pulsing ring (falls
+ *                          back to purple with no speakingCommand)
+ *
+ * Every non-idle phase fills light and tints the icon dark instead of the
+ * reverse, so e.g. tapping "how to say?" turns the button a light teal
+ * circle with a dark teal glyph, not a solid teal circle with a white one.
  *
  * [onClick] is wired to MainActivity's onToggleAssistant().
  */
@@ -52,8 +58,14 @@ fun AssistantButton(
     val speaking = phase == UiPhase.SPEAKING_TRANSLATION || phase == UiPhase.READING_RECOMMENDATION
     val active = listening || speaking
 
-    val fill = phase.buttonFillColor(speakingCommand)
-    val contentColor = if (phase == UiPhase.IDLE) MaterialTheme.colorScheme.onSurfaceVariant else Color.White
+    // The phase's "true" color (teal/purple/accent) -- while active, this
+    // now drives the ICON and a light tint of the fill, inverted from the
+    // old solid-fill/white-icon scheme: e.g. tapping "how to say?" turns the
+    // button a light teal circle with a dark teal mic/speaker glyph, rather
+    // than a solid teal circle with a white one.
+    val accent = phase.buttonFillColor(speakingCommand)
+    val fill = if (phase == UiPhase.IDLE) accent else accent.copy(alpha = 0.18f)
+    val contentColor = if (phase == UiPhase.IDLE) MaterialTheme.colorScheme.onSurfaceVariant else accent
 
     // rememberInfiniteTransition + animateFloat drive a value that loops
     // forever (grow, shrink, repeat) without any manual timers or callbacks;
@@ -83,7 +95,10 @@ fun AssistantButton(
                     .size(92.dp)
                     .scale(ringScale)
                     .clip(CircleShape)
-                    .background(fill.copy(alpha = ringAlpha)),
+                    // The ring pulses in the full-strength accent color, not
+                    // the light fill -- a ring tinted at 18% of an already
+                    // near-transparent alpha would barely register.
+                    .background(accent.copy(alpha = ringAlpha)),
             )
         }
         Box(
@@ -92,16 +107,17 @@ fun AssistantButton(
                 .size(84.dp)
                 .clip(CircleShape)
                 .background(fill)
-                // Grey outline only while idle -- same outline as the
-                // voice-commands panel, so the two line up. No border once
-                // listening/speaking -- the fill itself is already
-                // purple/teal there, so the same outline just read as a
-                // faint, purposeless ring.
+                // Grey outline while idle -- same outline as the
+                // voice-commands panel, so the two line up. A bolder accent-
+                // colored outline once listening/speaking, now that the
+                // fill itself is just a light tint -- without it the button
+                // reads as a plain pale circle instead of clearly teal/
+                // purple/accent-colored.
                 .then(
                     if (phase == UiPhase.IDLE) {
                         Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
                     } else {
-                        Modifier
+                        Modifier.border(2.dp, accent, CircleShape)
                     },
                 )
                 .clickable(onClick = onClick),
