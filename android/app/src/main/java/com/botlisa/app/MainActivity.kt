@@ -411,6 +411,14 @@ fun LisaScreen(
     var translationSpeaking by remember { mutableStateOf(false) }
     var relatedSpeaking by remember { mutableStateOf(false) }
     var englishSpeaking by remember { mutableStateOf(false) }
+    // Which command (instructions panel card or home-screen chip) most
+    // recently started one of the three speakers above -- combined with
+    // them below (isAnyCommandSpeaking) to know which single card/chip
+    // should show as "speaking now" (see InstructionsPanel/CommandChips'
+    // own speakingCommand param). Sticky rather than cleared the moment a
+    // command finishes, since nothing else reads it while all three
+    // speaking flags are false.
+    var activeSpeakingCommand by remember { mutableStateOf<CommandKind?>(null) }
     // Which related-phrase row is currently being read (null = none). Cleared
     // by phraseSpeaker's onSpeakingChanged when playback ends.
     var speakingIndex by remember { mutableStateOf<Int?>(null) }
@@ -1968,6 +1976,36 @@ fun LisaScreen(
             lastUtterance.isNotBlank()
         }
 
+        // One shared handler per command, called from both the instructions
+        // panel's cards and the home screen's chips (previously duplicated
+        // inline at each of those 8 call sites) -- each records itself as
+        // activeSpeakingCommand before running, so whichever of the three
+        // TTS speakers it ends up using, InstructionsPanel/CommandChips know
+        // which single card/chip to show as "speaking now" (see
+        // isAnyCommandSpeaking below).
+        fun onTranslateCommand() {
+            activeSpeakingCommand = CommandKind.TRANSLATE
+            onTranslateChipTap()
+        }
+        fun onMeaningCommand() {
+            activeSpeakingCommand = CommandKind.MEANING
+            if (hasUtteranceToActOn) speakMeaningOfLast() else speakTriggerPhrase(meaningTriggerPhrase)
+        }
+        fun onNextSuggestionCommand() {
+            activeSpeakingCommand = CommandKind.NEXT_SUGGESTION
+            if (hasUtteranceToActOn) requestWhatElse() else speakTriggerPhrase(nextSuggestionTriggerPhrase)
+        }
+        fun onAnswerCommand() {
+            activeSpeakingCommand = CommandKind.ANSWER
+            if (hasUtteranceToActOn) requestAnswerSuggestions() else speakTriggerPhrase(answerTriggerPhrase)
+        }
+        // True while any command's reply is actually playing -- combined
+        // with activeSpeakingCommand (above) so only the one card/chip that
+        // started the currently-playing speech highlights, not whichever
+        // was tapped last regardless of whether it's still talking.
+        val isAnyCommandSpeaking = translationSpeaking || englishSpeaking || relatedSpeaking
+        val speakingCommand = activeSpeakingCommand.takeIf { isAnyCommandSpeaking }
+
         InstructionsPanel(
             expanded = showInstructions,
             onToggle = { showInstructions = !showInstructions },
@@ -1976,16 +2014,11 @@ fun LisaScreen(
             meaningTriggerPhrase = meaningTriggerPhrase,
             nextSuggestionTriggerPhrase = nextSuggestionTriggerPhrase,
             answerTriggerPhrase = answerTriggerPhrase,
-            onSpeakTranslate = { onTranslateChipTap() },
-            onSpeakMeaning = {
-                if (hasUtteranceToActOn) speakMeaningOfLast() else speakTriggerPhrase(meaningTriggerPhrase)
-            },
-            onSpeakNext = {
-                if (hasUtteranceToActOn) requestWhatElse() else speakTriggerPhrase(nextSuggestionTriggerPhrase)
-            },
-            onSpeakAnswer = {
-                if (hasUtteranceToActOn) requestAnswerSuggestions() else speakTriggerPhrase(answerTriggerPhrase)
-            },
+            speakingCommand = speakingCommand,
+            onSpeakTranslate = ::onTranslateCommand,
+            onSpeakMeaning = ::onMeaningCommand,
+            onSpeakNext = ::onNextSuggestionCommand,
+            onSpeakAnswer = ::onAnswerCommand,
             onSpeakBubble = { text -> speaker?.speak(text) },
             onOpenSettings = {
                 showSettings = true
@@ -2019,43 +2052,31 @@ fun LisaScreen(
                 // field's still empty) -- these three used to silently no-op
                 // in that case instead of the tap producing *any* feedback.
                 // Same fallback the hands-free branch already uses: read the
-                // trigger phrase aloud as a demo instead. (hasUtteranceToActOn
-                // computed above, shared with the instructions panel's cards.)
+                // trigger phrase aloud as a demo instead -- see
+                // onMeaningCommand()/onNextSuggestionCommand()/
+                // onAnswerCommand() above, shared with the instructions
+                // panel's own cards.
                 add(
                     CommandChipSpec(
                         CommandKind.TRANSLATE, translateTriggerPhrase,
                         TriggerPhraseConfig.TRANSLATE_TRIGGER_EN,
-                    ) { onTranslateChipTap() },
+                        ::onTranslateCommand,
+                    ),
                 )
                 add(
                     CommandChipSpec(
                         CommandKind.MEANING, meaningTriggerPhrase,
                         TriggerPhraseConfig.MEANING_TRIGGER_EN,
-                    ) {
-                        // There's something to act on (whether idle or
-                        // actively listening): the tap IS the command, same
-                        // as if the trigger phrase had just been spoken.
-                        // Nothing to act on yet: tapping just demonstrates
-                        // how to say the trigger phrase instead.
-                        if (hasUtteranceToActOn) {
-                            speakMeaningOfLast()
-                        } else {
-                            speakTriggerPhrase(meaningTriggerPhrase)
-                        }
-                    },
+                        ::onMeaningCommand,
+                    ),
                 )
                 if (nextSuggestionSupported) {
                     add(
                         CommandChipSpec(
                             CommandKind.NEXT_SUGGESTION, nextSuggestionTriggerPhrase,
                             TriggerPhraseConfig.NEXT_SUGGESTION_TRIGGER_EN,
-                        ) {
-                            if (hasUtteranceToActOn) {
-                                requestWhatElse()
-                            } else {
-                                speakTriggerPhrase(nextSuggestionTriggerPhrase)
-                            }
-                        },
+                            ::onNextSuggestionCommand,
+                        ),
                     )
                 }
                 if (curatedRelatedSupported) {
@@ -2063,13 +2084,8 @@ fun LisaScreen(
                         CommandChipSpec(
                             CommandKind.ANSWER, answerTriggerPhrase,
                             TriggerPhraseConfig.ANSWER_TRIGGER_EN,
-                        ) {
-                            if (hasUtteranceToActOn) {
-                                requestAnswerSuggestions()
-                            } else {
-                                speakTriggerPhrase(answerTriggerPhrase)
-                            }
-                        },
+                            ::onAnswerCommand,
+                        ),
                     )
                 }
             },

@@ -94,6 +94,13 @@ fun InstructionsPanel(
     onSpeakAnswer: () -> Unit,
     onSpeakBubble: (String) -> Unit,
     onOpenSettings: () -> Unit,
+    // Which command is actively playing its TTS reply right now (null if
+    // none) -- see MainActivity's activeSpeakingCommand/isAnyCommandSpeaking.
+    // Whichever CardSpec matches gets a solid version of its own section
+    // color as a background instead of the usual faint tint (see
+    // CommandCard), the same way the record button itself swaps to a
+    // speaker icon while any of these is playing.
+    speakingCommand: CommandKind? = null,
     wordExampleEn: String,
     wordExampleTranslated: String,
     phraseExampleHeard: String,
@@ -122,7 +129,7 @@ fun InstructionsPanel(
                 heading = "FORGOTTEN A WORD?",
                 body = "Say the command, wait for the beep, then say the English word to get a translation.",
                 flow = listOf(
-                    FlowItem.CardItem(CardSpec(Icons.Filled.Translate, false, translateTriggerPhrase, TriggerPhraseConfig.TRANSLATE_TRIGGER_EN, onSpeakTranslate)),
+                    FlowItem.CardItem(CardSpec(Icons.Filled.Translate, false, translateTriggerPhrase, TriggerPhraseConfig.TRANSLATE_TRIGGER_EN, onSpeakTranslate, isSpeaking = speakingCommand == CommandKind.TRANSLATE)),
                     FlowItem.BubbleItem(wordExampleEn, gloss = null, speaker = Speaker.USER),
                     FlowItem.BubbleItem(wordExampleTranslated, gloss = wordExampleEn, speaker = Speaker.FOX),
                 ),
@@ -136,7 +143,7 @@ fun InstructionsPanel(
                     body = "Get contextual suggestions on what to say next based on what you just said.",
                     flow = listOf(
                         FlowItem.BubbleItem(phraseExampleHeard, phraseExampleHeardGloss, speaker = Speaker.USER),
-                        FlowItem.CardItem(CardSpec(Icons.Filled.Lightbulb, true, nextSuggestionTriggerPhrase, TriggerPhraseConfig.NEXT_SUGGESTION_TRIGGER_EN, onSpeakNext)),
+                        FlowItem.CardItem(CardSpec(Icons.Filled.Lightbulb, true, nextSuggestionTriggerPhrase, TriggerPhraseConfig.NEXT_SUGGESTION_TRIGGER_EN, onSpeakNext, isSpeaking = speakingCommand == CommandKind.NEXT_SUGGESTION)),
                         FlowItem.BubbleItem(phraseExampleResponse, phraseExampleResponseGloss, speaker = Speaker.FOX),
                     ),
                 ),
@@ -154,9 +161,9 @@ fun InstructionsPanel(
                     "Ask for help with what someone said."
                 },
                 flow = buildList {
-                    add(FlowItem.CardItem(CardSpec(Icons.AutoMirrored.Filled.MenuBook, false, meaningTriggerPhrase, TriggerPhraseConfig.MEANING_TRIGGER_EN, onSpeakMeaning)))
+                    add(FlowItem.CardItem(CardSpec(Icons.AutoMirrored.Filled.MenuBook, false, meaningTriggerPhrase, TriggerPhraseConfig.MEANING_TRIGGER_EN, onSpeakMeaning, isSpeaking = speakingCommand == CommandKind.MEANING)))
                     if (showAnswerStep) {
-                        add(FlowItem.CardItem(CardSpec(Icons.Filled.QuestionAnswer, true, answerTriggerPhrase, TriggerPhraseConfig.ANSWER_TRIGGER_EN, onSpeakAnswer)))
+                        add(FlowItem.CardItem(CardSpec(Icons.Filled.QuestionAnswer, true, answerTriggerPhrase, TriggerPhraseConfig.ANSWER_TRIGGER_EN, onSpeakAnswer, isSpeaking = speakingCommand == CommandKind.ANSWER)))
                     }
                 },
             ),
@@ -323,6 +330,7 @@ private data class CardSpec(
     val phrase: String,
     val caption: String,
     val onClick: () -> Unit,
+    val isSpeaking: Boolean = false,
 )
 
 /** Who's saying a bubble's text -- the caregiver (a person icon) or Lisa (the
@@ -547,6 +555,15 @@ private val COMMAND_CARD_BORDER = 2.5.dp
 @Composable
 private fun CommandCard(card: CardSpec, color: Color) {
     val shape = speechBubbleShape()
+    // While this card's own command is actively speaking, fill it solid
+    // with its section color (instead of the usual faint 8% tint) so it
+    // visibly "lights up" -- same idea as the record button swapping to a
+    // speaker icon for the same event. Foreground flips to white for
+    // contrast against that solid fill, the same convention AssistantButton
+    // uses once it's no longer idle.
+    val background = if (card.isSpeaking) color else color.copy(alpha = 0.08f)
+    val foreground = if (card.isSpeaking) Color.White else color
+    val captionColor = if (card.isSpeaking) Color.White.copy(alpha = 0.85f) else bubbleContentColor()
     Row(
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.spacedBy(SPEAKER_BUBBLE_GAP),
@@ -562,18 +579,18 @@ private fun CommandCard(card: CardSpec, color: Color) {
             modifier = Modifier
                 .weight(1f)
                 .clip(shape)
-                .background(color.copy(alpha = 0.08f))
+                .background(background)
                 .border(COMMAND_CARD_BORDER, color.copy(alpha = 0.7f), shape)
                 .clickable(onClick = card.onClick)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
             Box {
-                Icon(card.icon, contentDescription = null, tint = color, modifier = Modifier.size(32.dp))
+                Icon(card.icon, contentDescription = null, tint = foreground, modifier = Modifier.size(32.dp))
                 if (card.sparkle) {
                     Icon(
                         Icons.Filled.AutoAwesome,
                         contentDescription = null,
-                        tint = color,
+                        tint = foreground,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .offset(x = 4.dp, y = (-2).dp)
@@ -595,7 +612,7 @@ private fun CommandCard(card: CardSpec, color: Color) {
                     formatCommand(card.phrase),
                     style = MaterialTheme.typography.titleMedium.copy(fontSize = phraseFontSize),
                     fontWeight = FontWeight.Bold,
-                    color = color,
+                    color = foreground,
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Clip,
@@ -608,11 +625,12 @@ private fun CommandCard(card: CardSpec, color: Color) {
                 Text(
                     // Parenthesised to read as the phrase's English
                     // translation -- same size and light grey as the
-                    // example bubbles' own gloss text.
+                    // example bubbles' own gloss text (or a translucent
+                    // white to match, while this card is speaking).
                     "(${formatCommand(card.caption)})",
                     style = MaterialTheme.typography.bodySmall,
                     fontStyle = FontStyle.Italic,
-                    color = bubbleContentColor(),
+                    color = captionColor,
                 )
             }
             // Marks this bubble specifically as "tap to hear" -- the worked-
@@ -621,7 +639,7 @@ private fun CommandCard(card: CardSpec, color: Color) {
             Icon(
                 Icons.AutoMirrored.Filled.VolumeUp,
                 contentDescription = null,
-                tint = color,
+                tint = foreground,
                 modifier = Modifier
                     .padding(start = 6.dp)
                     .size(18.dp),
