@@ -384,11 +384,34 @@ class SpeechAssistant(
                 listOf(getTranslateTriggerPhrase(), getMeaningTriggerPhrase(), getNextSuggestionTriggerPhrase(), getAnswerTriggerPhrase()),
             )
             val pastCommonPrefix = TriggerPhraseDetector.normalize(partial).length > commonPrefixLength
+            // Past the shared wake word, comparing the partial against
+            // translate alone isn't enough: a low threshold (0.5, needed so
+            // the fast path can fire early, mid-phrase) can still clear
+            // against translate purely by chance for a short, still-growing
+            // remainder that's actually headed somewhere else entirely --
+            // reported live as saying "что ещё" (next-suggestion) but
+            // hearing the "how to say?" beep/switch fire instead, because at
+            // that partial length "что" happened to fuzzy-score >= 0.5
+            // against translate's own "как". Scoring every other trigger the
+            // same way and requiring translate to actually be the best fit
+            // (not just an acceptable one) rules that out: "что" scores far
+            // higher against next-suggestion's own "что ещё" prefix than
+            // against translate's "как сказать", so translate loses the
+            // comparison and the fast path correctly stays quiet.
+            val translateScore = maxOf(
+                TriggerPhraseDetector.prefixSimilarity(partial, getTranslateTriggerPhrase()),
+                TriggerPhraseDetector.prefixSimilarity(partial, TriggerPhraseConfig.TRANSLATE_TRIGGER_EN),
+            )
+            val bestOtherScore = maxOf(
+                TriggerPhraseDetector.prefixSimilarity(partial, getMeaningTriggerPhrase()),
+                TriggerPhraseDetector.prefixSimilarity(partial, TriggerPhraseConfig.MEANING_TRIGGER_EN),
+                TriggerPhraseDetector.prefixSimilarity(partial, getNextSuggestionTriggerPhrase()),
+                TriggerPhraseDetector.prefixSimilarity(partial, TriggerPhraseConfig.NEXT_SUGGESTION_TRIGGER_EN),
+                TriggerPhraseDetector.prefixSimilarity(partial, getAnswerTriggerPhrase()),
+                TriggerPhraseDetector.prefixSimilarity(partial, TriggerPhraseConfig.ANSWER_TRIGGER_EN),
+            )
             if (!stoppedByUser && !switchingToWord && state == State.LISTENING_DEFAULT && pastCommonPrefix &&
-                (
-                    TriggerPhraseDetector.matchesPrefix(partial, getTranslateTriggerPhrase(), threshold = 0.5) ||
-                        TriggerPhraseDetector.matchesPrefix(partial, TriggerPhraseConfig.TRANSLATE_TRIGGER_EN, threshold = 0.5)
-                    )
+                translateScore >= 0.5 && translateScore > bestOtherScore
             ) {
                 switchingToWord = true
                 state = State.LISTENING_FOR_WORD

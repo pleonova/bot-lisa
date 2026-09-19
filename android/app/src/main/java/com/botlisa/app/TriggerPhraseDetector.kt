@@ -94,6 +94,38 @@ object TriggerPhraseDetector {
     }
 
     /**
+     * Raw fuzzy score (0.0-1.0, or exactly 0.0 if [partial] is too short to
+     * judge -- same minimum-length gate [matchesPrefix] itself uses) of
+     * [partial] against [phrase]'s own equal-length prefix. Exposed
+     * separately from [matchesPrefix] so a caller comparing the same partial
+     * against several *candidate* phrases -- see SpeechAssistant's translate
+     * fast path -- can pick whichever candidate it actually resembles most,
+     * rather than accepting the first one that merely clears an absolute
+     * threshold. That distinction matters once several phrases share a wake
+     * word (see [commonPrefixLength]): just past the wake word, a short,
+     * still-ambiguous remainder can clear a lenient threshold against the
+     * WRONG command purely by chance (e.g. "что" vs "как" at a low
+     * threshold), even though a sibling phrase is the far better fit.
+     */
+    fun prefixSimilarity(partial: String, phrase: String): Double {
+        if (phrase.isBlank() || partial.isBlank()) return 0.0
+
+        val normalizedPartial = normalize(partial)
+        val normalizedPhrase = normalize(phrase)
+        if (normalizedPhrase.isBlank()) return 0.0
+
+        if (normalizedPartial.length >= normalizedPhrase.length) {
+            return similarityRatio(normalizedPartial, normalizedPhrase)
+        }
+
+        val minPartialLength = (normalizedPhrase.length / 3).coerceAtLeast(3)
+        if (normalizedPartial.length < minPartialLength) return 0.0
+
+        val phrasePrefix = normalizedPhrase.substring(0, normalizedPartial.length)
+        return similarityRatio(normalizedPartial, phrasePrefix)
+    }
+
+    /**
      * Length (in normalized characters) of the longest prefix shared by
      * every phrase in [phrases]. Every default trigger phrase now opens with
      * a common "Lisa"/"лиса" wake word (see TriggerPhraseConfig), which
