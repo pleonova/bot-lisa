@@ -1492,8 +1492,7 @@ fun LisaScreen(
             Text(
                 uiPhase.subtitle(targetLanguage.displayName),
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = if (uiPhase == UiPhase.IDLE) FontWeight.Bold else FontWeight.Normal,
-                // IDLE keeps its own bold purple CTA color regardless of the
+                // IDLE keeps its own purple CTA color regardless of the
                 // record button's (grey) fill -- every other phase matches
                 // the button's own fill color instead of a fixed grey, so
                 // e.g. "Now say the English word" reads in the same teal the
