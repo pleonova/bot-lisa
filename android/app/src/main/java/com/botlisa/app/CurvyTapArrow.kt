@@ -30,13 +30,14 @@ fun CurvyTapArrow(color: Color, alpha: Float, modifier: Modifier = Modifier) {
         val h = size.height
         // Tail sits low and slightly right (roughly level with the text),
         // the curve bows out further right through the middle, and the tip
-        // ends high and to the left (roughly level with the button) --
-        // together reading as a "look up here" sweep rather than a straight
-        // line.
+        // ends around the button's own vertical center (not its top edge --
+        // the button occupies roughly the top 70% of this whole block, so
+        // its center lands around 0.35 of the way down) -- together reading
+        // as a "look up here" sweep rather than a straight line.
         val tail = Offset(w * 0.75f, h * 0.92f)
-        val control1 = Offset(w * 1.15f, h * 0.55f)
-        val control2 = Offset(w * 0.65f, h * 0.18f)
-        val tip = Offset(w * 0.15f, h * 0.06f)
+        val control1 = Offset(w * 1.15f, h * 0.62f)
+        val control2 = Offset(w * 0.65f, h * 0.45f)
+        val tip = Offset(w * 0.15f, h * 0.34f)
         val path = Path().apply {
             moveTo(tail.x, tail.y)
             cubicTo(control1.x, control1.y, control2.x, control2.y, tip.x, tip.y)
