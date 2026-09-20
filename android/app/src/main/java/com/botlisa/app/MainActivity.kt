@@ -2318,6 +2318,12 @@ fun LisaScreen(
                 // demoed instead of it only being heard.
                 input = text
                 wordFromTranslateCapture = false
+                // Not a real command, so it shouldn't highlight whichever
+                // command card last legitimately spoke -- activeSpeakingCommand
+                // is otherwise sticky (see its own comment), so without this
+                // an example bubble playing through the same speaker as a
+                // real command left that older command's card lit up.
+                activeSpeakingCommand = null
                 if (text == wordExample.en) {
                     // The word example's own English bubble ("sleepy") --
                     // previews what the button looks like right after a real
