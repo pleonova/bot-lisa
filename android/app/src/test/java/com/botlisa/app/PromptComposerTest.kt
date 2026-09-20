@@ -38,7 +38,7 @@ class PromptComposerTest {
             "Everything you produce is in Russian and must be grammatically correct.\n" +
             "Keep it warm and infant-directed: use diminutives/softened forms naturally, simple vocabulary, sentences under 8 words.\n" +
             "Use 'your', not 'my', when referring to the child's things.\n" +
-            "Stay closely tied to what was just heard; don't add unrelated objects.\n" +
+            "Stay closely tied to what was just heard, but don't repeat the same thing; don't add unrelated objects.\n" +
             "Here are examples of the style and format expected:\n" +
             "Heard: \"Давай наденем твою пижамку.\"\n" +
             "Подними ручки.\n" +
