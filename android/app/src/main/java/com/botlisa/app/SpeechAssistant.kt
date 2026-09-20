@@ -220,6 +220,23 @@ class SpeechAssistant(
         state = State.LISTENING_FOR_WORD
         beep()
         runCatching { recognizer?.stopListening() }
+        // Normally onResults/onError (whichever the stopListening() above
+        // triggers) sees switchingToWord and opens the English mic itself.
+        // But calling stopListening() this soon after the recognizer was
+        // last (re)armed -- e.g. tapping "how to say?" right as a previous
+        // session just rearmed after reverting back to DEFAULT -- can be a
+        // silent no-op on some recognizer implementations, with neither
+        // callback ever firing. Without this fallback that left
+        // switchingToWord (and state) stuck forever: every later tap of
+        // "how to say?" saw switchingToWord already true and silently did
+        // nothing at all -- reported live as "clicking how to say doesn't do
+        // anything" after it had already been used once.
+        mainHandler.postDelayed({
+            if (switchingToWord && !stoppedByUser) {
+                switchingToWord = false
+                listenForWord()
+            }
+        }, 700)
     }
 
     // Re-cues the "now say the English word" beep without touching the
