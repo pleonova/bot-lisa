@@ -1574,12 +1574,12 @@ fun LisaScreen(
             // spacing -- this hint reads as belonging to the button right
             // above it, not as a floating line hovering between the two.
             verticalArrangement = Arrangement.spacedBy(4.dp),
-            // Extra room below, on top of the outer page Column's own 14dp
-            // gap to the search box -- separate from the spacedBy above,
-            // which only controls the button-to-text gap.
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .padding(bottom = 12.dp),
+            // No extra bottom padding of its own -- the outer page Column's
+            // own 14dp gap to the search box is enough on its own; stacking
+            // more on top of that read as too much space once this block
+            // always reserves a full two lines of height (see the Column
+            // below).
+            modifier = Modifier.align(Alignment.CenterHorizontally),
         ) {
             AssistantButton(
                 phase = uiPhase,
