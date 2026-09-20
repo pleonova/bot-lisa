@@ -1,6 +1,7 @@
 package com.botlisa.app
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
@@ -67,22 +69,33 @@ fun CommandChips(
     // fills up (like CSS flex-wrap) -- unlike Row, which would just overflow
     // or squeeze everything onto one line.
     AnimatedVisibility(visible = items.isNotEmpty(), modifier = modifier) {
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            maxItemsInEachRow = 2,
-        ) {
-            items.forEach { spec ->
-                CommandItem(spec, modifier = Modifier.weight(1f))
-            }
-            // Keep every chip half-width: with an odd count the last chip
-            // would otherwise stretch across the whole row and its icon
-            // would sit centre-screen instead of lining up with the column
-            // above it. A spacer fills the empty half so "what else?" lands
-            // in the same spot whether or not "how to answer?" follows it.
-            if (items.size % 2 == 1) {
-                Spacer(Modifier.weight(1f))
+        Column {
+            Text(
+                "Voice Commands",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(10.dp))
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                maxItemsInEachRow = 2,
+            ) {
+                items.forEach { spec ->
+                    CommandItem(spec, modifier = Modifier.weight(1f))
+                }
+                // Keep every chip half-width: with an odd count the last chip
+                // would otherwise stretch across the whole row and its icon
+                // would sit centre-screen instead of lining up with the column
+                // above it. A spacer fills the empty half so "what else?" lands
+                // in the same spot whether or not "how to answer?" follows it.
+                if (items.size % 2 == 1) {
+                    Spacer(Modifier.weight(1f))
+                }
             }
         }
     }
@@ -121,18 +134,36 @@ private fun CommandItem(spec: CommandChipSpec, modifier: Modifier = Modifier) {
             .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(42.dp))
+        // Same solid-fill-circle-with-white-icon look as the record button
+        // itself (see AssistantButton) -- a real button instead of a bare
+        // tinted icon, so these read as the same kind of tappable control.
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(64.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .background(color),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(30.dp))
+            }
             if (sparkle) {
-                Icon(
-                    Icons.Filled.AutoAwesome,
-                    contentDescription = null,
-                    tint = color,
+                // A small white backdrop of its own -- guarantees contrast
+                // for the badge regardless of what's behind it (the solid
+                // accent circle in one direction, the plain page background
+                // in the other), rather than risking the badge blending
+                // into a same-colored circle if tinted to match it.
+                Box(
+                    contentAlignment = Alignment.Center,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .offset(x = 6.dp, y = (-4).dp)
-                        .size(16.dp),
-                )
+                        .offset(x = 4.dp, y = (-4).dp)
+                        .size(20.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surface),
+                ) {
+                    Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
+                }
             }
         }
         Spacer(Modifier.height(6.dp))
