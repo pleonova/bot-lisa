@@ -74,6 +74,8 @@ fun SettingsScreen(
     // that hand-rolled scroll-offset math did (it was landing at the bottom
     // of the page instead of at the section).
     expandVoiceCommandsInitially: Boolean = false,
+    pulseFreezeEnabled: Boolean = false,
+    onPulseFreezeEnabledChange: (Boolean) -> Unit = {},
 ) {
     // LocalContext.current retrieves the Context for use inside a
     // Composable -- Compose functions don't take Context as an ordinary
@@ -148,6 +150,21 @@ fun SettingsScreen(
                     )
                 }
                 Switch(checked = isDark, onCheckedChange = { onToggleDark() })
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Freeze pulsing text on tap", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Tap beside the record button (not on it) to stop its text from pulsing and hold it in the darker color. Tap again to resume.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = pulseFreezeEnabled, onCheckedChange = onPulseFreezeEnabledChange)
             }
         }
 

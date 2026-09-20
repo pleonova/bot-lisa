@@ -16,6 +16,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -485,6 +486,14 @@ fun LisaScreen(
     // the caregiver does anything real: taps the record button, sends a
     // lookup, or a genuine command starts speaking.
     var demoUiPhase by remember { mutableStateOf<UiPhase?>(null) }
+    // Settings toggle (off by default) -- while on, tapping the blank space
+    // beside the record button (left or right of the button/subtitle/arrow,
+    // not on any of them) freezes the subtitle's pulse at its darker/final
+    // color instead of continuing to animate. Tapping there again resumes
+    // it. See pulseFrozen below for the actual frozen/not state, and
+    // PulseFreezeConfig for persistence.
+    var pulseFreezeEnabled by remember { mutableStateOf(PulseFreezeConfig.isEnabled(context)) }
+    var pulseFrozen by remember { mutableStateOf(false) }
     // Which related-phrase row is currently being read (null = none). Cleared
     // by phraseSpeaker's onSpeakingChanged when playback ends.
     var speakingIndex by remember { mutableStateOf<Int?>(null) }
@@ -1422,6 +1431,7 @@ fun LisaScreen(
 
     fun onToggleAssistant() {
         demoUiPhase = null
+        pulseFrozen = false
         if (assistantState != SpeechAssistant.State.IDLE) {
             stopHandsFree()
             return
@@ -1503,6 +1513,7 @@ fun LisaScreen(
         stopHandsFree()
         idleCommandHint = null
         demoUiPhase = null
+        pulseFrozen = false
         // Drop focus so the field isn't left selected -- a focused field
         // hides the "start typing" helper under the buttons.
         focusManager.clearFocus()
@@ -1555,6 +1566,12 @@ fun LisaScreen(
                 apiKey = apiKey,
                 onApiKeyChange = ::onApiKeyChange,
                 expandVoiceCommandsInitially = openSettingsAtVoiceCommands,
+                pulseFreezeEnabled = pulseFreezeEnabled,
+                onPulseFreezeEnabledChange = {
+                    pulseFreezeEnabled = it
+                    pulseFrozen = false
+                    PulseFreezeConfig.setEnabled(context, it)
+                },
             )
         } else {
         Column(
@@ -1622,6 +1639,11 @@ fun LisaScreen(
         // Bold throughout -- only the color pulses (grey to grey, or grey to
         // a command's accent); no thin end to the pulse at all.
         val idleHintWeight = FontWeight.Bold
+        // Frozen at 1f (idleHintPulse's darker/final end -- see its own lerp
+        // calls below) rather than actually stopping the underlying
+        // animation, which keeps running harmlessly in the background; only
+        // what's actually drawn reads as frozen.
+        val effectivePulse = if (pulseFrozen) 1f else idleHintPulse
         // demoUiPhase, when set, previews a phase for the button/text below
         // without touching the real uiPhase everything else (mic muting,
         // SpeechAssistant, ...) still relies on.
@@ -1664,14 +1686,14 @@ fun LisaScreen(
         val listeningRu = displayPhase == UiPhase.LISTENING_RU
         // Same idea again -- "Now say the word" / "In English".
         val listeningEn = displayPhase == UiPhase.LISTENING_EN
-        val greyPulse = lerp(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.onSurfaceVariant, idleHintPulse)
+        val greyPulse = lerp(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.onSurfaceVariant, effectivePulse)
         // Shared by both lines below whenever they're not the demoed
         // hint -- so the plain subtitle's color logic lives in exactly
         // one place instead of being repeated (and possibly drifting)
         // between line one and line two.
         val subtitleColor = when {
             displayPhase == UiPhase.IDLE -> greyPulse
-            actionRequired -> lerp(MaterialTheme.colorScheme.outlineVariant, displayPhase.buttonFillColor(speakingCommand), idleHintPulse)
+            actionRequired -> lerp(MaterialTheme.colorScheme.outlineVariant, displayPhase.buttonFillColor(speakingCommand), effectivePulse)
             else -> displayPhase.buttonFillColor(speakingCommand).copy(alpha = 0.6f)
         }
         val lineOneText = when {
@@ -1693,38 +1715,57 @@ fun LisaScreen(
         // itself, rather than re-deriving which phases say "Tap", can't
         // drift out of sync with lineOneText above.
         val showTapArrow = "Tap" in lineOneText
-        Box(modifier = Modifier.align(Alignment.CenterHorizontally)) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                // Tighter than the old "centered between button and search
-                // box" spacing -- this hint reads as belonging to the
-                // button right above it, not as a floating line hovering
-                // between the two.
-                verticalArrangement = Arrangement.spacedBy(0.dp),
-            ) {
-                AssistantButton(
-                    phase = displayPhase,
-                    onClick = { onToggleAssistant() },
-                    speakingCommand = speakingCommand,
-                )
-                // One shared Text for line one -- whether that's the demoed
-                // hint's own instruction or the phase's plain subtitle -- so
-                // its styling can never drift between the two instead of
-                // each keeping its own copy. Line two always renders too
-                // (blank, same style, when there's no "then say [phrase]"
-                // to show) rather than being conditionally omitted: an
-                // empty Text still claims a full line's height, so the
-                // search box below stays put no matter which state this is
-                // -- see the screenshots that prompted this, where the
-                // search box visibly jumped down only while the two-line
-                // hint was showing.
-                // Its own tight spacing between the two lines themselves,
-                // separate from the outer Column's spacedBy above (which
-                // only controls the button-to-text gap) -- reduced well
-                // below that, since these two lines read as one continuous
-                // hint rather than two things that need visual breathing
-                // room between them.
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(0.dp)) {
+        // Full width so there's blank space on either side of the (much
+        // narrower) button/text/arrow block below to actually tap -- see
+        // pulseFreezeEnabled's own comment. No-op Modifier when the Settings
+        // toggle is off, so this never steals a tap from anything else.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (pulseFreezeEnabled) {
+                        Modifier.clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { pulseFrozen = !pulseFrozen }
+                    } else {
+                        Modifier
+                    },
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    // Tighter than the old "centered between button and search
+                    // box" spacing -- this hint reads as belonging to the
+                    // button right above it, not as a floating line hovering
+                    // between the two.
+                    verticalArrangement = Arrangement.spacedBy(0.dp),
+                ) {
+                    AssistantButton(
+                        phase = displayPhase,
+                        onClick = { onToggleAssistant() },
+                        speakingCommand = speakingCommand,
+                    )
+                    // One shared Text for line one -- whether that's the demoed
+                    // hint's own instruction or the phase's plain subtitle -- so
+                    // its styling can never drift between the two instead of
+                    // each keeping its own copy. Line two always renders too
+                    // (blank, same style, when there's no "then say [phrase]"
+                    // to show) rather than being conditionally omitted: an
+                    // empty Text still claims a full line's height, so the
+                    // search box below stays put no matter which state this is
+                    // -- see the screenshots that prompted this, where the
+                    // search box visibly jumped down only while the two-line
+                    // hint was showing.
+                    // Its own tight spacing between the two lines themselves,
+                    // separate from the outer Column's spacedBy above (which
+                    // only controls the button-to-text gap) -- reduced well
+                    // below that, since these two lines read as one continuous
+                    // hint rather than two things that need visual breathing
+                    // room between them.
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(0.dp)) {
                     Text(
                         lineOneText,
                         style = MaterialTheme.typography.bodyLarge,
@@ -1745,7 +1786,7 @@ fun LisaScreen(
                                     }
                                     withStyle(
                                         SpanStyle(
-                                            color = lerp(MaterialTheme.colorScheme.outlineVariant, hint!!.kind.accentColor(), idleHintPulse),
+                                            color = lerp(MaterialTheme.colorScheme.outlineVariant, hint!!.kind.accentColor(), effectivePulse),
                                             fontWeight = idleHintWeight,
                                         ),
                                     ) {
@@ -1768,7 +1809,7 @@ fun LisaScreen(
             if (showTapArrow) {
                 CurvyTapArrow(
                     color = if (showingHint) greyPulse else subtitleColor,
-                    alpha = idleHintPulse,
+                    alpha = effectivePulse,
                     // Close enough that the tip nearly touches the button --
                     // the arrow's own tip sits a couple dp inside its
                     // canvas already (see CurvyTapArrow), so this doesn't
@@ -1777,6 +1818,7 @@ fun LisaScreen(
                         .align(Alignment.CenterEnd)
                         .offset(x = 6.dp),
                 )
+            }
             }
         }
 
