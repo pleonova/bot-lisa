@@ -448,15 +448,17 @@ fun LisaScreen(
     var translationSpeaking by remember { mutableStateOf(false) }
     var relatedSpeaking by remember { mutableStateOf(false) }
     var englishSpeaking by remember { mutableStateOf(false) }
-    // True only while `speaker` is reading a worked-example bubble from the
-    // quick-tips panel aloud (see onSpeakBubble below) -- translationSpeaking
-    // alone can't distinguish that from a real command's reply, since both
-    // play through the same TTS speaker. Lets the record-button subtitle say
-    // "Playing the example…" instead of "Playing the voice command…" for
-    // this specific case. Reset at the top of every real command handler
+    // The bubble's own text while (and only while) `speaker` is reading a
+    // worked-example bubble from the quick-tips panel aloud (see
+    // onSpeakBubble below), null otherwise -- translationSpeaking alone
+    // can't distinguish that from a real command's reply, since both play
+    // through the same TTS speaker. Lets the record-button subtitle say
+    // "Playing the example…" (or, specifically for the word example's own
+    // translation, "Playing $language translation…") instead of "Playing
+    // the voice command…". Reset at the top of every real command handler
     // below so an example interrupted mid-playback by an actual command
-    // can't leave this stuck true.
-    var isExampleSpeaking by remember { mutableStateOf(false) }
+    // can't leave this stuck non-null.
+    var speakingExampleText by remember { mutableStateOf<String?>(null) }
     // Which command (instructions panel card or home-screen chip) most
     // recently started one of the three speakers above -- combined with
     // them below (isAnyCommandSpeaking) to know which single card/chip
@@ -565,7 +567,7 @@ fun LisaScreen(
         if (input.isBlank()) return
         errorText = null
         offerCellularDownloadRetry = false
-        isExampleSpeaking = false
+        speakingExampleText = null
         demoUiPhase = null
         // Drop the previous card straight away so a new lookup (typed or
         // spoken) doesn't sit under a stale result until the response lands.
@@ -1703,10 +1705,15 @@ fun LisaScreen(
             listeningEn -> "Now say the word"
             // Same speaker as any real command's reply, so
             // translationSpeaking alone can't tell them apart --
-            // isExampleSpeaking is what's actually set only while
-            // a quick-tips example bubble is playing (see
-            // onSpeakBubble).
-            displayPhase == UiPhase.SPEAKING_TRANSLATION && isExampleSpeaking -> "Playing the example…"
+            // speakingExampleText is what's actually set only while a
+            // quick-tips example bubble is playing (see onSpeakBubble). The
+            // word example's own translation bubble gets a more specific
+            // label than the generic examples -- it's the one case where
+            // what's playing really is a translation into the target
+            // language, worth calling out by name.
+            displayPhase == UiPhase.SPEAKING_TRANSLATION && speakingExampleText == wordExample.translated ->
+                "Playing ${targetLanguage.displayName} translation…"
+            displayPhase == UiPhase.SPEAKING_TRANSLATION && speakingExampleText != null -> "Playing the example…"
             else -> displayPhase.subtitle(targetLanguage.displayName)
         }
         // "Tap" only ever shows up in line one when the caregiver actually
@@ -2284,7 +2291,7 @@ fun LisaScreen(
         // isAnyCommandSpeaking below).
         fun onTranslateCommand() {
             idleCommandHint = null
-            isExampleSpeaking = false
+            speakingExampleText = null
             demoUiPhase = null
             activeSpeakingCommand = CommandKind.TRANSLATE
             onTranslateChipTap()
@@ -2303,7 +2310,7 @@ fun LisaScreen(
         }
         fun onMeaningCommand() {
             cancelStrayWordCapture()
-            isExampleSpeaking = false
+            speakingExampleText = null
             demoUiPhase = null
             activeSpeakingCommand = CommandKind.MEANING
             if (hasUtteranceToActOn) {
@@ -2316,7 +2323,7 @@ fun LisaScreen(
         }
         fun onNextSuggestionCommand() {
             cancelStrayWordCapture()
-            isExampleSpeaking = false
+            speakingExampleText = null
             demoUiPhase = null
             activeSpeakingCommand = CommandKind.NEXT_SUGGESTION
             if (hasUtteranceToActOn) {
@@ -2329,7 +2336,7 @@ fun LisaScreen(
         }
         fun onAnswerCommand() {
             cancelStrayWordCapture()
-            isExampleSpeaking = false
+            speakingExampleText = null
             demoUiPhase = null
             activeSpeakingCommand = CommandKind.ANSWER
             if (hasUtteranceToActOn) {
@@ -2383,9 +2390,9 @@ fun LisaScreen(
                     // this example instead of some earlier (possibly stale)
                     // utterance still sitting in lastUtterance.
                     lastUtterance = text
-                    isExampleSpeaking = true
-                    if (speaker?.speak(text) { isExampleSpeaking = false } != true) {
-                        isExampleSpeaking = false
+                    speakingExampleText = text
+                    if (speaker?.speak(text) { speakingExampleText = null } != true) {
+                        speakingExampleText = null
                         demoUiPhase = null
                     }
                 }
