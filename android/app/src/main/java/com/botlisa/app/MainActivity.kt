@@ -134,8 +134,8 @@ enum class UiPhase { IDLE, LISTENING_RU, LISTENING_EN, SPEAKING_TRANSLATION, REA
 /**
  * Replaces the idle hint under the record button once a command was
  * demoed instead of actually run (see LisaScreen's idleCommandHint/
- * demoHintFor) -- [lineOne] ("Tap and speak Russian" / "Tap and let Lisa
- * listen to Russian") is static, [phrase] (the command just demoed, e.g.
+ * demoHintFor) -- [lineOne] ("Tap and speak Russian" / "Tap and capture
+ * Russian") is static, [phrase] (the command just demoed, e.g.
  * "Лиса, что ещё?") renders on its own line pulsing in [kind]'s own accent
  * color instead of the base hint's grey/purple.
  */
@@ -2115,7 +2115,7 @@ fun LisaScreen(
             val language = targetLanguage.displayName
             val lineOne = when (kind) {
                 CommandKind.NEXT_SUGGESTION, CommandKind.TRANSLATE -> "Tap and speak $language"
-                CommandKind.MEANING, CommandKind.ANSWER -> "Tap and let Lisa listen to $language"
+                CommandKind.MEANING, CommandKind.ANSWER -> "Tap and capture $language"
             }
             return IdleCommandHint(kind, lineOne, formatCommand(phrase))
         }
