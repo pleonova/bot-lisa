@@ -1573,7 +1573,7 @@ fun LisaScreen(
             // Tighter than the old "centered between button and search box"
             // spacing -- this hint reads as belonging to the button right
             // above it, not as a floating line hovering between the two.
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
             // No extra bottom padding of its own -- the outer page Column's
             // own 14dp gap to the search box is enough on its own; stacking
             // more on top of that read as too much space once this block
