@@ -1561,7 +1561,7 @@ fun LisaScreen(
         val idleHintPulse by rememberInfiniteTransition(label = "idle-hint-pulse").animateFloat(
             initialValue = 1f,
             targetValue = 0f,
-            animationSpec = infiniteRepeatable(tween(1500, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            animationSpec = infiniteRepeatable(tween(750, easing = FastOutSlowInEasing), RepeatMode.Reverse),
             label = "idle-hint-pulse",
         )
         // Bold throughout -- only the color pulses (grey to grey, or grey to
