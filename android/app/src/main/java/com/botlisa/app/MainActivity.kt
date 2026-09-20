@@ -1137,6 +1137,15 @@ fun LisaScreen(
             scrollToTop()
         }
     }
+    // Clears speakingExampleText once whatever was actually speaking stops
+    // -- most callers that set it also pass their own onComplete callback
+    // to do this immediately, but the word example's completed-translation
+    // playback goes through onSend()'s own speaker.speak() call, which
+    // doesn't take one; this catches that case (and is a harmless no-op
+    // wherever the callback already handled it).
+    LaunchedEffect(translationSpeaking) {
+        if (!translationSpeaking) speakingExampleText = null
+    }
 
     // Settings and the home screen share this one scroll Column/ScrollState
     // (swapped via the if/else below), so without this, opening Settings
@@ -2385,12 +2394,26 @@ fun LisaScreen(
                 if (text == wordExample.en) {
                     // The word example's own English bubble ("sleepy") --
                     // previews what the button looks like right after a real
-                    // "how to say?" (see demoUiPhase's own comment), and
-                    // reads it in the correct English voice (englishSpeaker,
-                    // not the target-language `speaker` every other bubble
-                    // uses) rather than mispronouncing it in that accent.
+                    // "how to say?" (see demoUiPhase's own comment), reads it
+                    // in the correct English voice (englishSpeaker, not the
+                    // target-language `speaker` every other bubble uses)
+                    // rather than mispronouncing it in that accent, and once
+                    // that's done runs the actual translation -- completing
+                    // the demo with a real result card and its spoken
+                    // translation, the same as genuinely capturing this word
+                    // via a real "how to say?" would. onSend() itself clears
+                    // demoUiPhase/speakingExampleText at its own top (see
+                    // there), so setting speakingExampleText again right
+                    // after it returns (well before its own translation
+                    // actually finishes and starts speaking) is what gets
+                    // the specific "Playing $language translation…" label
+                    // instead of the generic "Playing the voice command…".
                     demoUiPhase = UiPhase.LISTENING_EN
-                    englishSpeaker?.speak(text)
+                    wordFromTranslateCapture = true
+                    val onWordHeard = { onSend(); speakingExampleText = wordExample.translated }
+                    if (englishSpeaker?.speak(text, onWordHeard) != true) {
+                        onWordHeard()
+                    }
                 } else {
                     // Also becomes "the last utterance" -- exactly as if the
                     // caregiver had typed or spoken this target-language
