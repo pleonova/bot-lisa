@@ -1612,6 +1612,12 @@ fun LisaScreen(
             // itself, which pulses grey to that command's own accent color.
             val hint = idleCommandHint
             val showingHint = uiPhase == UiPhase.IDLE && hint != null
+            // Plain idle, no demoed command yet -- "Tap and speak" /
+            // "$language" across the two reserved lines (below) instead of
+            // running the language name onto the end of line one, so it
+            // doesn't get cut off centered against a long language name on
+            // narrower screens.
+            val plainIdle = uiPhase == UiPhase.IDLE && hint == null
             val greyPulse = lerp(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.onSurfaceVariant, idleHintPulse)
             // One shared Text for line one -- whether that's the demoed
             // hint's own instruction or the phase's plain subtitle -- so its
@@ -1630,7 +1636,11 @@ fun LisaScreen(
             // two things that need visual breathing room between them.
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(0.dp)) {
                 Text(
-                    if (showingHint) hint!!.lineOne else uiPhase.subtitle(targetLanguage.displayName),
+                    when {
+                        showingHint -> hint!!.lineOne
+                        plainIdle -> "Tap and speak"
+                        else -> uiPhase.subtitle(targetLanguage.displayName)
+                    },
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold,
                     color = when {
@@ -1646,26 +1656,29 @@ fun LisaScreen(
                     modifier = Modifier.clickable { onToggleAssistant() },
                 )
                 Text(
-                    if (showingHint) {
-                        buildAnnotatedString {
-                            withStyle(SpanStyle(color = greyPulse, fontWeight = idleHintWeight)) {
-                                append("then say ")
+                    when {
+                        showingHint ->
+                            buildAnnotatedString {
+                                withStyle(SpanStyle(color = greyPulse, fontWeight = idleHintWeight)) {
+                                    append("then say ")
+                                }
+                                withStyle(
+                                    SpanStyle(
+                                        color = lerp(MaterialTheme.colorScheme.outlineVariant, hint!!.kind.accentColor(), idleHintPulse),
+                                        fontWeight = idleHintWeight,
+                                    ),
+                                ) {
+                                    append("“${hint.phrase}”")
+                                }
                             }
-                            withStyle(
-                                SpanStyle(
-                                    color = lerp(MaterialTheme.colorScheme.outlineVariant, hint!!.kind.accentColor(), idleHintPulse),
-                                    fontWeight = idleHintWeight,
-                                ),
-                            ) {
-                                append("“${hint.phrase}”")
-                            }
-                        }
-                    } else {
-                        AnnotatedString("")
+                        plainIdle -> AnnotatedString(targetLanguage.displayName)
+                        else -> AnnotatedString("")
                     },
                     style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = if (plainIdle) FontWeight.Bold else null,
+                    color = if (plainIdle) greyPulse else Color.Unspecified,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.clickable(enabled = showingHint) { onToggleAssistant() },
+                    modifier = Modifier.clickable(enabled = showingHint || plainIdle) { onToggleAssistant() },
                 )
             }
         }
