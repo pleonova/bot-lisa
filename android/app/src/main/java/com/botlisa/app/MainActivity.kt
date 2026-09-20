@@ -2334,6 +2334,13 @@ fun LisaScreen(
                     demoUiPhase = UiPhase.LISTENING_EN
                     englishSpeaker?.speak(text)
                 } else {
+                    // Also becomes "the last utterance" -- exactly as if the
+                    // caregiver had typed or spoken this target-language
+                    // phrase themselves -- so tapping "what else?"/"what
+                    // does that mean?"/"how to answer?" right after acts on
+                    // this example instead of some earlier (possibly stale)
+                    // utterance still sitting in lastUtterance.
+                    lastUtterance = text
                     isExampleSpeaking = true
                     if (speaker?.speak(text) { isExampleSpeaking = false } != true) {
                         isExampleSpeaking = false
