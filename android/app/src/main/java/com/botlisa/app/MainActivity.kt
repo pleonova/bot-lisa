@@ -447,6 +447,15 @@ fun LisaScreen(
     var translationSpeaking by remember { mutableStateOf(false) }
     var relatedSpeaking by remember { mutableStateOf(false) }
     var englishSpeaking by remember { mutableStateOf(false) }
+    // True only while `speaker` is reading a worked-example bubble from the
+    // quick-tips panel aloud (see onSpeakBubble below) -- translationSpeaking
+    // alone can't distinguish that from a real command's reply, since both
+    // play through the same TTS speaker. Lets the record-button subtitle say
+    // "Playing the example…" instead of "Playing the voice command…" for
+    // this specific case. Reset at the top of every real command handler
+    // below so an example interrupted mid-playback by an actual command
+    // can't leave this stuck true.
+    var isExampleSpeaking by remember { mutableStateOf(false) }
     // Which command (instructions panel card or home-screen chip) most
     // recently started one of the three speakers above -- combined with
     // them below (isAnyCommandSpeaking) to know which single card/chip
@@ -536,6 +545,7 @@ fun LisaScreen(
         if (input.isBlank()) return
         errorText = null
         offerCellularDownloadRetry = false
+        isExampleSpeaking = false
         // Drop the previous card straight away so a new lookup (typed or
         // spoken) doesn't sit under a stale result until the response lands.
         result = null
@@ -1674,6 +1684,12 @@ fun LisaScreen(
                         showingHint -> hint!!.lineOne
                         plainIdle -> "Tap and speak"
                         listeningRu -> "Listening for"
+                        // Same speaker as any real command's reply, so
+                        // translationSpeaking alone can't tell them apart --
+                        // isExampleSpeaking is what's actually set only while
+                        // a quick-tips example bubble is playing (see
+                        // onSpeakBubble).
+                        uiPhase == UiPhase.SPEAKING_TRANSLATION && isExampleSpeaking -> "Playing the example…"
                         else -> uiPhase.subtitle(targetLanguage.displayName)
                     },
                     style = MaterialTheme.typography.bodyLarge,
@@ -2173,6 +2189,7 @@ fun LisaScreen(
         // isAnyCommandSpeaking below).
         fun onTranslateCommand() {
             idleCommandHint = null
+            isExampleSpeaking = false
             activeSpeakingCommand = CommandKind.TRANSLATE
             onTranslateChipTap()
         }
@@ -2190,6 +2207,7 @@ fun LisaScreen(
         }
         fun onMeaningCommand() {
             cancelStrayWordCapture()
+            isExampleSpeaking = false
             activeSpeakingCommand = CommandKind.MEANING
             if (hasUtteranceToActOn) {
                 idleCommandHint = null
@@ -2201,6 +2219,7 @@ fun LisaScreen(
         }
         fun onNextSuggestionCommand() {
             cancelStrayWordCapture()
+            isExampleSpeaking = false
             activeSpeakingCommand = CommandKind.NEXT_SUGGESTION
             if (hasUtteranceToActOn) {
                 idleCommandHint = null
@@ -2212,6 +2231,7 @@ fun LisaScreen(
         }
         fun onAnswerCommand() {
             cancelStrayWordCapture()
+            isExampleSpeaking = false
             activeSpeakingCommand = CommandKind.ANSWER
             if (hasUtteranceToActOn) {
                 idleCommandHint = null
@@ -2235,7 +2255,17 @@ fun LisaScreen(
             onSpeakMeaning = ::onMeaningCommand,
             onSpeakNext = ::onNextSuggestionCommand,
             onSpeakAnswer = ::onAnswerCommand,
-            onSpeakBubble = { text -> speaker?.speak(text) },
+            onSpeakBubble = { text ->
+                // Same as any other spoken phrase landing in the field --
+                // lets the caregiver see (and reuse/edit) what was just
+                // demoed instead of it only being heard.
+                input = text
+                wordFromTranslateCapture = false
+                isExampleSpeaking = true
+                if (speaker?.speak(text) { isExampleSpeaking = false } != true) {
+                    isExampleSpeaking = false
+                }
+            },
             onOpenSettings = {
                 showSettings = true
                 openSettingsAtVoiceCommands = true
