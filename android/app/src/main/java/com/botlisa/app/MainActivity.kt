@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -1328,7 +1329,11 @@ fun LisaScreen(
             onNextSuggestionRequested = { handleNextSuggestionRequest.value() },
             onAnswerRequested = { handleAnswerRequest.value() },
             onTranscript = { handleTranscript.value(it) },
-            isMuted = { translationSpeaking || relatedSpeaking || englishSpeaking },
+            // Also muted while an explicitly-requested "what else?" is still
+            // generating (not the silent background eager prefetch -- see
+            // whatElseRequested) -- the caregiver asked and is now waiting,
+            // same as if Lisa were already talking.
+            isMuted = { translationSpeaking || relatedSpeaking || englishSpeaking || (whatElseRequested && onDeviceGenerating) },
             onStateChanged = { assistantState = it },
             onError = { message, isNotice ->
                 if (isNotice) assistantNotice = message else assistantError = message
@@ -1653,6 +1658,13 @@ fun LisaScreen(
         // without touching the real uiPhase everything else (mic muting,
         // SpeechAssistant, ...) still relies on.
         val displayPhase = demoUiPhase ?: uiPhase
+        // True only while an explicitly-requested "what else?" (tapped or
+        // spoken, not the silent background eager prefetch -- see
+        // whatElseRequested) is still generating -- swaps the button's icon
+        // to a lightbulb and the subtitle to "Generating suggestions…"
+        // while the caregiver waits (see isMuted's own comment for the mic
+        // side of this).
+        val isGeneratingSuggestions = whatElseRequested && onDeviceGenerating
         // Pulses (bold, grey -> a color) exactly while the phase needs the
         // caregiver to actually DO something -- tap to start (IDLE), or
         // speak (LISTENING_RU/LISTENING_EN) -- so the CTA keeps drawing
@@ -1697,6 +1709,7 @@ fun LisaScreen(
         // one place instead of being repeated (and possibly drifting)
         // between line one and line two.
         val subtitleColor = when {
+            isGeneratingSuggestions -> CommandKind.NEXT_SUGGESTION.accentColor().copy(alpha = 0.6f)
             displayPhase == UiPhase.IDLE -> greyPulse
             actionRequired -> lerp(MaterialTheme.colorScheme.outlineVariant, displayPhase.buttonFillColor(speakingCommand), effectivePulse)
             else -> displayPhase.buttonFillColor(speakingCommand).copy(alpha = 0.6f)
@@ -1717,10 +1730,12 @@ fun LisaScreen(
             else -> null
         }
         val lineOneText = when {
+            isGeneratingSuggestions -> "Generating"
             showingHint -> hint!!.lineOne
             plainIdle -> "Tap and speak"
             listeningRu -> "Listening for"
             listeningEn -> "Now say the word"
+            playingSuffix != null -> "Playing"
             // Every UiPhase is covered by one of the branches above --
             // IDLE by showingHint/plainIdle, LISTENING_RU/LISTENING_EN by
             // their own branches, SPEAKING_TRANSLATION/READING_RECOMMENDATION
@@ -1768,6 +1783,7 @@ fun LisaScreen(
                         phase = displayPhase,
                         onClick = { onToggleAssistant() },
                         speakingCommand = speakingCommand,
+                        iconOverride = if (isGeneratingSuggestions) Icons.Filled.Lightbulb else null,
                     )
                     // One shared Text for line one -- whether that's the demoed
                     // hint's own instruction or the phase's plain subtitle -- so
@@ -1814,6 +1830,7 @@ fun LisaScreen(
                                         append("“${hint.phrase}”")
                                     }
                                 }
+                            isGeneratingSuggestions -> AnnotatedString("suggestions…")
                             plainIdle -> AnnotatedString(targetLanguage.displayName)
                             listeningRu -> AnnotatedString("${targetLanguage.displayName}…")
                             listeningEn -> AnnotatedString("In English")
@@ -1821,11 +1838,19 @@ fun LisaScreen(
                             else -> AnnotatedString("")
                         },
                         style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = if (plainIdle || listeningRu || listeningEn || playingSuffix != null) FontWeight.Bold else null,
-                        color = if (plainIdle || listeningRu || listeningEn || playingSuffix != null) subtitleColor else Color.Unspecified,
+                        fontWeight = if (isGeneratingSuggestions || plainIdle || listeningRu || listeningEn || playingSuffix != null) {
+                            FontWeight.Bold
+                        } else {
+                            null
+                        },
+                        color = if (isGeneratingSuggestions || plainIdle || listeningRu || listeningEn || playingSuffix != null) {
+                            subtitleColor
+                        } else {
+                            Color.Unspecified
+                        },
                         textAlign = TextAlign.Center,
                         modifier = Modifier.clickable(
-                            enabled = showingHint || plainIdle || listeningRu || listeningEn || playingSuffix != null,
+                            enabled = isGeneratingSuggestions || showingHint || plainIdle || listeningRu || listeningEn || playingSuffix != null,
                         ) { onToggleAssistant() },
                     )
                 }

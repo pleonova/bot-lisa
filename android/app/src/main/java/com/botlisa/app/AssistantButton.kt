@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 
 /**
@@ -54,6 +55,10 @@ fun AssistantButton(
     // see UiPhase.buttonFillColor()'s own doc for how this takes over the
     // fill color (teal/purple/orange) instead of the generic purple.
     speakingCommand: CommandKind? = null,
+    // Replaces the mic/speaker icon entirely when set (e.g. a lightbulb
+    // while "what else?" suggestions are generating) -- fill/border/pulsing
+    // ring still follow [phase] as normal, only the glyph itself changes.
+    iconOverride: ImageVector? = null,
 ) {
     val listening = phase == UiPhase.LISTENING_RU || phase == UiPhase.LISTENING_EN
     val speaking = phase == UiPhase.SPEAKING_TRANSLATION || phase == UiPhase.READING_RECOMMENDATION
@@ -128,7 +133,7 @@ fun AssistantButton(
                 .clickable(onClick = onClick),
         ) {
             Icon(
-                imageVector = if (speaking) Icons.AutoMirrored.Filled.VolumeUp else Icons.Filled.Mic,
+                imageVector = iconOverride ?: if (speaking) Icons.AutoMirrored.Filled.VolumeUp else Icons.Filled.Mic,
                 contentDescription = if (phase == UiPhase.IDLE) "Start hands-free mode" else "Stop hands-free mode",
                 tint = contentColor,
                 modifier = Modifier.size(36.dp),
