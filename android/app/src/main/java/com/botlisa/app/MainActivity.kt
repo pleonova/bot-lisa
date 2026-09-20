@@ -1662,6 +1662,8 @@ fun LisaScreen(
             // across the two reserved lines instead of running long onto the
             // end of one line.
             val listeningRu = uiPhase == UiPhase.LISTENING_RU
+            // Same idea again -- "Now say the word" / "In English".
+            val listeningEn = uiPhase == UiPhase.LISTENING_EN
             val greyPulse = lerp(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.onSurfaceVariant, idleHintPulse)
             // Shared by both lines below whenever they're not the demoed
             // hint -- so the plain subtitle's color logic lives in exactly
@@ -1693,6 +1695,7 @@ fun LisaScreen(
                         showingHint -> hint!!.lineOne
                         plainIdle -> "Tap and speak"
                         listeningRu -> "Listening for"
+                        listeningEn -> "Now say the word"
                         // Same speaker as any real command's reply, so
                         // translationSpeaking alone can't tell them apart --
                         // isExampleSpeaking is what's actually set only while
@@ -1728,13 +1731,14 @@ fun LisaScreen(
                             }
                         plainIdle -> AnnotatedString(targetLanguage.displayName)
                         listeningRu -> AnnotatedString("${targetLanguage.displayName}…")
+                        listeningEn -> AnnotatedString("In English")
                         else -> AnnotatedString("")
                     },
                     style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = if (plainIdle || listeningRu) FontWeight.Bold else null,
-                    color = if (plainIdle || listeningRu) subtitleColor else Color.Unspecified,
+                    fontWeight = if (plainIdle || listeningRu || listeningEn) FontWeight.Bold else null,
+                    color = if (plainIdle || listeningRu || listeningEn) subtitleColor else Color.Unspecified,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.clickable(enabled = showingHint || plainIdle || listeningRu) { onToggleAssistant() },
+                    modifier = Modifier.clickable(enabled = showingHint || plainIdle || listeningRu || listeningEn) { onToggleAssistant() },
                 )
             }
         }
