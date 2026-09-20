@@ -474,6 +474,17 @@ fun LisaScreen(
     // or returns to the opening screen, so it never lingers past the moment
     // it's useful.
     var idleCommandHint by remember { mutableStateOf<IdleCommandHint?>(null) }
+    // Purely cosmetic preview of a phase the record button isn't actually
+    // in -- set when tapping the "sleepy"-style word example in the quick
+    // tips panel, to show what the button looks like right after a real
+    // "how to say?" (LISTENING_EN), without actually starting hands-free or
+    // opening the mic. Only ever read by the button/subtitle rendering (see
+    // displayPhase) -- every functional check elsewhere (isMuted, the
+    // assistantState LaunchedEffect, SpeechAssistant itself) keeps reading
+    // the real uiPhase/assistantState, untouched by this. Cleared the moment
+    // the caregiver does anything real: taps the record button, sends a
+    // lookup, or a genuine command starts speaking.
+    var demoUiPhase by remember { mutableStateOf<UiPhase?>(null) }
     // Which related-phrase row is currently being read (null = none). Cleared
     // by phraseSpeaker's onSpeakingChanged when playback ends.
     var speakingIndex by remember { mutableStateOf<Int?>(null) }
@@ -546,6 +557,7 @@ fun LisaScreen(
         errorText = null
         offerCellularDownloadRetry = false
         isExampleSpeaking = false
+        demoUiPhase = null
         // Drop the previous card straight away so a new lookup (typed or
         // spoken) doesn't sit under a stale result until the response lands.
         result = null
@@ -1409,6 +1421,7 @@ fun LisaScreen(
     }
 
     fun onToggleAssistant() {
+        demoUiPhase = null
         if (assistantState != SpeechAssistant.State.IDLE) {
             stopHandsFree()
             return
@@ -1489,6 +1502,7 @@ fun LisaScreen(
     fun resetToStart(showIntroPopup: Boolean = false) {
         stopHandsFree()
         idleCommandHint = null
+        demoUiPhase = null
         // Drop focus so the field isn't left selected -- a focused field
         // hides the "start typing" helper under the buttons.
         focusManager.clearFocus()
@@ -1621,8 +1635,12 @@ fun LisaScreen(
             // below).
             modifier = Modifier.align(Alignment.CenterHorizontally),
         ) {
+            // demoUiPhase, when set, previews a phase for the button/text
+            // below without touching the real uiPhase everything else
+            // (mic muting, SpeechAssistant, ...) still relies on.
+            val displayPhase = demoUiPhase ?: uiPhase
             AssistantButton(
-                phase = uiPhase,
+                phase = displayPhase,
                 onClick = { onToggleAssistant() },
                 speakingCommand = speakingCommand,
             )
@@ -1640,7 +1658,7 @@ fun LisaScreen(
             // its "dark grey" (already used for every other muted/hint
             // text), and the button's own fill color for whichever phase/
             // command this is (buttonFillColor()) is the "correct color".
-            val actionRequired = uiPhase != UiPhase.SPEAKING_TRANSLATION && uiPhase != UiPhase.READING_RECOMMENDATION
+            val actionRequired = displayPhase != UiPhase.SPEAKING_TRANSLATION && displayPhase != UiPhase.READING_RECOMMENDATION
             // idleCommandHint (set by onMeaningCommand()/
             // onNextSuggestionCommand()/onAnswerCommand() below when a tap
             // only played a demo) takes over the idle hint until the
@@ -1651,28 +1669,28 @@ fun LisaScreen(
             // same grey-to-grey as the base hint below, except the phrase
             // itself, which pulses grey to that command's own accent color.
             val hint = idleCommandHint
-            val showingHint = uiPhase == UiPhase.IDLE && hint != null
+            val showingHint = displayPhase == UiPhase.IDLE && hint != null
             // Plain idle, no demoed command yet -- "Tap and speak" /
             // "$language" across the two reserved lines (below) instead of
             // running the language name onto the end of line one, so it
             // doesn't get cut off centered against a long language name on
             // narrower screens.
-            val plainIdle = uiPhase == UiPhase.IDLE && hint == null
+            val plainIdle = displayPhase == UiPhase.IDLE && hint == null
             // Same idea as plainIdle above -- "Listening for" / "$language…"
             // across the two reserved lines instead of running long onto the
             // end of one line.
-            val listeningRu = uiPhase == UiPhase.LISTENING_RU
+            val listeningRu = displayPhase == UiPhase.LISTENING_RU
             // Same idea again -- "Now say the word" / "In English".
-            val listeningEn = uiPhase == UiPhase.LISTENING_EN
+            val listeningEn = displayPhase == UiPhase.LISTENING_EN
             val greyPulse = lerp(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.onSurfaceVariant, idleHintPulse)
             // Shared by both lines below whenever they're not the demoed
             // hint -- so the plain subtitle's color logic lives in exactly
             // one place instead of being repeated (and possibly drifting)
             // between line one and line two.
             val subtitleColor = when {
-                uiPhase == UiPhase.IDLE -> greyPulse
-                actionRequired -> lerp(MaterialTheme.colorScheme.outlineVariant, uiPhase.buttonFillColor(speakingCommand), idleHintPulse)
-                else -> uiPhase.buttonFillColor(speakingCommand).copy(alpha = 0.6f)
+                displayPhase == UiPhase.IDLE -> greyPulse
+                actionRequired -> lerp(MaterialTheme.colorScheme.outlineVariant, displayPhase.buttonFillColor(speakingCommand), idleHintPulse)
+                else -> displayPhase.buttonFillColor(speakingCommand).copy(alpha = 0.6f)
             }
             // One shared Text for line one -- whether that's the demoed
             // hint's own instruction or the phase's plain subtitle -- so its
@@ -1701,8 +1719,8 @@ fun LisaScreen(
                         // isExampleSpeaking is what's actually set only while
                         // a quick-tips example bubble is playing (see
                         // onSpeakBubble).
-                        uiPhase == UiPhase.SPEAKING_TRANSLATION && isExampleSpeaking -> "Playing the example…"
-                        else -> uiPhase.subtitle(targetLanguage.displayName)
+                        displayPhase == UiPhase.SPEAKING_TRANSLATION && isExampleSpeaking -> "Playing the example…"
+                        else -> displayPhase.subtitle(targetLanguage.displayName)
                     },
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold,
@@ -2206,6 +2224,7 @@ fun LisaScreen(
         fun onTranslateCommand() {
             idleCommandHint = null
             isExampleSpeaking = false
+            demoUiPhase = null
             activeSpeakingCommand = CommandKind.TRANSLATE
             onTranslateChipTap()
         }
@@ -2224,6 +2243,7 @@ fun LisaScreen(
         fun onMeaningCommand() {
             cancelStrayWordCapture()
             isExampleSpeaking = false
+            demoUiPhase = null
             activeSpeakingCommand = CommandKind.MEANING
             if (hasUtteranceToActOn) {
                 idleCommandHint = null
@@ -2236,6 +2256,7 @@ fun LisaScreen(
         fun onNextSuggestionCommand() {
             cancelStrayWordCapture()
             isExampleSpeaking = false
+            demoUiPhase = null
             activeSpeakingCommand = CommandKind.NEXT_SUGGESTION
             if (hasUtteranceToActOn) {
                 idleCommandHint = null
@@ -2248,6 +2269,7 @@ fun LisaScreen(
         fun onAnswerCommand() {
             cancelStrayWordCapture()
             isExampleSpeaking = false
+            demoUiPhase = null
             activeSpeakingCommand = CommandKind.ANSWER
             if (hasUtteranceToActOn) {
                 idleCommandHint = null
@@ -2277,9 +2299,21 @@ fun LisaScreen(
                 // demoed instead of it only being heard.
                 input = text
                 wordFromTranslateCapture = false
-                isExampleSpeaking = true
-                if (speaker?.speak(text) { isExampleSpeaking = false } != true) {
-                    isExampleSpeaking = false
+                if (text == wordExample.en) {
+                    // The word example's own English bubble ("sleepy") --
+                    // previews what the button looks like right after a real
+                    // "how to say?" (see demoUiPhase's own comment), and
+                    // reads it in the correct English voice (englishSpeaker,
+                    // not the target-language `speaker` every other bubble
+                    // uses) rather than mispronouncing it in that accent.
+                    demoUiPhase = UiPhase.LISTENING_EN
+                    englishSpeaker?.speak(text)
+                } else {
+                    isExampleSpeaking = true
+                    if (speaker?.speak(text) { isExampleSpeaking = false } != true) {
+                        isExampleSpeaking = false
+                        demoUiPhase = null
+                    }
                 }
             },
             onOpenSettings = {
