@@ -168,15 +168,6 @@ fun UiPhase.buttonFillColor(speakingCommand: CommandKind? = null): Color {
     }
 }
 
-// Kept short -- these render in the handwritten hint beside the mic.
-private fun UiPhase.subtitle(spokenLanguage: String): String = when (this) {
-    UiPhase.IDLE -> "Tap and speak $spokenLanguage"
-    UiPhase.LISTENING_RU -> "Listening for $spokenLanguage…"
-    UiPhase.LISTENING_EN -> "Now say the English word"
-    UiPhase.SPEAKING_TRANSLATION -> "Playing the voice command…"
-    UiPhase.READING_RECOMMENDATION -> "Playing the voice command…"
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LisaScreen(
@@ -1701,23 +1692,32 @@ fun LisaScreen(
             actionRequired -> lerp(MaterialTheme.colorScheme.outlineVariant, displayPhase.buttonFillColor(speakingCommand), effectivePulse)
             else -> displayPhase.buttonFillColor(speakingCommand).copy(alpha = 0.6f)
         }
+        // Line two's half of any "Playing ..." state -- null everywhere else.
+        // Same speaker as any real command's reply, so translationSpeaking
+        // alone can't tell them apart -- speakingExampleText is what's
+        // actually set only while a quick-tips example bubble is playing
+        // (see onSpeakBubble). The word example's own translation bubble
+        // gets a more specific label than the generic examples -- it's the
+        // one case where what's playing really is a translation into the
+        // target language, worth calling out by name.
+        val playingSuffix = when {
+            displayPhase == UiPhase.SPEAKING_TRANSLATION && speakingExampleText == wordExample.translated ->
+                "${targetLanguage.displayName} translation…"
+            displayPhase == UiPhase.SPEAKING_TRANSLATION && speakingExampleText != null -> "example…"
+            displayPhase == UiPhase.SPEAKING_TRANSLATION || displayPhase == UiPhase.READING_RECOMMENDATION -> "voice command…"
+            else -> null
+        }
         val lineOneText = when {
             showingHint -> hint!!.lineOne
             plainIdle -> "Tap and speak"
             listeningRu -> "Listening for"
             listeningEn -> "Now say the word"
-            // Same speaker as any real command's reply, so
-            // translationSpeaking alone can't tell them apart --
-            // speakingExampleText is what's actually set only while a
-            // quick-tips example bubble is playing (see onSpeakBubble). The
-            // word example's own translation bubble gets a more specific
-            // label than the generic examples -- it's the one case where
-            // what's playing really is a translation into the target
-            // language, worth calling out by name.
-            displayPhase == UiPhase.SPEAKING_TRANSLATION && speakingExampleText == wordExample.translated ->
-                "Playing ${targetLanguage.displayName} translation…"
-            displayPhase == UiPhase.SPEAKING_TRANSLATION && speakingExampleText != null -> "Playing the example…"
-            else -> displayPhase.subtitle(targetLanguage.displayName)
+            // Every UiPhase is covered by one of the branches above --
+            // IDLE by showingHint/plainIdle, LISTENING_RU/LISTENING_EN by
+            // their own branches, SPEAKING_TRANSLATION/READING_RECOMMENDATION
+            // by playingSuffix -- so this never actually runs; it's just
+            // what an exhaustive `when` over plain boolean guards requires.
+            else -> ""
         }
         // "Tap" only ever shows up in line one when the caregiver actually
         // needs to tap the button (plain idle, or the demoed hint) -- never
@@ -1808,13 +1808,16 @@ fun LisaScreen(
                             plainIdle -> AnnotatedString(targetLanguage.displayName)
                             listeningRu -> AnnotatedString("${targetLanguage.displayName}…")
                             listeningEn -> AnnotatedString("In English")
+                            playingSuffix != null -> AnnotatedString(playingSuffix)
                             else -> AnnotatedString("")
                         },
                         style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = if (plainIdle || listeningRu || listeningEn) FontWeight.Bold else null,
-                        color = if (plainIdle || listeningRu || listeningEn) subtitleColor else Color.Unspecified,
+                        fontWeight = if (plainIdle || listeningRu || listeningEn || playingSuffix != null) FontWeight.Bold else null,
+                        color = if (plainIdle || listeningRu || listeningEn || playingSuffix != null) subtitleColor else Color.Unspecified,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.clickable(enabled = showingHint || plainIdle || listeningRu || listeningEn) { onToggleAssistant() },
+                        modifier = Modifier.clickable(
+                            enabled = showingHint || plainIdle || listeningRu || listeningEn || playingSuffix != null,
+                        ) { onToggleAssistant() },
                     )
                 }
             }
