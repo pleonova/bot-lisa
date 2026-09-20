@@ -1449,28 +1449,28 @@ fun LisaScreen(
         }
     }
 
-    // "How to say?" chip: text already in the field -> that IS the word to
-    // translate, same as pressing the keyboard's Search key. But if that
-    // text is only sitting there because a *previous* "how to say?" round
-    // captured and spoke it (wordFromTranslateCapture), re-running onSend()
-    // on it would just re-speak the same old word -- so clear it first.
-    // Otherwise there's nothing to translate yet: while hands-free is
-    // already running, fast-switch it into LISTENING_FOR_WORD (same as if
-    // the target-language trigger phrase had just been spoken); while IDLE,
+    // "How to say?" chip: always clears the field first and runs this
+    // command's own flow, regardless of anything already in the box or any
+    // state hands-free was already in -- while hands-free is already
+    // running, fast-switch it into LISTENING_FOR_WORD (same as if the
+    // target-language trigger phrase had just been spoken); while IDLE,
     // speak the trigger phrase aloud first -- same demo-on-tap the other
     // three command cards do -- and only then start hands-free landing
     // straight in LISTENING_FOR_WORD, so the record button lighting up
     // follows the caregiver actually hearing the command instead of firing
     // silently the instant they tap.
     fun onTranslateChipTap() {
-        if (wordFromTranslateCapture) {
-            input = ""
-            result = null
-            wordFromTranslateCapture = false
-        } else if (input.isNotBlank()) {
-            onSend()
-            return
-        }
+        // Always runs this flow itself, overriding whatever else was in the
+        // box or already happening -- previously, any leftover text in
+        // `input` (typed, or left behind by tapping a quick-tips example)
+        // made this defer to onSend() instead, silently running an
+        // unrelated expand-mode lookup -- reported live as "how to say?"
+        // popping up an unrelated related-phrases card sourced from the
+        // library. "How to say?" always means restart this specific flow,
+        // regardless of what was already going on.
+        input = ""
+        result = null
+        wordFromTranslateCapture = false
         when (assistantState) {
             SpeechAssistant.State.IDLE -> speakTriggerPhrase(translateTriggerPhrase) {
                 // The demo phrase takes a moment to play out, and this
@@ -2320,6 +2320,11 @@ fun LisaScreen(
                 idleCommandHint = demoHintFor(CommandKind.MEANING, meaningTriggerPhrase)
                 speakTriggerPhrase(meaningTriggerPhrase)
             }
+            // Both branches above already captured whatever they needed
+            // from input/lastUtterance synchronously before this runs --
+            // clearing it after is what makes every command tap reset the
+            // search box, same as "how to say?" does.
+            input = ""
         }
         fun onNextSuggestionCommand() {
             cancelStrayWordCapture()
@@ -2333,6 +2338,8 @@ fun LisaScreen(
                 idleCommandHint = demoHintFor(CommandKind.NEXT_SUGGESTION, nextSuggestionTriggerPhrase)
                 speakTriggerPhrase(nextSuggestionTriggerPhrase)
             }
+            // See onMeaningCommand's own comment on this same line.
+            input = ""
         }
         fun onAnswerCommand() {
             cancelStrayWordCapture()
@@ -2346,6 +2353,8 @@ fun LisaScreen(
                 idleCommandHint = demoHintFor(CommandKind.ANSWER, answerTriggerPhrase)
                 speakTriggerPhrase(answerTriggerPhrase)
             }
+            // See onMeaningCommand's own comment on this same line.
+            input = ""
         }
 
         InstructionsPanel(
