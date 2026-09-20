@@ -1769,9 +1769,13 @@ fun LisaScreen(
                 CurvyTapArrow(
                     color = if (showingHint) greyPulse else subtitleColor,
                     alpha = idleHintPulse,
+                    // Close enough that the tip nearly touches the button --
+                    // the arrow's own tip sits a couple dp inside its
+                    // canvas already (see CurvyTapArrow), so this doesn't
+                    // need much more than a hairline gap on top of that.
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .offset(x = 28.dp),
+                        .offset(x = 6.dp),
                 )
             }
         }
