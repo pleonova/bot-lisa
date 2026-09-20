@@ -1445,25 +1445,34 @@ fun LisaScreen(
         }
     }
 
-    // "How to say?" chip: always clears the field first and runs this
-    // command's own flow, regardless of anything already in the box or any
-    // state hands-free was already in -- while hands-free is already
-    // running, fast-switch it into LISTENING_FOR_WORD (same as if the
-    // target-language trigger phrase had just been spoken); while IDLE,
+    // "How to say?" chip: if the box already holds a Latin-script (English-
+    // looking) word, treat this tap as if that word had just been captured
+    // for real -- same as saying "how to say?" and then immediately saying
+    // it -- and translate it directly. Target-language (non-Latin) text
+    // doesn't count: "how to say?" is specifically English -> target
+    // language, so text that's already IN the target language (e.g. left in
+    // the box by tapping a quick-tips example) falls through to the normal
+    // demo+listen flow below instead of being misread as the English word --
+    // treating it as one was the earlier bug reported as "how to say? pops
+    // up an unrelated related-phrases card sourced from the library" (any
+    // non-Latin `input` makes onSend() run expand mode, not translate mode).
+    // Otherwise (blank, or non-Latin) this always clears the field first and
+    // runs this command's own flow, regardless of anything already in the
+    // box or any state hands-free was already in -- while hands-free is
+    // already running, fast-switch it into LISTENING_FOR_WORD (same as if
+    // the target-language trigger phrase had just been spoken); while IDLE,
     // speak the trigger phrase aloud first -- same demo-on-tap the other
     // three command cards do -- and only then start hands-free landing
     // straight in LISTENING_FOR_WORD, so the record button lighting up
     // follows the caregiver actually hearing the command instead of firing
     // silently the instant they tap.
     fun onTranslateChipTap() {
-        // Always runs this flow itself, overriding whatever else was in the
-        // box or already happening -- previously, any leftover text in
-        // `input` (typed, or left behind by tapping a quick-tips example)
-        // made this defer to onSend() instead, silently running an
-        // unrelated expand-mode lookup -- reported live as "how to say?"
-        // popping up an unrelated related-phrases card sourced from the
-        // library. "How to say?" always means restart this specific flow,
-        // regardless of what was already going on.
+        val looksLikeEnglish = input.isNotBlank() && input.none { it.isLetter() && it.code > 0x024F }
+        if (looksLikeEnglish) {
+            wordFromTranslateCapture = true
+            onSend()
+            return
+        }
         input = ""
         result = null
         wordFromTranslateCapture = false
