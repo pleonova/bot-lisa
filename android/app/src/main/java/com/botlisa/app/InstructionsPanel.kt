@@ -14,11 +14,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
@@ -257,8 +260,18 @@ fun InstructionsPanel(
                     // heading, description and example bubbles read as one
                     // scannable unit per step instead of blending into the
                     // grey panel and into each other.
+                    // Capped height + its own scroll, rather than growing to
+                    // fit every section -- otherwise expanding this pushed
+                    // the record button and search box off the top of the
+                    // (separately scrolling) page every time. heightIn(max)
+                    // is what makes nesting a second verticalScroll here
+                    // safe -- an unbounded one inside the page's own would
+                    // crash on infinite height constraints.
                     Column(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier
+                            .padding(12.dp)
+                            .heightIn(max = 360.dp)
+                            .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         sections.forEachIndexed { i, section ->
