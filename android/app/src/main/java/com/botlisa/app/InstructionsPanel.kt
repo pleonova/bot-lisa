@@ -56,8 +56,6 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -274,17 +272,17 @@ fun InstructionsPanel(
                     // is what makes nesting a second verticalScroll here
                     // safe -- an unbounded one inside the page's own would
                     // crash on infinite height constraints.
-                    // Measured (not just assumed) so the trailing spacer
-                    // below only ever adds exactly as much slack as the last
-                    // section actually needs to reach the top -- a flat
-                    // spacer as tall as the whole cap showed as a lot of bare
-                    // grey panel underneath the last section, including
-                    // whenever the three sections already fit under the cap
-                    // with no scrolling needed at all.
-                    val density = LocalDensity.current
-                    var sectionsHeightPx by remember { mutableStateOf(0) }
-                    var lastSectionHeightPx by remember { mutableStateOf(0) }
-                    val maxHeightPx = with(density) { QUICK_TIPS_MAX_HEIGHT.roundToPx() }
+                    // Plain scroll, clamped to the content's own natural
+                    // bounds -- no trailing spacer. A spacer that let the
+                    // last (shorter-than-the-cap) section scroll all the way
+                    // up to the top was tried, but that gap between the
+                    // section's own bottom and the viewport's bottom has
+                    // nothing to fill it once you actually scroll there --
+                    // it can only ever show as bare grey panel, which read
+                    // as a bug rather than a feature. Stopping at the
+                    // content's real end avoids that entirely, at the cost
+                    // of the last section not necessarily tucking flush to
+                    // the top.
                     Column(
                         modifier = Modifier
                             .padding(12.dp)
@@ -292,34 +290,8 @@ fun InstructionsPanel(
                             .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        // verticalScroll above always measures this at its
-                        // true, unclipped height regardless of the outer
-                        // heightIn(max) -- that's what makes it safe to read
-                        // here as "does this actually overflow the cap"
-                        // rather than something heightIn already shrank.
-                        Column(
-                            modifier = Modifier.onSizeChanged { sectionsHeightPx = it.height },
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            sections.forEachIndexed { i, section ->
-                                if (i == sections.lastIndex) {
-                                    Box(modifier = Modifier.onSizeChanged { lastSectionHeightPx = it.height }) {
-                                        SectionBlock(number = i + 1, section = section, onSpeakBubble = onSpeakBubble)
-                                    }
-                                } else {
-                                    SectionBlock(number = i + 1, section = section, onSpeakBubble = onSpeakBubble)
-                                }
-                            }
-                        }
-                        // Only once the sections actually overflow the cap
-                        // (so this panel is scrollable at all) -- otherwise
-                        // everything's already fully visible and there's
-                        // nothing to scroll the last section up out of.
-                        if (sectionsHeightPx > maxHeightPx) {
-                            val spacerHeight = with(density) {
-                                (maxHeightPx - lastSectionHeightPx).coerceAtLeast(0).toDp()
-                            }
-                            Spacer(Modifier.height(spacerHeight))
+                        sections.forEachIndexed { i, section ->
+                            SectionBlock(number = i + 1, section = section, onSpeakBubble = onSpeakBubble)
                         }
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
