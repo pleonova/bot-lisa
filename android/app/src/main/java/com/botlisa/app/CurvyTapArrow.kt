@@ -28,16 +28,17 @@ fun CurvyTapArrow(color: Color, alpha: Float, modifier: Modifier = Modifier) {
     Canvas(modifier = modifier.size(width = 44.dp, height = 150.dp)) {
         val w = size.width
         val h = size.height
-        // Tail sits low and slightly right (roughly level with the text),
-        // the curve bows WAY out to the right through the middle (control1
-        // past the canvas's own right edge) for a real hook rather than a
-        // gentle bend, and the tip ends close to the canvas's left edge, near
-        // the button's own vertical center (not its top edge -- the button
-        // occupies roughly the top 70% of this whole block, so its center
-        // lands around 0.35 of the way down).
-        val tail = Offset(w * 0.68f, h * 0.92f)
-        val control1 = Offset(w * 1.35f, h * 0.60f)
-        val control2 = Offset(w * 0.55f, h * 0.42f)
+        // Tail sits well above the canvas's own bottom edge -- leaving clear
+        // white space below it rather than crowding the text -- and
+        // slightly right, the curve bows WAY out to the right through the
+        // middle (control1 past the canvas's own right edge) for a real
+        // hook rather than a gentle bend, and the tip ends close to the
+        // canvas's left edge, near the button's own vertical center (not
+        // its top edge -- the button occupies roughly the top 70% of this
+        // whole block, so its center lands around 0.35 of the way down).
+        val tail = Offset(w * 0.68f, h * 0.74f)
+        val control1 = Offset(w * 1.35f, h * 0.52f)
+        val control2 = Offset(w * 0.55f, h * 0.40f)
         val tip = Offset(w * 0.02f, h * 0.34f)
         val path = Path().apply {
             moveTo(tail.x, tail.y)
