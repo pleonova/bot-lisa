@@ -2357,7 +2357,11 @@ fun LisaScreen(
             activeSpeakingCommand = CommandKind.MEANING
             if (hasUtteranceToActOn) {
                 idleCommandHint = null
-                speakMeaningOfLast()
+                // Reads the trigger phrase aloud first, same as tapping this
+                // command with nothing to act on does -- so tapping (or
+                // saying) a command always reads it back, whether or not it
+                // goes on to do something real.
+                speakTriggerPhrase(meaningTriggerPhrase) { speakMeaningOfLast() }
             } else {
                 idleCommandHint = demoHintFor(CommandKind.MEANING, meaningTriggerPhrase)
                 speakTriggerPhrase(meaningTriggerPhrase)
@@ -2375,7 +2379,8 @@ fun LisaScreen(
             activeSpeakingCommand = CommandKind.NEXT_SUGGESTION
             if (hasUtteranceToActOn) {
                 idleCommandHint = null
-                requestWhatElse()
+                // See onMeaningCommand's own comment on this same pattern.
+                speakTriggerPhrase(nextSuggestionTriggerPhrase) { requestWhatElse() }
             } else {
                 idleCommandHint = demoHintFor(CommandKind.NEXT_SUGGESTION, nextSuggestionTriggerPhrase)
                 speakTriggerPhrase(nextSuggestionTriggerPhrase)
@@ -2390,7 +2395,8 @@ fun LisaScreen(
             activeSpeakingCommand = CommandKind.ANSWER
             if (hasUtteranceToActOn) {
                 idleCommandHint = null
-                requestAnswerSuggestions()
+                // See onMeaningCommand's own comment on this same pattern.
+                speakTriggerPhrase(answerTriggerPhrase) { requestAnswerSuggestions() }
             } else {
                 idleCommandHint = demoHintFor(CommandKind.ANSWER, answerTriggerPhrase)
                 speakTriggerPhrase(answerTriggerPhrase)
