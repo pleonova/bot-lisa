@@ -1649,7 +1649,7 @@ fun LisaScreen(
                             lerp(MaterialTheme.colorScheme.outlineVariant, uiPhase.buttonFillColor(speakingCommand), idleHintPulse)
                         else -> uiPhase.buttonFillColor(speakingCommand).copy(alpha = 0.6f)
                     },
-                    fontWeight = if (actionRequired) idleHintWeight else FontWeight.Light,
+                    fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
                     // Same action as tapping the button itself -- a bigger,
                     // easier-to-hit target for starting (or stopping)
