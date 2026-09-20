@@ -93,7 +93,10 @@ class SpeechAssistant(
      */
     private val isMuted: () -> Boolean = { false },
     private val onStateChanged: (State) -> Unit,
-    private val onError: (String) -> Unit,
+    // isNotice: true for benign, expected stops (e.g. the silence watchdog)
+    // that shouldn't read as alarming; false for genuine errors (permission
+    // missing, recognizer failure, ...) -- see NoticeCard vs WarningCard.
+    private val onError: (message: String, isNotice: Boolean) -> Unit,
 ) {
     enum class State { IDLE, LISTENING_DEFAULT, LISTENING_FOR_WORD }
 
@@ -131,12 +134,12 @@ class SpeechAssistant(
     private var lastPartialTranscriptAtMs = 0L
 
     // Fires if resetSilenceTimeout() isn't called again within
-    // SILENCE_TIMEOUT_MS -- i.e. ten minutes pass with no speech (not even
+    // SILENCE_TIMEOUT_MS -- i.e. three minutes pass with no speech (not even
     // an unrecognised partial) detected at all.
     private val silenceWatchdog = Runnable {
         if (!stoppedByUser) {
             stop()
-            onError("Lisa Assistant stopped listening after 10 minutes of silence.")
+            onError("Lisa Assistant stopped listening after 3 minutes of silence.", true)
         }
     }
 
@@ -179,7 +182,7 @@ class SpeechAssistant(
      */
     fun start(listenForWordFirst: Boolean = false) {
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            onError("Speech recognition isn't available on this device.")
+            onError("Speech recognition isn't available on this device.", false)
             return
         }
         stoppedByUser = false
@@ -278,7 +281,7 @@ class SpeechAssistant(
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 200L)
         }
         runCatching { recognizer?.startListening(intent) }
-            .onFailure { onError("Couldn't start listening: ${it.message}") }
+            .onFailure { onError("Couldn't start listening: ${it.message}", false) }
     }
 
     private fun rearm() {
@@ -497,7 +500,7 @@ class SpeechAssistant(
                     consecutiveErrors++
                     if (consecutiveErrors >= 6) {
                         consecutiveErrors = 0
-                        onError("Lisa Assistant stopped listening (error code $error). Tap to restart.")
+                        onError("Lisa Assistant stopped listening (error code $error). Tap to restart.", false)
                         stoppedByUser = true
                         state = State.IDLE
                     } else {
@@ -506,7 +509,7 @@ class SpeechAssistant(
                     }
                 }
                 else -> {
-                    onError("Lisa Assistant stopped listening (error code $error). Tap to restart.")
+                    onError("Lisa Assistant stopped listening (error code $error). Tap to restart.", false)
                     stoppedByUser = true
                     state = State.IDLE
                 }

@@ -1073,6 +1073,11 @@ fun LisaScreen(
     val handleNextSuggestionRequest = rememberUpdatedState { requestWhatElse() }
 
     var assistantError by remember { mutableStateOf<String?>(null) }
+    // Benign, expected stops (currently just the silence watchdog) -- kept
+    // separate from assistantError so it renders as a neutral NoticeCard
+    // instead of WarningCard's alarming red. See SpeechAssistant's onError
+    // isNotice param.
+    var assistantNotice by remember { mutableStateOf<String?>(null) }
 
     // Header subtitle + central-button colour/icon. derivedStateOf so more
     // inputs can fold in without changing callers -- takes over from the
@@ -1305,7 +1310,9 @@ fun LisaScreen(
             onTranscript = { handleTranscript.value(it) },
             isMuted = { translationSpeaking || relatedSpeaking || englishSpeaking },
             onStateChanged = { assistantState = it },
-            onError = { assistantError = it },
+            onError = { message, isNotice ->
+                if (isNotice) assistantNotice = message else assistantError = message
+            },
         )
     }
     // Hands-free needs a foreground service running alongside SpeechAssistant
@@ -1314,6 +1321,7 @@ fun LisaScreen(
     fun startHandsFree(listenForWordFirst: Boolean = false) {
         idleCommandHint = null
         assistantError = null
+        assistantNotice = null
         // Drop focus from the input field if switching straight from typing
         // mode -- handleTranscript guards writes on !inputFocused (so live
         // transcript updates never clobbers active typing), and that focus
@@ -1494,6 +1502,7 @@ fun LisaScreen(
         onDeviceRelated = null
         errorText = null
         assistantError = null
+        assistantNotice = null
         suggestionIndex = 0
         showInstructions = true
         showSettings = false
@@ -1732,6 +1741,9 @@ fun LisaScreen(
 
         assistantError?.let {
             WarningCard(it)
+        }
+        assistantNotice?.let {
+            NoticeCard(it)
         }
 
         // Shared field: the caregiver types here, AND Lisa Assistant's live
