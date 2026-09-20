@@ -337,6 +337,35 @@ set, which it isn't.
   repeats are free, and promote frequently-hit generations into the
   curated library.
 
+**Konkani support (ML Kit doesn't cover it).** Google ML Kit's on-device
+translator — what every non-Russian target language uses today
+(`OnDeviceTranslator.kt`) — has a fixed ~59-language set that excludes
+Konkani, so it can't be added the same way Hindi/Marathi were (confirmed by
+inspecting the SDK's `TranslateLanguage` constants — no Konkani entry).
+Two free translation backends exist, both requiring a new network-based
+integration rather than an on-device model swap:
+
+- **Bhashini API** — the Indian government's free MT service (National
+  Language Translation Mission), purpose-built for Konkani and India's
+  other scheduled languages. Simple REST call from the backend (same shape
+  as `llm_client.py`'s Claude call), no billing account needed. Trade-off:
+  less mature/stable than a major cloud provider.
+- **NLLB-200 on-device** — Meta's open-source translation model, explicitly
+  trained on Konkani (`gom_Deva`) as one of its 200 target languages. The
+  distilled 600M variant, quantized via CTranslate2, is plausibly
+  phone-sized, but it's a separate on-device ML effort from the Qwen work
+  in `llm_lab/` (a different runtime — CTranslate2/ONNX, not `llama.cpp` —
+  plus its own model export and phased validation), not a quick addition.
+
+Either path still leaves TTS and mic dictation unsolved: no major TTS
+engine (Android's built-in, Google Cloud) or speech recognizer has Konkani
+coverage, so Konkani would be text-only regardless of which translation
+backend is chosen. (Google Cloud Translation API also supports Konkani and
+was considered — same integration shape as Bhashini — but unlike Bhashini
+it requires a billing-account-linked GCP project, so it's not listed as a
+free option above even though its free monthly tier would likely cover
+this app's usage.)
+
 **Other.**
 
 - **Swap primary ↔ secondary language** — flip the "from" and "to"; today
