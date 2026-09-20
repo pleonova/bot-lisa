@@ -66,6 +66,11 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+// Capped height of the expanded sections list (see InstructionsPanel below)
+// -- also reused as the trailing spacer's height so the last section can
+// always be scrolled all the way up to the top, whatever its own height is.
+private val QUICK_TIPS_MAX_HEIGHT = 360.dp
+
 /**
  * Collapsible "Use voice commands" card. Tap the header to expand three
  * numbered, colour-coded sections -- forgotten word (teal), while speaking
@@ -270,13 +275,26 @@ fun InstructionsPanel(
                     Column(
                         modifier = Modifier
                             .padding(12.dp)
-                            .heightIn(max = 360.dp)
+                            .heightIn(max = QUICK_TIPS_MAX_HEIGHT)
                             .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         sections.forEachIndexed { i, section ->
                             SectionBlock(number = i + 1, section = section, onSpeakBubble = onSpeakBubble)
                         }
+                        // A plain scroll only lets you scroll until the
+                        // CONTENT's bottom reaches the viewport's bottom --
+                        // if the last section is shorter than the viewport
+                        // (the common case), that stops short of ever
+                        // bringing its own top up to the viewport's top,
+                        // leaving it stuck lower down with earlier sections'
+                        // tail end still showing above it. A trailing spacer
+                        // as tall as the viewport itself is always more than
+                        // enough slack to let the last section scroll all
+                        // the way up, whatever its actual height turns out
+                        // to be, at the cost of some possible extra blank
+                        // space below it once it's there.
+                        Spacer(Modifier.height(QUICK_TIPS_MAX_HEIGHT))
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Row(
