@@ -74,8 +74,8 @@ fun SettingsScreen(
     // that hand-rolled scroll-offset math did (it was landing at the bottom
     // of the page instead of at the section).
     expandVoiceCommandsInitially: Boolean = false,
-    pulseFreezeEnabled: Boolean = false,
-    onPulseFreezeEnabledChange: (Boolean) -> Unit = {},
+    pulseEnabled: Boolean = true,
+    onPulseEnabledChange: (Boolean) -> Unit = {},
 ) {
     // LocalContext.current retrieves the Context for use inside a
     // Composable -- Compose functions don't take Context as an ordinary
@@ -157,14 +157,14 @@ fun SettingsScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Freeze pulsing text on tap", style = MaterialTheme.typography.bodyLarge)
+                    Text("Pulsing record-button text", style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        "Tap beside the record button (not on it) to stop its text from pulsing and hold it in the darker color. Tap again to resume.",
+                        "The text under the record button animates to draw attention. Turn off to keep it in its solid color instead.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Switch(checked = pulseFreezeEnabled, onCheckedChange = onPulseFreezeEnabledChange)
+                Switch(checked = pulseEnabled, onCheckedChange = onPulseEnabledChange)
             }
         }
 

@@ -488,14 +488,11 @@ fun LisaScreen(
     // the caregiver does anything real: taps the record button, sends a
     // lookup, or a genuine command starts speaking.
     var demoUiPhase by remember { mutableStateOf<UiPhase?>(null) }
-    // Settings toggle (off by default) -- while on, tapping the blank space
-    // beside the record button (left or right of the button/subtitle/arrow,
-    // not on any of them) freezes the subtitle's pulse at its darker/final
-    // color instead of continuing to animate. Tapping there again resumes
-    // it. See pulseFrozen below for the actual frozen/not state, and
-    // PulseFreezeConfig for persistence.
-    var pulseFreezeEnabled by remember { mutableStateOf(PulseFreezeConfig.isEnabled(context)) }
-    var pulseFrozen by remember { mutableStateOf(false) }
+    // Settings toggle, on by default -- whether the record-button subtitle
+    // pulses at all. Off just holds it at its darker/final color instead of
+    // animating (see effectivePulse below). Set only from Settings -- see
+    // PulseConfig for persistence.
+    var pulseEnabled by remember { mutableStateOf(PulseConfig.isEnabled(context)) }
     // Which related-phrase row is currently being read (null = none). Cleared
     // by phraseSpeaker's onSpeakingChanged when playback ends.
     var speakingIndex by remember { mutableStateOf<Int?>(null) }
@@ -1442,7 +1439,6 @@ fun LisaScreen(
 
     fun onToggleAssistant() {
         demoUiPhase = null
-        pulseFrozen = false
         if (assistantState != SpeechAssistant.State.IDLE) {
             stopHandsFree()
             return
@@ -1524,7 +1520,6 @@ fun LisaScreen(
         stopHandsFree()
         idleCommandHint = null
         demoUiPhase = null
-        pulseFrozen = false
         // Drop focus so the field isn't left selected -- a focused field
         // hides the "start typing" helper under the buttons.
         focusManager.clearFocus()
@@ -1577,11 +1572,10 @@ fun LisaScreen(
                 apiKey = apiKey,
                 onApiKeyChange = ::onApiKeyChange,
                 expandVoiceCommandsInitially = openSettingsAtVoiceCommands,
-                pulseFreezeEnabled = pulseFreezeEnabled,
-                onPulseFreezeEnabledChange = {
-                    pulseFreezeEnabled = it
-                    pulseFrozen = false
-                    PulseFreezeConfig.setEnabled(context, it)
+                pulseEnabled = pulseEnabled,
+                onPulseEnabledChange = {
+                    pulseEnabled = it
+                    PulseConfig.setEnabled(context, it)
                 },
             )
         } else {
@@ -1650,11 +1644,11 @@ fun LisaScreen(
         // Bold throughout -- only the color pulses (grey to grey, or grey to
         // a command's accent); no thin end to the pulse at all.
         val idleHintWeight = FontWeight.Bold
-        // Frozen at 1f (idleHintPulse's darker/final end -- see its own lerp
-        // calls below) rather than actually stopping the underlying
-        // animation, which keeps running harmlessly in the background; only
-        // what's actually drawn reads as frozen.
-        val effectivePulse = if (pulseFrozen) 1f else idleHintPulse
+        // Held at 1f (idleHintPulse's darker/final end -- see its own lerp
+        // calls below) when the Settings toggle is off, rather than actually
+        // stopping the underlying animation, which keeps running harmlessly
+        // in the background; only what's actually drawn reads as static.
+        val effectivePulse = if (pulseEnabled) idleHintPulse else 1f
         // demoUiPhase, when set, previews a phase for the button/text below
         // without touching the real uiPhase everything else (mic muting,
         // SpeechAssistant, ...) still relies on.
@@ -1732,22 +1726,24 @@ fun LisaScreen(
         // drift out of sync with lineOneText above.
         val showTapArrow = "Tap" in lineOneText
         // Full width so there's blank space on either side of the (much
-        // narrower) button/text/arrow block below to actually tap -- see
-        // pulseFreezeEnabled's own comment. No-op Modifier when the Settings
-        // toggle is off, so this never steals a tap from anything else.
+        // narrower) button/text/arrow block below to actually tap -- tapping
+        // there stops whatever's currently going on (hands-free listening,
+        // or any of the three TTS speakers), the same as tapping the record
+        // button itself while it's active would, but reachable without
+        // having to aim for the button specifically.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .then(
-                    if (pulseFreezeEnabled) {
-                        Modifier.clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                        ) { pulseFrozen = !pulseFrozen }
-                    } else {
-                        Modifier
-                    },
-                ),
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) {
+                    demoUiPhase = null
+                    if (assistantState != SpeechAssistant.State.IDLE) stopHandsFree()
+                    speaker?.stop()
+                    phraseSpeaker?.stop()
+                    englishSpeaker?.stop()
+                },
             contentAlignment = Alignment.Center,
         ) {
             Box {
