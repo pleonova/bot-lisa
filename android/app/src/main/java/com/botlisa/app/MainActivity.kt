@@ -372,6 +372,23 @@ fun LisaScreen(
     // mid-sentence.
     var pendingUtterance by remember { mutableStateOf("") }
 
+    // Bumped by handleTranscript below on every live partial that still
+    // belongs to a not-yet-committed pendingUtterance -- i.e. the caregiver
+    // is still actively talking through a follow-on recognizer session, not
+    // just pausing between them. The debounce LaunchedEffect(pendingUtterance,
+    // pendingUtteranceActivity) below restarts its wait on either changing,
+    // so a session that's still mid-sentence (still producing partials, no
+    // final yet) keeps deferring the commit instead of only reacting to
+    // *finalized* fragments. Without this, a follow-on session running
+    // longer than the debounce window -- entirely plausible for anything
+    // past a couple of words -- got cut off mid-utterance: reported live as
+    // "Lisa," (the wake-word fragment alone) committing as its own
+    // lastUtterance while the rest of the sentence was still being spoken,
+    // which then landed as a second, separate lastUtterance instead of one
+    // complete line, and visibly dropped the "Lisa" prefix from the field
+    // the instant that premature commit reset pendingUtterance back to "".
+    var pendingUtteranceActivity by remember { mutableStateOf(0) }
+
     // On-device "что ещё" suggestions for lastUtterance, prefetched as soon
     // as it's heard (see the LaunchedEffect below) so there's no dead air
     // when the next-suggestion trigger actually fires. Null means "not
@@ -1135,7 +1152,7 @@ fun LisaScreen(
     // breath pauses) collapses into a single commit instead of firing -- and
     // immediately cancelling -- the eager "what else?" generation below once
     // per fragment.
-    LaunchedEffect(pendingUtterance) {
+    LaunchedEffect(pendingUtterance, pendingUtteranceActivity) {
         if (pendingUtterance.isBlank()) return@LaunchedEffect
         delay(800)
         lastUtterance = pendingUtterance
@@ -1241,10 +1258,14 @@ fun LisaScreen(
             // not-yet-committed accumulation lastUtterance's own debounce
             // uses (see its declaration above) -- keeps the field showing
             // the whole sentence-so-far across that restart instead.
-            input = if (assistantState == SpeechAssistant.State.LISTENING_DEFAULT && pendingUtterance.isNotBlank()) {
-                "$pendingUtterance $text"
+            if (assistantState == SpeechAssistant.State.LISTENING_DEFAULT && pendingUtterance.isNotBlank()) {
+                input = "$pendingUtterance $text"
+                // Still talking through this follow-on session -- keep the
+                // debounce below from committing pendingUtterance out from
+                // under it. See pendingUtteranceActivity's own comment.
+                pendingUtteranceActivity++
             } else {
-                text
+                input = text
             }
             wordFromTranslateCapture = false
         }
