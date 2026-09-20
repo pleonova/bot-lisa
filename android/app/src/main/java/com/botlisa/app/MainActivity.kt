@@ -1622,141 +1622,156 @@ fun LisaScreen(
         // Bold throughout -- only the color pulses (grey to grey, or grey to
         // a command's accent); no thin end to the pulse at all.
         val idleHintWeight = FontWeight.Bold
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            // Tighter than the old "centered between button and search box"
-            // spacing -- this hint reads as belonging to the button right
-            // above it, not as a floating line hovering between the two.
-            verticalArrangement = Arrangement.spacedBy(0.dp),
-            // No extra bottom padding of its own -- the outer page Column's
-            // own 14dp gap to the search box is enough on its own; stacking
-            // more on top of that read as too much space once this block
-            // always reserves a full two lines of height (see the Column
-            // below).
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-        ) {
-            // demoUiPhase, when set, previews a phase for the button/text
-            // below without touching the real uiPhase everything else
-            // (mic muting, SpeechAssistant, ...) still relies on.
-            val displayPhase = demoUiPhase ?: uiPhase
-            AssistantButton(
-                phase = displayPhase,
-                onClick = { onToggleAssistant() },
-                speakingCommand = speakingCommand,
-            )
-            // Pulses (bold, grey -> a color) exactly while the phase needs the
-            // caregiver to actually DO something -- tap to start (IDLE), or
-            // speak (LISTENING_RU/LISTENING_EN) -- so the CTA keeps drawing
-            // the eye. Once Lisa herself is the one talking
-            // (SPEAKING_TRANSLATION/READING_RECOMMENDATION) nothing is being
-            // asked of the caregiver, so it settles to a plain, non-bold,
-            // lightly-tinted line instead of continuing to pulse at them.
-            // Every color here is drawn straight from the app's own palette
-            // (MaterialTheme.colorScheme -- see Theme.kt) rather than a
-            // one-off mixed shade: outlineVariant is the app's own "light
-            // grey" (already used for the idle button outline), onSurfaceVariant
-            // its "dark grey" (already used for every other muted/hint
-            // text), and the button's own fill color for whichever phase/
-            // command this is (buttonFillColor()) is the "correct color".
-            val actionRequired = displayPhase != UiPhase.SPEAKING_TRANSLATION && displayPhase != UiPhase.READING_RECOMMENDATION
-            // idleCommandHint (set by onMeaningCommand()/
-            // onNextSuggestionCommand()/onAnswerCommand() below when a tap
-            // only played a demo) takes over the idle hint until the
-            // caregiver actually starts hands-free or resets -- teaches how
-            // to use the command that was just demoed instead of repeating
-            // the generic "Tap and speak $language". Its own two lines: the
-            // static instruction, then "then say [phrase]" -- both pulse the
-            // same grey-to-grey as the base hint below, except the phrase
-            // itself, which pulses grey to that command's own accent color.
-            val hint = idleCommandHint
-            val showingHint = displayPhase == UiPhase.IDLE && hint != null
-            // Plain idle, no demoed command yet -- "Tap and speak" /
-            // "$language" across the two reserved lines (below) instead of
-            // running the language name onto the end of line one, so it
-            // doesn't get cut off centered against a long language name on
-            // narrower screens.
-            val plainIdle = displayPhase == UiPhase.IDLE && hint == null
-            // Same idea as plainIdle above -- "Listening for" / "$language…"
-            // across the two reserved lines instead of running long onto the
-            // end of one line.
-            val listeningRu = displayPhase == UiPhase.LISTENING_RU
-            // Same idea again -- "Now say the word" / "In English".
-            val listeningEn = displayPhase == UiPhase.LISTENING_EN
-            val greyPulse = lerp(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.onSurfaceVariant, idleHintPulse)
-            // Shared by both lines below whenever they're not the demoed
-            // hint -- so the plain subtitle's color logic lives in exactly
-            // one place instead of being repeated (and possibly drifting)
-            // between line one and line two.
-            val subtitleColor = when {
-                displayPhase == UiPhase.IDLE -> greyPulse
-                actionRequired -> lerp(MaterialTheme.colorScheme.outlineVariant, displayPhase.buttonFillColor(speakingCommand), idleHintPulse)
-                else -> displayPhase.buttonFillColor(speakingCommand).copy(alpha = 0.6f)
-            }
-            // One shared Text for line one -- whether that's the demoed
-            // hint's own instruction or the phase's plain subtitle -- so its
-            // styling can never drift between the two instead of each
-            // keeping its own copy. Line two always renders too (blank, same
-            // style, when there's no "then say [phrase]" to show) rather
-            // than being conditionally omitted: an empty Text still claims a
-            // full line's height, so the search box below stays put no
-            // matter which state this is -- see the screenshots that
-            // prompted this, where the search box visibly jumped down only
-            // while the two-line hint was showing.
-            // Its own tight spacing between the two lines themselves,
-            // separate from the outer Column's spacedBy above (which only
-            // controls the button-to-text gap) -- reduced well below that,
-            // since these two lines read as one continuous hint rather than
-            // two things that need visual breathing room between them.
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                Text(
-                    when {
-                        showingHint -> hint!!.lineOne
-                        plainIdle -> "Tap and speak"
-                        listeningRu -> "Listening for"
-                        listeningEn -> "Now say the word"
-                        // Same speaker as any real command's reply, so
-                        // translationSpeaking alone can't tell them apart --
-                        // isExampleSpeaking is what's actually set only while
-                        // a quick-tips example bubble is playing (see
-                        // onSpeakBubble).
-                        displayPhase == UiPhase.SPEAKING_TRANSLATION && isExampleSpeaking -> "Playing the example…"
-                        else -> displayPhase.subtitle(targetLanguage.displayName)
-                    },
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = if (showingHint) greyPulse else subtitleColor,
-                    textAlign = TextAlign.Center,
-                    // Same action as tapping the button itself -- a bigger,
-                    // easier-to-hit target for starting (or stopping)
-                    // hands-free than the 84dp circle alone.
-                    modifier = Modifier.clickable { onToggleAssistant() },
+        // demoUiPhase, when set, previews a phase for the button/text below
+        // without touching the real uiPhase everything else (mic muting,
+        // SpeechAssistant, ...) still relies on.
+        val displayPhase = demoUiPhase ?: uiPhase
+        // Pulses (bold, grey -> a color) exactly while the phase needs the
+        // caregiver to actually DO something -- tap to start (IDLE), or
+        // speak (LISTENING_RU/LISTENING_EN) -- so the CTA keeps drawing
+        // the eye. Once Lisa herself is the one talking
+        // (SPEAKING_TRANSLATION/READING_RECOMMENDATION) nothing is being
+        // asked of the caregiver, so it settles to a plain, non-bold,
+        // lightly-tinted line instead of continuing to pulse at them.
+        // Every color here is drawn straight from the app's own palette
+        // (MaterialTheme.colorScheme -- see Theme.kt) rather than a
+        // one-off mixed shade: outlineVariant is the app's own "light
+        // grey" (already used for the idle button outline), onSurfaceVariant
+        // its "dark grey" (already used for every other muted/hint
+        // text), and the button's own fill color for whichever phase/
+        // command this is (buttonFillColor()) is the "correct color".
+        val actionRequired = displayPhase != UiPhase.SPEAKING_TRANSLATION && displayPhase != UiPhase.READING_RECOMMENDATION
+        // idleCommandHint (set by onMeaningCommand()/
+        // onNextSuggestionCommand()/onAnswerCommand() below when a tap
+        // only played a demo) takes over the idle hint until the
+        // caregiver actually starts hands-free or resets -- teaches how
+        // to use the command that was just demoed instead of repeating
+        // the generic "Tap and speak $language". Its own two lines: the
+        // static instruction, then "then say [phrase]" -- both pulse the
+        // same grey-to-grey as the base hint below, except the phrase
+        // itself, which pulses grey to that command's own accent color.
+        val hint = idleCommandHint
+        val showingHint = displayPhase == UiPhase.IDLE && hint != null
+        // Plain idle, no demoed command yet -- "Tap and speak" /
+        // "$language" across the two reserved lines (below) instead of
+        // running the language name onto the end of line one, so it
+        // doesn't get cut off centered against a long language name on
+        // narrower screens.
+        val plainIdle = displayPhase == UiPhase.IDLE && hint == null
+        // Same idea as plainIdle above -- "Listening for" / "$language…"
+        // across the two reserved lines instead of running long onto the
+        // end of one line.
+        val listeningRu = displayPhase == UiPhase.LISTENING_RU
+        // Same idea again -- "Now say the word" / "In English".
+        val listeningEn = displayPhase == UiPhase.LISTENING_EN
+        val greyPulse = lerp(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.onSurfaceVariant, idleHintPulse)
+        // Shared by both lines below whenever they're not the demoed
+        // hint -- so the plain subtitle's color logic lives in exactly
+        // one place instead of being repeated (and possibly drifting)
+        // between line one and line two.
+        val subtitleColor = when {
+            displayPhase == UiPhase.IDLE -> greyPulse
+            actionRequired -> lerp(MaterialTheme.colorScheme.outlineVariant, displayPhase.buttonFillColor(speakingCommand), idleHintPulse)
+            else -> displayPhase.buttonFillColor(speakingCommand).copy(alpha = 0.6f)
+        }
+        val lineOneText = when {
+            showingHint -> hint!!.lineOne
+            plainIdle -> "Tap and speak"
+            listeningRu -> "Listening for"
+            listeningEn -> "Now say the word"
+            // Same speaker as any real command's reply, so
+            // translationSpeaking alone can't tell them apart --
+            // isExampleSpeaking is what's actually set only while
+            // a quick-tips example bubble is playing (see
+            // onSpeakBubble).
+            displayPhase == UiPhase.SPEAKING_TRANSLATION && isExampleSpeaking -> "Playing the example…"
+            else -> displayPhase.subtitle(targetLanguage.displayName)
+        }
+        // "Tap" only ever shows up in line one when the caregiver actually
+        // needs to tap the button (plain idle, or the demoed hint) -- never
+        // while listening or while Lisa's talking -- so checking the text
+        // itself, rather than re-deriving which phases say "Tap", can't
+        // drift out of sync with lineOneText above.
+        val showTapArrow = "Tap" in lineOneText
+        Box(modifier = Modifier.align(Alignment.CenterHorizontally)) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                // Tighter than the old "centered between button and search
+                // box" spacing -- this hint reads as belonging to the
+                // button right above it, not as a floating line hovering
+                // between the two.
+                verticalArrangement = Arrangement.spacedBy(0.dp),
+            ) {
+                AssistantButton(
+                    phase = displayPhase,
+                    onClick = { onToggleAssistant() },
+                    speakingCommand = speakingCommand,
                 )
-                Text(
-                    when {
-                        showingHint ->
-                            buildAnnotatedString {
-                                withStyle(SpanStyle(color = greyPulse, fontWeight = idleHintWeight)) {
-                                    append("then say ")
+                // One shared Text for line one -- whether that's the demoed
+                // hint's own instruction or the phase's plain subtitle -- so
+                // its styling can never drift between the two instead of
+                // each keeping its own copy. Line two always renders too
+                // (blank, same style, when there's no "then say [phrase]"
+                // to show) rather than being conditionally omitted: an
+                // empty Text still claims a full line's height, so the
+                // search box below stays put no matter which state this is
+                // -- see the screenshots that prompted this, where the
+                // search box visibly jumped down only while the two-line
+                // hint was showing.
+                // Its own tight spacing between the two lines themselves,
+                // separate from the outer Column's spacedBy above (which
+                // only controls the button-to-text gap) -- reduced well
+                // below that, since these two lines read as one continuous
+                // hint rather than two things that need visual breathing
+                // room between them.
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    Text(
+                        lineOneText,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = if (showingHint) greyPulse else subtitleColor,
+                        textAlign = TextAlign.Center,
+                        // Same action as tapping the button itself -- a
+                        // bigger, easier-to-hit target for starting (or
+                        // stopping) hands-free than the 84dp circle alone.
+                        modifier = Modifier.clickable { onToggleAssistant() },
+                    )
+                    Text(
+                        when {
+                            showingHint ->
+                                buildAnnotatedString {
+                                    withStyle(SpanStyle(color = greyPulse, fontWeight = idleHintWeight)) {
+                                        append("then say ")
+                                    }
+                                    withStyle(
+                                        SpanStyle(
+                                            color = lerp(MaterialTheme.colorScheme.outlineVariant, hint!!.kind.accentColor(), idleHintPulse),
+                                            fontWeight = idleHintWeight,
+                                        ),
+                                    ) {
+                                        append("“${hint.phrase}”")
+                                    }
                                 }
-                                withStyle(
-                                    SpanStyle(
-                                        color = lerp(MaterialTheme.colorScheme.outlineVariant, hint!!.kind.accentColor(), idleHintPulse),
-                                        fontWeight = idleHintWeight,
-                                    ),
-                                ) {
-                                    append("“${hint.phrase}”")
-                                }
-                            }
-                        plainIdle -> AnnotatedString(targetLanguage.displayName)
-                        listeningRu -> AnnotatedString("${targetLanguage.displayName}…")
-                        listeningEn -> AnnotatedString("In English")
-                        else -> AnnotatedString("")
-                    },
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = if (plainIdle || listeningRu || listeningEn) FontWeight.Bold else null,
-                    color = if (plainIdle || listeningRu || listeningEn) subtitleColor else Color.Unspecified,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.clickable(enabled = showingHint || plainIdle || listeningRu || listeningEn) { onToggleAssistant() },
+                            plainIdle -> AnnotatedString(targetLanguage.displayName)
+                            listeningRu -> AnnotatedString("${targetLanguage.displayName}…")
+                            listeningEn -> AnnotatedString("In English")
+                            else -> AnnotatedString("")
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = if (plainIdle || listeningRu || listeningEn) FontWeight.Bold else null,
+                        color = if (plainIdle || listeningRu || listeningEn) subtitleColor else Color.Unspecified,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.clickable(enabled = showingHint || plainIdle || listeningRu || listeningEn) { onToggleAssistant() },
+                    )
+                }
+            }
+            if (showTapArrow) {
+                CurvyTapArrow(
+                    color = if (showingHint) greyPulse else subtitleColor,
+                    alpha = idleHintPulse,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .offset(x = 28.dp),
                 )
             }
         }
