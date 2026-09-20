@@ -69,33 +69,22 @@ fun CommandChips(
     // fills up (like CSS flex-wrap) -- unlike Row, which would just overflow
     // or squeeze everything onto one line.
     AnimatedVisibility(visible = items.isNotEmpty(), modifier = modifier) {
-        Column {
-            Text(
-                "Voice Commands",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(10.dp))
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                maxItemsInEachRow = 2,
-            ) {
-                items.forEach { spec ->
-                    CommandItem(spec, modifier = Modifier.weight(1f))
-                }
-                // Keep every chip half-width: with an odd count the last chip
-                // would otherwise stretch across the whole row and its icon
-                // would sit centre-screen instead of lining up with the column
-                // above it. A spacer fills the empty half so "what else?" lands
-                // in the same spot whether or not "how to answer?" follows it.
-                if (items.size % 2 == 1) {
-                    Spacer(Modifier.weight(1f))
-                }
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            maxItemsInEachRow = 2,
+        ) {
+            items.forEach { spec ->
+                CommandItem(spec, modifier = Modifier.weight(1f))
+            }
+            // Keep every chip half-width: with an odd count the last chip
+            // would otherwise stretch across the whole row and its icon
+            // would sit centre-screen instead of lining up with the column
+            // above it. A spacer fills the empty half so "what else?" lands
+            // in the same spot whether or not "how to answer?" follows it.
+            if (items.size % 2 == 1) {
+                Spacer(Modifier.weight(1f))
             }
         }
     }
