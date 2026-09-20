@@ -41,6 +41,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
@@ -1610,51 +1611,61 @@ fun LisaScreen(
             // same grey-to-grey as the base hint below, except the phrase
             // itself, which pulses grey to that command's own accent color.
             val hint = idleCommandHint
-            if (uiPhase == UiPhase.IDLE && hint != null) {
-                val greyPulse = lerp(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.onSurfaceVariant, idleHintPulse)
+            val showingHint = uiPhase == UiPhase.IDLE && hint != null
+            val greyPulse = lerp(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.onSurfaceVariant, idleHintPulse)
+            // One shared Text for line one -- whether that's the demoed
+            // hint's own instruction or the phase's plain subtitle -- so its
+            // styling can never drift between the two instead of each
+            // keeping its own copy. Line two always renders too (blank, same
+            // style, when there's no "then say [phrase]" to show) rather
+            // than being conditionally omitted: an empty Text still claims a
+            // full line's height, so the search box below stays put no
+            // matter which state this is -- see the screenshots that
+            // prompted this, where the search box visibly jumped down only
+            // while the two-line hint was showing.
+            // Its own tight spacing between the two lines themselves,
+            // separate from the outer Column's spacedBy above (which only
+            // controls the button-to-text gap) -- reduced well below that,
+            // since these two lines read as one continuous hint rather than
+            // two things that need visual breathing room between them.
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(0.dp)) {
                 Text(
-                    hint.lineOne,
+                    if (showingHint) hint!!.lineOne else uiPhase.subtitle(targetLanguage.displayName),
                     style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = idleHintWeight,
-                    color = greyPulse,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.clickable { onToggleAssistant() },
-                )
-                Text(
-                    buildAnnotatedString {
-                        withStyle(SpanStyle(color = greyPulse, fontWeight = idleHintWeight)) {
-                            append("then say ")
-                        }
-                        withStyle(
-                            SpanStyle(
-                                color = lerp(MaterialTheme.colorScheme.outlineVariant, hint.kind.accentColor(), idleHintPulse),
-                                fontWeight = idleHintWeight,
-                            ),
-                        ) {
-                            append("“${hint.phrase}”")
-                        }
-                    },
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.clickable { onToggleAssistant() },
-                )
-            } else {
-                Text(
-                    uiPhase.subtitle(targetLanguage.displayName),
-                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
                     color = when {
-                        uiPhase == UiPhase.IDLE ->
-                            lerp(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.onSurfaceVariant, idleHintPulse)
+                        showingHint || uiPhase == UiPhase.IDLE -> greyPulse
                         actionRequired ->
                             lerp(MaterialTheme.colorScheme.outlineVariant, uiPhase.buttonFillColor(speakingCommand), idleHintPulse)
                         else -> uiPhase.buttonFillColor(speakingCommand).copy(alpha = 0.6f)
                     },
-                    fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
                     // Same action as tapping the button itself -- a bigger,
                     // easier-to-hit target for starting (or stopping)
                     // hands-free than the 84dp circle alone.
                     modifier = Modifier.clickable { onToggleAssistant() },
+                )
+                Text(
+                    if (showingHint) {
+                        buildAnnotatedString {
+                            withStyle(SpanStyle(color = greyPulse, fontWeight = idleHintWeight)) {
+                                append("then say ")
+                            }
+                            withStyle(
+                                SpanStyle(
+                                    color = lerp(MaterialTheme.colorScheme.outlineVariant, hint!!.kind.accentColor(), idleHintPulse),
+                                    fontWeight = idleHintWeight,
+                                ),
+                            ) {
+                                append("“${hint.phrase}”")
+                            }
+                        }
+                    } else {
+                        AnnotatedString("")
+                    },
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.clickable(enabled = showingHint) { onToggleAssistant() },
                 )
             }
         }
