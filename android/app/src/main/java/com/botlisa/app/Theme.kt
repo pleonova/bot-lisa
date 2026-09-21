@@ -31,6 +31,14 @@ private val OffWhite = Color(0xFFF7F7FA) // light window background
 // (no free role left) so CommandChips.kt reads it directly.
 val Rust = Color(0xFFD8722E)
 
+// Charcoal -- the default hands-free "listening for [language]" state
+// (UiPhase.LISTENING_RU), which used to borrow Purple even though it isn't
+// the "what else?" command. A neutral so the record button/subtitle reads as
+// "ambiently listening" rather than any one brand command. Fixed hex, same
+// in both themes, like the other accents above -- see MainActivity's
+// UiPhase.buttonFillColor().
+val Charcoal = Color(0xFF6E6E78)
+
 // Baloo 2 (SIL OFL, see app/licenses/baloo2-OFL.txt) -- the rounded, playful
 // weight used for the "Assistant Lisa" header title, in place of the
 // default Material sans-serif which read as too plain/corporate for a

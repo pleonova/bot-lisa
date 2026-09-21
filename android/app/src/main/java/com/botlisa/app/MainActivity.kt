@@ -169,6 +169,7 @@ fun UiPhase.buttonFillColor(speakingCommand: CommandKind? = null): Color {
     }
     return when (this) {
         UiPhase.IDLE -> MaterialTheme.colorScheme.surfaceVariant
+        UiPhase.LISTENING_RU -> Charcoal
         UiPhase.LISTENING_EN -> MaterialTheme.colorScheme.tertiary
         else -> MaterialTheme.colorScheme.primary
     }
