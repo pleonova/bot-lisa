@@ -1736,8 +1736,18 @@ fun LisaScreen(
         val playingSuffix = when {
             displayPhase == UiPhase.SPEAKING_TRANSLATION && speakingExampleText == wordExample.translated ->
                 "${targetLanguage.displayName} translation…"
-            displayPhase == UiPhase.SPEAKING_TRANSLATION && speakingExampleText != null -> "example…"
-            displayPhase == UiPhase.SPEAKING_TRANSLATION || displayPhase == UiPhase.READING_RECOMMENDATION -> "voice command…"
+            displayPhase == UiPhase.SPEAKING_TRANSLATION && speakingExampleText == null -> "voice command…"
+            else -> null
+        }
+        // Short enough to read as one line rather than needing playingSuffix's
+        // own second line -- "Playing suggestion" (reading a related/
+        // suggested phrase aloud) and "Playing example" (a quick-tips
+        // example bubble) both fit comfortably, unlike the longer "Playing
+        // voice command…"/"Playing $language translation…" cases above.
+        val playingOneLiner = when {
+            displayPhase == UiPhase.READING_RECOMMENDATION -> "Playing suggestion"
+            displayPhase == UiPhase.SPEAKING_TRANSLATION && speakingExampleText != null && speakingExampleText != wordExample.translated ->
+                "Playing example"
             else -> null
         }
         val lineOneText = when {
@@ -1746,12 +1756,14 @@ fun LisaScreen(
             plainIdle -> "Tap and speak"
             listeningRu -> "Listening for"
             listeningEn -> "Now say the word"
+            playingOneLiner != null -> playingOneLiner
             playingSuffix != null -> "Playing"
             // Every UiPhase is covered by one of the branches above --
             // IDLE by showingHint/plainIdle, LISTENING_RU/LISTENING_EN by
             // their own branches, SPEAKING_TRANSLATION/READING_RECOMMENDATION
-            // by playingSuffix -- so this never actually runs; it's just
-            // what an exhaustive `when` over plain boolean guards requires.
+            // by playingOneLiner/playingSuffix -- so this never actually
+            // runs; it's just what an exhaustive `when` over plain boolean
+            // guards requires.
             else -> ""
         }
         // "Tap" only ever shows up in line one when the caregiver actually
