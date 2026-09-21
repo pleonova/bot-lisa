@@ -2646,8 +2646,13 @@ private fun RelatedPhraseList(
         val active = index == speakingIndex
         Surface(
             shape = RoundedCornerShape(12.dp),
+            // Purple, not orange -- these are always "what else?" suggestions
+            // (relatedForDisplay, from either on-device AI or the curated
+            // library fallback -- see its own comment), the same command
+            // NEXT_SUGGESTION is purple for everywhere else (CommandChips'
+            // accentColor(), the instructions panel's own section color).
             color = if (active) {
-                MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
             } else {
                 androidx.compose.ui.graphics.Color.Transparent
             },
@@ -2676,7 +2681,7 @@ private fun RelatedPhraseList(
                         Icons.AutoMirrored.Filled.VolumeUp,
                         contentDescription = "Play phrase",
                         tint = if (active) {
-                            MaterialTheme.colorScheme.secondary
+                            MaterialTheme.colorScheme.primary
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         },

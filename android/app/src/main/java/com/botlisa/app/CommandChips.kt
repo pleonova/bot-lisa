@@ -112,8 +112,9 @@ private fun CommandItem(spec: CommandChipSpec, modifier: Modifier = Modifier) {
         CommandKind.NEXT_SUGGESTION -> Icons.Filled.Lightbulb
         CommandKind.ANSWER -> Icons.Filled.QuestionAnswer
     }
-    // "What else?" / "How to answer?" get an orange sparkle badge -- these are
-    // the AI-powered suggestion commands, so flag them the way the tagline does.
+    // "What else?" / "How to answer?" get a sparkle badge (in the command's
+    // own color -- see below) -- these are the AI-powered suggestion
+    // commands, so flag them the way the tagline does.
     val sparkle = spec.kind == CommandKind.NEXT_SUGGESTION || spec.kind == CommandKind.ANSWER
     Column(
         // Tap to hear the phrase spoken.

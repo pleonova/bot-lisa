@@ -17,8 +17,8 @@ import androidx.compose.ui.graphics.Color
  * (purple / orange / teal) are shared; only the neutrals differ.
  */
 
-private val Purple = Color(0xFF8F7FEE)   // primary  -- title, active mic, translation speaker
-private val Orange = Color(0xFFFE9F4D)   // secondary -- "Что ещё?" / phrase being read
+private val Purple = Color(0xFF8F7FEE)   // primary  -- title, active mic, "Что ещё?" / suggested phrases
+private val Orange = Color(0xFFFE9F4D)   // secondary -- "Что это значит?" / "Как ответить?"
 private val Teal = Color(0xFF2CB3AE)     // tertiary  -- "Как сказать?" / listening-for-word
 private val OffWhite = Color(0xFFF7F7FA) // light window background
 
