@@ -21,9 +21,15 @@ import androidx.compose.ui.text.font.FontWeight
  */
 
 private val Purple = Color(0xFF8F7FEE)   // primary  -- title, active mic, "Что ещё?" / suggested phrases
-private val Orange = Color(0xFFFE9F4D)   // secondary -- "Что это значит?" / "Как ответить?"
+private val Orange = Color(0xFFFE9F4D)   // secondary -- "Что это значит?"
 private val Teal = Color(0xFF2CB3AE)     // tertiary  -- "Как сказать?" / listening-for-word
 private val OffWhite = Color(0xFFF7F7FA) // light window background
+
+// Rust -- a darker shade of Orange, not a new brand hue, so "Как ответить?"
+// reads as distinct from "Что это значит?" (both used to share Orange) while
+// staying in the same warm family. Not part of the Material ColorScheme
+// (no free role left) so CommandChips.kt reads it directly.
+val Rust = Color(0xFFD8722E)
 
 // Baloo 2 (SIL OFL, see app/licenses/baloo2-OFL.txt) -- the rounded, playful
 // weight used for the "Assistant Lisa" header title, in place of the

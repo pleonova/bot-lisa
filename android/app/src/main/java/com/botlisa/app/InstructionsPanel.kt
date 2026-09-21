@@ -82,7 +82,10 @@ private val QUICK_TIPS_MAX_HEIGHT = 360.dp
  * [spokenLanguage] -- see InstructionsExamples.kt for where that data comes
  * from. The "next suggestion" section only appears when "what else?" is
  * available in the target language ([showNextSuggestionStep]); the
- * "suggested reply" card is Russian-only ([showAnswerStep]).
+ * "suggested reply" card is Russian-only ([showAnswerStep]) and overrides its
+ * section's orange with its own Rust accent (see CardSpec.color), matching
+ * the home-screen "answer" chip (CommandKind.accentColor()) even though it
+ * shares a section/heading with "meaning".
  */
 @Composable
 fun InstructionsPanel(
@@ -177,7 +180,7 @@ fun InstructionsPanel(
                 flow = buildList {
                     add(FlowItem.CardItem(CardSpec(Icons.AutoMirrored.Filled.MenuBook, false, meaningTriggerPhrase, TriggerPhraseConfig.MEANING_TRIGGER_EN, onSpeakMeaning, isSpeaking = speakingCommand == CommandKind.MEANING)))
                     if (showAnswerStep) {
-                        add(FlowItem.CardItem(CardSpec(Icons.Filled.QuestionAnswer, true, answerTriggerPhrase, TriggerPhraseConfig.ANSWER_TRIGGER_EN, onSpeakAnswer, isSpeaking = speakingCommand == CommandKind.ANSWER)))
+                        add(FlowItem.CardItem(CardSpec(Icons.Filled.QuestionAnswer, true, answerTriggerPhrase, TriggerPhraseConfig.ANSWER_TRIGGER_EN, onSpeakAnswer, isSpeaking = speakingCommand == CommandKind.ANSWER, color = Rust)))
                     }
                 },
             ),
@@ -366,6 +369,11 @@ private data class CardSpec(
     val caption: String,
     val onClick: () -> Unit,
     val isSpeaking: Boolean = false,
+    // Overrides the enclosing section's color for this one card -- used by
+    // the "answer" card, which shares its section with "meaning" (both file
+    // under "NOT SURE HOW TO RESPOND?") but needs its own Rust accent to
+    // match the home-screen chip (see CommandKind.accentColor()).
+    val color: Color? = null,
 )
 
 /** Who's saying a bubble's text -- the caregiver (a person icon) or Lisa (the
@@ -424,7 +432,7 @@ private fun SectionBlock(number: Int, section: Section, onSpeakBubble: (String) 
             section.flow.forEachIndexed { i, item ->
                 if (i > 0) Spacer(Modifier.height(6.dp))
                 when (item) {
-                    is FlowItem.CardItem -> CommandCard(item.spec, section.color)
+                    is FlowItem.CardItem -> CommandCard(item.spec, item.spec.color ?: section.color)
                     is FlowItem.BubbleItem -> if (item.speaker == Speaker.FOX) {
                         // Lisa's replies sit on the right, like the other side of
                         // a chat conversation -- the caregiver's own bubbles

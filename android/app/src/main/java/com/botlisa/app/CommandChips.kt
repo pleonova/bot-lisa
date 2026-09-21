@@ -92,15 +92,17 @@ fun CommandChips(
 
 /**
  * Each command's own accent color -- teal for translate, purple for
- * next-suggestion, orange for meaning/answer. Shared by [CommandItem] below
- * and (so the record button and its hint text can match whichever command
- * is currently speaking) MainActivity's own UiPhase.buttonFillColor().
+ * next-suggestion, orange for meaning, rust (a darker shade of orange) for
+ * answer. Shared by [CommandItem] below and (so the record button and its
+ * hint text can match whichever command is currently speaking) MainActivity's
+ * own UiPhase.buttonFillColor().
  */
 @Composable
 fun CommandKind.accentColor(): Color = when (this) {
     CommandKind.TRANSLATE -> MaterialTheme.colorScheme.tertiary // teal
     CommandKind.NEXT_SUGGESTION -> MaterialTheme.colorScheme.primary // purple
-    CommandKind.MEANING, CommandKind.ANSWER -> MaterialTheme.colorScheme.secondary // orange
+    CommandKind.MEANING -> MaterialTheme.colorScheme.secondary // orange
+    CommandKind.ANSWER -> Rust
 }
 
 @Composable
