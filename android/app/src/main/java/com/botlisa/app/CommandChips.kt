@@ -71,8 +71,11 @@ fun CommandChips(
     AnimatedVisibility(visible = items.isNotEmpty(), modifier = modifier) {
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            // Wider than the old bare-icon chips needed -- these are now
+            // full 64dp circular buttons (see CommandItem), which read as
+            // cramped at the old 12dp gap.
+            horizontalArrangement = Arrangement.spacedBy(20.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
             maxItemsInEachRow = 2,
         ) {
             items.forEach { spec ->
@@ -123,8 +126,12 @@ private fun CommandItem(spec: CommandChipSpec, modifier: Modifier = Modifier) {
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = spec.onSpeak)
-            .padding(vertical = 4.dp),
+            .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
+        // Same 6dp on both gaps -- icon-to-phrase (as before) and, new,
+        // phrase-to-caption, which previously had no gap at all and read as
+        // the two lines running together.
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         // Same solid-fill-circle-with-white-icon look as the record button
         // itself (see AssistantButton) -- a real button instead of a bare
@@ -158,7 +165,6 @@ private fun CommandItem(spec: CommandChipSpec, modifier: Modifier = Modifier) {
                 }
             }
         }
-        Spacer(Modifier.height(6.dp))
         Text(
             formatCommand(spec.phrase),
             style = MaterialTheme.typography.titleMedium,
