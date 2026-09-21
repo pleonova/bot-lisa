@@ -360,6 +360,16 @@ fun LisaScreen(
     // The last ordinary target-language utterance heard hands-free -- what
     // the "what does that mean?" / "how to answer?" commands act on.
     var lastUtterance by remember { mutableStateOf("") }
+    // Which of input/lastUtterance is actually the fresher, more-authoritative
+    // one to act on while idle -- see the utterance-resolution comment on
+    // requestWhatElse() for the full reasoning. True right after the
+    // caregiver types something they haven't submitted yet (input is ahead);
+    // false once something makes lastUtterance authoritative instead -- a
+    // completed lookup (onSend()'s own translation, which deliberately
+    // leaves `input` showing the original English query while lastUtterance
+    // holds the target-language result commands actually need) or genuinely
+    // heard speech.
+    var inputIsFresher by remember { mutableStateOf(false) }
 
     // Raw default-mode fragments accumulate here as they're heard, and only
     // land in lastUtterance once a short quiet period passes with nothing
@@ -626,6 +636,7 @@ fun LisaScreen(
                         // actually now "in play" for the caregiver to build
                         // on. See ON_DEVICE_LLM_PLAN.md Phase 7.
                         lastUtterance = translated
+                        inputIsFresher = false
                         suggestionIndex = 0
                         isLoading = false
                         return@launch
@@ -671,6 +682,7 @@ fun LisaScreen(
                 } else {
                     lastUtterance = input
                 }
+                inputIsFresher = false
                 // A fresh lookup means a fresh suggestion list -- next-suggestion
                 // cycling (see speakNextSuggestion()) should start from the top.
                 suggestionIndex = 0
@@ -714,6 +726,7 @@ fun LisaScreen(
                 if (offline != null) {
                     offline.translation?.let { speaker?.speak(it.ru) }
                     offline.translation?.let { lastUtterance = it.ru }
+                    inputIsFresher = false
                     result = offline
                     suggestionIndex = 0
                     errorText = "Server unreachable -- translated on-device instead.$emulatorUrlHint"
@@ -844,17 +857,21 @@ fun LisaScreen(
             return
         }
         val source = OnDeviceLlmConfig.getWhatElseSource(context)
-        // `input` (whatever's actually visible in the search box) wins over
-        // lastUtterance while idle -- typing/tapping a quick-tips example
-        // and then tapping a command should act on what's now sitting in
-        // the box, not an older lastUtterance from before it. While
+        // Whichever of input/lastUtterance is actually fresher wins while
+        // idle -- see inputIsFresher's own comment: typing something unsent
+        // (or tapping a quick-tips example) makes `input` the one to act on,
+        // but a completed translate lookup deliberately leaves `input`
+        // showing the original English query while lastUtterance holds the
+        // target-language result -- acting on the stale English `input`
+        // there instead would feed the wrong language into what-else/
+        // meaning/answer, which all expect target-language text. While
         // genuinely hands-free listening, lastUtterance alone is
         // authoritative (cleared fresh by startHandsFree(), then kept
         // current by every heard utterance); falling back to `input` there
         // too could reach back into stale leftover field text from well
         // before this listening session started.
         val utterance = if (assistantState == SpeechAssistant.State.IDLE) {
-            input.ifBlank { lastUtterance }
+            if (inputIsFresher) input.ifBlank { lastUtterance } else lastUtterance.ifBlank { input }
         } else {
             lastUtterance
         }
@@ -1009,10 +1026,10 @@ fun LisaScreen(
     // "what does that mean?" -- translate the previous target-language
     // utterance into English and read it aloud (English voice).
     fun speakMeaningOfLast() {
-        // See requestWhatElse()'s utterance comment for why `input` wins
-        // while idle.
+        // See requestWhatElse()'s utterance comment for why this checks
+        // inputIsFresher while idle.
         val text = if (assistantState == SpeechAssistant.State.IDLE) {
-            input.ifBlank { lastUtterance }
+            if (inputIsFresher) input.ifBlank { lastUtterance } else lastUtterance.ifBlank { input }
         } else {
             lastUtterance
         }
@@ -1035,10 +1052,10 @@ fun LisaScreen(
     // surface a generic "server unreachable" error, which reads as broken
     // rather than "not built yet". Say so plainly and immediately instead.
     fun requestAnswerSuggestions() {
-        // See requestWhatElse()'s utterance comment for why `input` wins
-        // while idle.
+        // See requestWhatElse()'s utterance comment for why this checks
+        // inputIsFresher while idle.
         val text = if (assistantState == SpeechAssistant.State.IDLE) {
-            input.ifBlank { lastUtterance }
+            if (inputIsFresher) input.ifBlank { lastUtterance } else lastUtterance.ifBlank { input }
         } else {
             lastUtterance
         }
@@ -1205,6 +1222,7 @@ fun LisaScreen(
         if (pendingUtterance.isBlank()) return@LaunchedEffect
         delay(800)
         lastUtterance = pendingUtterance
+        inputIsFresher = false
         pendingUtterance = ""
         // Only now -- a genuinely new, fully-debounced utterance -- drop a
         // previous command's result card. onSend() itself used to do this
@@ -1396,6 +1414,20 @@ fun LisaScreen(
     fun stopHandsFree() {
         assistant.stop()
         ListeningForegroundService.stop(context)
+    }
+    // speaker/phraseSpeaker/englishSpeaker are three independent TextToSpeech
+    // instances -- starting one doesn't stop whatever's already playing on a
+    // *different* one (same-instance re-taps already self-interrupt via
+    // QUEUE_FLUSH inside TranslationSpeaker.speak()). Without this, tapping
+    // e.g. the word example's English bubble ("sleepy", englishSpeaker) right
+    // after its own translation bubble ("сонный", speaker) -- or tapping any
+    // command while an example is still playing -- could overlap two
+    // utterances instead of the new one cleanly taking over. Safe to call
+    // unconditionally: stopping an already-idle TTS engine is a no-op.
+    fun stopAllSpeakers() {
+        speaker?.stop()
+        phraseSpeaker?.stop()
+        englishSpeaker?.stop()
     }
 
     DisposableEffect(Unit) {
@@ -1993,6 +2025,10 @@ fun LisaScreen(
             onValueChange = {
                 input = it
                 wordFromTranslateCapture = false
+                // Typing makes input the fresher one again -- see its own
+                // comment -- even if an earlier lookup had already set
+                // lastUtterance to something else.
+                inputIsFresher = true
             },
             placeholder = {
                 // Same size as the voice-command instructions
@@ -2434,6 +2470,7 @@ fun LisaScreen(
         // which single card/chip to show as "speaking now" (see
         // isAnyCommandSpeaking below).
         fun onTranslateCommand() {
+            stopAllSpeakers()
             idleCommandHint = null
             speakingExampleText = null
             demoUiPhase = null
@@ -2453,6 +2490,7 @@ fun LisaScreen(
             }
         }
         fun onMeaningCommand() {
+            stopAllSpeakers()
             cancelStrayWordCapture()
             speakingExampleText = null
             demoUiPhase = null
@@ -2462,49 +2500,64 @@ fun LisaScreen(
                 // Reads the trigger phrase aloud first, same as tapping this
                 // command with nothing to act on does -- so tapping (or
                 // saying) a command always reads it back, whether or not it
-                // goes on to do something real.
-                speakTriggerPhrase(meaningTriggerPhrase) { speakMeaningOfLast() }
+                // goes on to do something real. Clearing `input` has to wait
+                // until *inside* this callback, after speakMeaningOfLast()
+                // has actually run -- it reads input synchronously at its own
+                // top, but that doesn't happen until the trigger phrase
+                // finishes playing (this callback fires then, not now).
+                // Clearing input right after this call instead (outside the
+                // callback) wiped it before speakMeaningOfLast() ever saw it,
+                // silently breaking "type/tap something, then tap a command"
+                // whenever lastUtterance hadn't independently been set too.
+                speakTriggerPhrase(meaningTriggerPhrase) {
+                    speakMeaningOfLast()
+                    input = ""
+                }
             } else {
                 idleCommandHint = demoHintFor(CommandKind.MEANING, meaningTriggerPhrase)
                 speakTriggerPhrase(meaningTriggerPhrase)
+                input = ""
             }
-            // Both branches above already captured whatever they needed
-            // from input/lastUtterance synchronously before this runs --
-            // clearing it after is what makes every command tap reset the
-            // search box, same as "how to say?" does.
-            input = ""
         }
         fun onNextSuggestionCommand() {
+            stopAllSpeakers()
             cancelStrayWordCapture()
             speakingExampleText = null
             demoUiPhase = null
             activeSpeakingCommand = CommandKind.NEXT_SUGGESTION
             if (hasUtteranceToActOn) {
                 idleCommandHint = null
-                // See onMeaningCommand's own comment on this same pattern.
-                speakTriggerPhrase(nextSuggestionTriggerPhrase) { requestWhatElse() }
+                // See onMeaningCommand's own comment on why input is cleared
+                // *inside* this callback, not right after calling it.
+                speakTriggerPhrase(nextSuggestionTriggerPhrase) {
+                    requestWhatElse()
+                    input = ""
+                }
             } else {
                 idleCommandHint = demoHintFor(CommandKind.NEXT_SUGGESTION, nextSuggestionTriggerPhrase)
                 speakTriggerPhrase(nextSuggestionTriggerPhrase)
+                input = ""
             }
-            // See onMeaningCommand's own comment on this same line.
-            input = ""
         }
         fun onAnswerCommand() {
+            stopAllSpeakers()
             cancelStrayWordCapture()
             speakingExampleText = null
             demoUiPhase = null
             activeSpeakingCommand = CommandKind.ANSWER
             if (hasUtteranceToActOn) {
                 idleCommandHint = null
-                // See onMeaningCommand's own comment on this same pattern.
-                speakTriggerPhrase(answerTriggerPhrase) { requestAnswerSuggestions() }
+                // See onMeaningCommand's own comment on why input is cleared
+                // *inside* this callback, not right after calling it.
+                speakTriggerPhrase(answerTriggerPhrase) {
+                    requestAnswerSuggestions()
+                    input = ""
+                }
             } else {
                 idleCommandHint = demoHintFor(CommandKind.ANSWER, answerTriggerPhrase)
                 speakTriggerPhrase(answerTriggerPhrase)
+                input = ""
             }
-            // See onMeaningCommand's own comment on this same line.
-            input = ""
         }
 
         InstructionsPanel(
@@ -2522,6 +2575,17 @@ fun LisaScreen(
             onSpeakNext = ::onNextSuggestionCommand,
             onSpeakAnswer = ::onAnswerCommand,
             onSpeakBubble = { text ->
+                // Stops any other bubble/command still speaking on a
+                // *different* TTS instance first -- see stopAllSpeakers()'s
+                // own comment for why that doesn't already happen on its own.
+                stopAllSpeakers()
+                // Same reasoning as every onXCommand() handler -- a stray
+                // "how to say?" word-capture session left running in the
+                // background would otherwise silently revert the record
+                // button/subtitle to "Now say the word" the moment this
+                // example's own TTS finishes, since nothing else in that
+                // case overrides displayPhase back to idle.
+                cancelStrayWordCapture()
                 // Same as any other spoken phrase landing in the field --
                 // lets the caregiver see (and reuse/edit) what was just
                 // demoed instead of it only being heard.
@@ -2533,6 +2597,17 @@ fun LisaScreen(
                 // an example bubble playing through the same speaker as a
                 // real command left that older command's card lit up.
                 activeSpeakingCommand = null
+                // Cleared here (not just left to the word-example branch,
+                // which sets its own right after anyway) so switching
+                // straight from the word example's English bubble to any
+                // other bubble doesn't leave its LISTENING_EN preview stuck
+                // on screen, masking whatever's actually happening now.
+                demoUiPhase = null
+                // Same idea -- a clean slate regardless of which branch
+                // below runs next, rather than relying on each one to
+                // remember to clear whatever the *other* branch last left
+                // behind.
+                speakingExampleText = null
                 if (text == wordExample.en) {
                     // The word example's own English bubble ("sleepy") --
                     // previews what the button looks like right after a real
@@ -2552,6 +2627,13 @@ fun LisaScreen(
                     // instead of the generic "Playing the voice command…".
                     demoUiPhase = UiPhase.LISTENING_EN
                     wordFromTranslateCapture = true
+                    // onSend() (below, once heard) sets lastUtterance/
+                    // inputIsFresher correctly once it completes, but if a
+                    // command gets tapped before then (stopAllSpeakers()
+                    // interrupts this before onSend() ever runs), input
+                    // ("sleepy") should still be the one commands act on
+                    // rather than some older lastUtterance.
+                    inputIsFresher = true
                     val onWordHeard = { onSend(); speakingExampleText = wordExample.translated }
                     if (englishSpeaker?.speak(text, onWordHeard) != true) {
                         onWordHeard()
@@ -2564,6 +2646,7 @@ fun LisaScreen(
                     // this example instead of some earlier (possibly stale)
                     // utterance still sitting in lastUtterance.
                     lastUtterance = text
+                    inputIsFresher = false
                     speakingExampleText = text
                     if (speaker?.speak(text) { speakingExampleText = null } != true) {
                         speakingExampleText = null
