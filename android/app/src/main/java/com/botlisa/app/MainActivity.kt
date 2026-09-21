@@ -811,20 +811,29 @@ fun LisaScreen(
     // showing, rather than keeping it.
     // onDeviceRelated is only ever populated by the AI path, so a non-empty
     // one always means "showing AI".
-    val usingAiSuggestions = !onDeviceRelated.isNullOrEmpty()
+    fun usingAiSuggestions() = !onDeviceRelated.isNullOrEmpty()
     // The phrase library (result.related) is Russian-only: for any other
     // target language there is nothing to fall back to, so the AI result --
     // or nothing -- is all there is, whatever the source setting says. Only
     // when the target actually is Russian does the BOTH / LIBRARY_ONLY
     // fallback to the library apply.
-    val relatedForDisplay: List<Phrase> = when {
+    //
+    // A function, not a plain val -- requestWhatElse() below reads this to
+    // decide whether there's already something to speak, and it's a closure
+    // that (like hasUtteranceToActOn) can be invoked from a Compose
+    // recomposition older than the one where onDeviceRelated/result last
+    // changed. A plain val here would freeze that decision at whatever it
+    // was computed as during that older pass; every render-code usage below
+    // re-reads it every recomposition regardless; only the closure call
+    // actually needed this to stop the same class of bug.
+    fun relatedForDisplay(): List<Phrase> = when {
         !curatedRelatedSupported -> onDeviceRelated.orEmpty()
         OnDeviceLlmConfig.getWhatElseSource(context) == OnDeviceLlmConfig.WhatElseSource.AI_ONLY ->
             onDeviceRelated.orEmpty()
         OnDeviceLlmConfig.getWhatElseSource(context) == OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY ->
             result?.related.orEmpty()
         else -> // BOTH
-            if (usingAiSuggestions) onDeviceRelated.orEmpty() else result?.related.orEmpty()
+            if (usingAiSuggestions()) onDeviceRelated.orEmpty() else result?.related.orEmpty()
     }
 
     // True while the result card should show the "still generating" spinner
@@ -862,7 +871,7 @@ fun LisaScreen(
     // requestWhatElse()'s own on-demand generation below both instead pass
     // the list they *just* produced explicitly -- see the comment on that
     // default's own limitation just below.
-    fun speakNextSuggestion(related: List<Phrase> = relatedForDisplay) {
+    fun speakNextSuggestion(related: List<Phrase> = relatedForDisplay()) {
         if (related.isEmpty()) return
         val index = suggestionIndex % related.size
         // Only claim the row / advance if TTS actually started, so a
@@ -891,11 +900,12 @@ fun LisaScreen(
         // even if EAGER prefetch already has (or is still generating)
         // suggestions in the background.
         whatElseRequested = true
+        val alreadyDisplayed = relatedForDisplay()
         Log.d(WHAT_ELSE_LOG_TAG, "requestWhatElse: input=\"$input\" lastUtterance=\"$lastUtterance\" " +
-            "inputIsFresher=$inputIsFresher assistantState=$assistantState relatedForDisplay.size=${relatedForDisplay.size}")
-        if (relatedForDisplay.isNotEmpty()) {
-            Log.d(WHAT_ELSE_LOG_TAG, "requestWhatElse: already have ${relatedForDisplay.size} suggestions, speaking existing list")
-            speakNextSuggestion()
+            "inputIsFresher=$inputIsFresher assistantState=$assistantState relatedForDisplay.size=${alreadyDisplayed.size}")
+        if (alreadyDisplayed.isNotEmpty()) {
+            Log.d(WHAT_ELSE_LOG_TAG, "requestWhatElse: already have ${alreadyDisplayed.size} suggestions, speaking existing list")
+            speakNextSuggestion(alreadyDisplayed)
             return
         }
         // Only dedup against a call *this screen* already tracks (the
@@ -1117,7 +1127,7 @@ fun LisaScreen(
     // result.related directly) so the index lines up with whichever list is
     // actually rendered on screen right now.
     fun speakRelated(index: Int) {
-        val phrase = relatedForDisplay.getOrNull(index) ?: return
+        val phrase = relatedForDisplay().getOrNull(index) ?: return
         if (phraseSpeaker?.speak(phrase.ru) == true) {
             speakingIndex = index
             suggestionIndex = index + 1
@@ -2369,7 +2379,8 @@ fun LisaScreen(
         // mirrors the standalone AI card's own eagerMode/whatElseRequested
         // gate below (which this val is now shared with).
         val eagerMode = OnDeviceLlmConfig.getPrefetchMode(context) == OnDeviceLlmConfig.PrefetchMode.EAGER
-        if (relatedForDisplay.isNotEmpty() || aiPending || libraryGenerating || eagerMode || whatElseRequested) {
+        val relatedForDisplayNow = relatedForDisplay()
+        if (relatedForDisplayNow.isNotEmpty() || aiPending || libraryGenerating || eagerMode || whatElseRequested) {
             // `result` itself stays null for the whole libraryGenerating
             // window -- ApiClient.sendAssist() is a real network call (up to
             // ~15s on a slow/unreachable server) and nothing sets `result`
@@ -2398,7 +2409,7 @@ fun LisaScreen(
                         // eager/on-demand "what else?" suggestions actually show
                         // up here, the same as a spoken utterance's.
                         when {
-                            relatedForDisplay.isNotEmpty() || aiPending || libraryGenerating -> {
+                            relatedForDisplayNow.isNotEmpty() || aiPending || libraryGenerating -> {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -2420,21 +2431,21 @@ fun LisaScreen(
                                             // libraryGenerating is the mirror case for the
                                             // network fetch -- neither has a result yet, so
                                             // usingAiSuggestions alone can't tell them apart.
-                                            if (usingAiSuggestions || aiPending) "AI" else "Library",
+                                            if (usingAiSuggestions() || aiPending) "AI" else "Library",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = Color.White,
                                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                         )
                                     }
                                 }
-                                if (relatedForDisplay.isNotEmpty()) {
+                                if (relatedForDisplayNow.isNotEmpty()) {
                                     Text(
                                         displayInput,
                                         style = MaterialTheme.typography.titleMedium,
                                         fontStyle = FontStyle.Italic,
                                         color = MaterialTheme.colorScheme.primary,
                                     )
-                                    RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
+                                    RelatedPhraseList(relatedForDisplayNow, speakingIndex, ::speakRelated)
                                 } else {
                                     // Same heading + phrase as the finished state above --
                                     // the phrase and its spinner share one line instead of
@@ -2499,14 +2510,14 @@ fun LisaScreen(
                         }
                     }
                     when {
-                        relatedForDisplay.isNotEmpty() -> {
+                        relatedForDisplayNow.isNotEmpty() -> {
                             Text(
                                 lastUtterance,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontStyle = FontStyle.Italic,
                                 color = MaterialTheme.colorScheme.primary,
                             )
-                            RelatedPhraseList(relatedForDisplay, speakingIndex, ::speakRelated)
+                            RelatedPhraseList(relatedForDisplayNow, speakingIndex, ::speakRelated)
                         }
                         aiPending ->
                             // Same heading + phrase as the finished state above --
@@ -2595,7 +2606,23 @@ fun LisaScreen(
         // only a valid fallback while IDLE. Shared by the instructions
         // panel's cards and the command chips below so both act the same
         // way a spoken trigger phrase would, not just play a TTS demo.
-        val hasUtteranceToActOn = if (assistantState == SpeechAssistant.State.IDLE) {
+        // A function, not a plain val -- the command handlers below
+        // (onTranslateCommand/onMeaningCommand/onNextSuggestionCommand/
+        // onAnswerCommand) are closures that can be invoked from a Compose
+        // recomposition *older* than the one where lastUtterance/input last
+        // changed (e.g. a quick-tips example bubble sets lastUtterance,
+        // Compose hasn't gotten around to recomposing this scope again by
+        // the time the caregiver's very next tap lands on a command chip).
+        // lastUtterance/input themselves are Compose State, so reading them
+        // always sees the live value even from a stale closure -- but a
+        // plain val here would freeze whatever this expression evaluated to
+        // at that older recomposition, so a closure invoked before the next
+        // recomposition caught up would silently see a stale answer. Reported
+        // live as tapping a quick-tips example immediately followed by a
+        // command chip acting as if nothing had been said, right after the
+        // logcat trace below confirmed input/lastUtterance were already
+        // correctly set while this had frozen on the answer from before.
+        fun hasUtteranceToActOn(): Boolean = if (assistantState == SpeechAssistant.State.IDLE) {
             lastUtterance.isNotBlank() || input.isNotBlank()
         } else {
             lastUtterance.isNotBlank()
@@ -2651,7 +2678,7 @@ fun LisaScreen(
             speakingExampleText = null
             demoUiPhase = null
             activeSpeakingCommand = CommandKind.MEANING
-            if (hasUtteranceToActOn) {
+            if (hasUtteranceToActOn()) {
                 idleCommandHint = null
                 // Reads the trigger phrase aloud first, same as tapping this
                 // command with nothing to act on does -- so tapping (or
@@ -2681,9 +2708,9 @@ fun LisaScreen(
             speakingExampleText = null
             demoUiPhase = null
             activeSpeakingCommand = CommandKind.NEXT_SUGGESTION
-            Log.d(WHAT_ELSE_LOG_TAG, "onNextSuggestionCommand: hasUtteranceToActOn=$hasUtteranceToActOn " +
+            Log.d(WHAT_ELSE_LOG_TAG, "onNextSuggestionCommand: hasUtteranceToActOn=${hasUtteranceToActOn()} " +
                 "input=\"$input\" lastUtterance=\"$lastUtterance\" assistantState=$assistantState")
-            if (hasUtteranceToActOn) {
+            if (hasUtteranceToActOn()) {
                 idleCommandHint = null
                 // See onMeaningCommand's own comment on why input is cleared
                 // *inside* this callback, not right after calling it.
@@ -2703,7 +2730,7 @@ fun LisaScreen(
             speakingExampleText = null
             demoUiPhase = null
             activeSpeakingCommand = CommandKind.ANSWER
-            if (hasUtteranceToActOn) {
+            if (hasUtteranceToActOn()) {
                 idleCommandHint = null
                 // See onMeaningCommand's own comment on why input is cleared
                 // *inside* this callback, not right after calling it.
