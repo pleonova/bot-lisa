@@ -838,14 +838,17 @@ fun LisaScreen(
             return
         }
         val source = OnDeviceLlmConfig.getWhatElseSource(context)
-        // Only fall back to `input` while idle (a phrase typed but not yet
-        // sent) -- while genuinely hands-free listening, lastUtterance alone
-        // is authoritative (cleared fresh by startHandsFree(), then kept
+        // `input` (whatever's actually visible in the search box) wins over
+        // lastUtterance while idle -- typing/tapping a quick-tips example
+        // and then tapping a command should act on what's now sitting in
+        // the box, not an older lastUtterance from before it. While
+        // genuinely hands-free listening, lastUtterance alone is
+        // authoritative (cleared fresh by startHandsFree(), then kept
         // current by every heard utterance); falling back to `input` there
         // too could reach back into stale leftover field text from well
         // before this listening session started.
         val utterance = if (assistantState == SpeechAssistant.State.IDLE) {
-            lastUtterance.ifBlank { input }
+            input.ifBlank { lastUtterance }
         } else {
             lastUtterance
         }
@@ -1000,10 +1003,10 @@ fun LisaScreen(
     // "what does that mean?" -- translate the previous target-language
     // utterance into English and read it aloud (English voice).
     fun speakMeaningOfLast() {
-        // See requestWhatElse()'s utterance comment for why the `input`
-        // fallback is IDLE-only.
+        // See requestWhatElse()'s utterance comment for why `input` wins
+        // while idle.
         val text = if (assistantState == SpeechAssistant.State.IDLE) {
-            lastUtterance.ifBlank { input }
+            input.ifBlank { lastUtterance }
         } else {
             lastUtterance
         }
@@ -1026,10 +1029,10 @@ fun LisaScreen(
     // surface a generic "server unreachable" error, which reads as broken
     // rather than "not built yet". Say so plainly and immediately instead.
     fun requestAnswerSuggestions() {
-        // See requestWhatElse()'s utterance comment for why the `input`
-        // fallback is IDLE-only.
+        // See requestWhatElse()'s utterance comment for why `input` wins
+        // while idle.
         val text = if (assistantState == SpeechAssistant.State.IDLE) {
-            lastUtterance.ifBlank { input }
+            input.ifBlank { lastUtterance }
         } else {
             lastUtterance
         }
