@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -118,6 +119,11 @@ fun InstructionsPanel(
     modifier: Modifier = Modifier,
     showNextSuggestionStep: Boolean = true,
     showAnswerStep: Boolean = true,
+    // Hoisted so the caller (MainActivity's "Assistant Lisa" header tap)
+    // can reset it back to 0 -- otherwise scrolling down within the
+    // sections list (see QUICK_TIPS_MAX_HEIGHT) stayed scrolled down even
+    // after resetting the rest of the page back to its opening state.
+    quickTipsScrollState: ScrollState = rememberScrollState(),
 ) {
     val chevronRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
@@ -287,7 +293,7 @@ fun InstructionsPanel(
                         modifier = Modifier
                             .padding(12.dp)
                             .heightIn(max = QUICK_TIPS_MAX_HEIGHT)
-                            .verticalScroll(rememberScrollState()),
+                            .verticalScroll(quickTipsScrollState),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         sections.forEachIndexed { i, section ->

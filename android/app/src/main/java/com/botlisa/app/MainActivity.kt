@@ -188,6 +188,10 @@ fun LisaScreen(
     fun scrollToTop() {
         scope.launch { mainScrollState.animateScrollTo(0) }
     }
+    // Hoisted so resetToStart() (the "Assistant Lisa" header tap) can scroll
+    // this back to 0 along with the rest of the page -- see InstructionsPanel's
+    // own quickTipsScrollState param for why.
+    val quickTipsScrollState = rememberScrollState()
 
     // Set true only by the instructions panel's "go to settings" row --
     // opening Settings any other way (the header's own gear icon) leaves
@@ -1542,6 +1546,10 @@ fun LisaScreen(
         suggestionIndex = 0
         showInstructions = true
         showSettings = false
+        scope.launch {
+            mainScrollState.scrollTo(0)
+            quickTipsScrollState.scrollTo(0)
+        }
         if (showIntroPopup) showIntro = true
     }
 
@@ -2408,6 +2416,7 @@ fun LisaScreen(
         InstructionsPanel(
             expanded = showInstructions,
             onToggle = { showInstructions = !showInstructions },
+            quickTipsScrollState = quickTipsScrollState,
             spokenLanguage = targetLanguage.displayName,
             translateTriggerPhrase = translateTriggerPhrase,
             meaningTriggerPhrase = meaningTriggerPhrase,
