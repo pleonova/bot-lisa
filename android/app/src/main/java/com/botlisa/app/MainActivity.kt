@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -174,6 +175,14 @@ fun UiPhase.buttonFillColor(speakingCommand: CommandKind? = null): Color {
         else -> MaterialTheme.colorScheme.primary
     }
 }
+
+// "what else?" has been the hardest flow in this file to get right by
+// static reading alone -- several state-management bugs here only ever
+// showed up on a real device, not in compile/unit-test runs. Tagged logging
+// at requestWhatElse()'s key decision points (below) so a live repro's exact
+// branch/utterance/counts can be pulled straight from `adb logcat -s
+// $WHAT_ELSE_LOG_TAG` instead of guessed at.
+private const val WHAT_ELSE_LOG_TAG = "WhatElse"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -882,7 +891,10 @@ fun LisaScreen(
         // even if EAGER prefetch already has (or is still generating)
         // suggestions in the background.
         whatElseRequested = true
+        Log.d(WHAT_ELSE_LOG_TAG, "requestWhatElse: input=\"$input\" lastUtterance=\"$lastUtterance\" " +
+            "inputIsFresher=$inputIsFresher assistantState=$assistantState relatedForDisplay.size=${relatedForDisplay.size}")
         if (relatedForDisplay.isNotEmpty()) {
+            Log.d(WHAT_ELSE_LOG_TAG, "requestWhatElse: already have ${relatedForDisplay.size} suggestions, speaking existing list")
             speakNextSuggestion()
             return
         }
@@ -917,11 +929,15 @@ fun LisaScreen(
         } else {
             lastUtterance
         }
-        if (utterance.isBlank()) return
+        if (utterance.isBlank()) {
+            Log.d(WHAT_ELSE_LOG_TAG, "requestWhatElse: utterance blank, giving up")
+            return
+        }
         // Only defer to an *already in-flight* generation if it's actually
         // for this utterance -- see generatingForUtterance's own comment for
         // why onDeviceGenerating alone isn't enough to tell that.
         if (onDeviceGenerating && generatingForUtterance == utterance) {
+            Log.d(WHAT_ELSE_LOG_TAG, "requestWhatElse: deferring to in-flight generation for \"$utterance\"")
             speakWhenReady = true
             return
         }
@@ -937,7 +953,9 @@ fun LisaScreen(
             OnDeviceLlmConfig.getModelState(context) == OnDeviceLlmConfig.ModelState.READY
         // Russian-only curated library (see relatedForDisplay/curatedRelatedSupported).
         val tryLibrary = source != OnDeviceLlmConfig.WhatElseSource.AI_ONLY && curatedRelatedSupported
+        Log.d(WHAT_ELSE_LOG_TAG, "requestWhatElse: utterance=\"$utterance\" source=$source tryAi=$tryAi tryLibrary=$tryLibrary")
         if (!tryAi && !tryLibrary) {
+            Log.d(WHAT_ELSE_LOG_TAG, "requestWhatElse: neither AI nor library available, errorText set")
             // Silently doing nothing here reads as "the button is broken" --
             // this is overwhelmingly the "AI model never downloaded" case
             // (it's a ~2.7GB opt-in download, so NOT_DOWNLOADED is the
@@ -1001,6 +1019,9 @@ fun LisaScreen(
                     OnDeviceLlm.generateWhatElse(context, utterance, language.code)
                 }
                 activeWhatElseJob = null
+                Log.d(WHAT_ELSE_LOG_TAG, "requestWhatElse: on-device generation for \"$utterance\" -> " +
+                    "${generated.getOrNull()?.size ?: -1} phrases (isCurrent=${isCurrent()}), " +
+                    "error=${generated.exceptionOrNull()}")
                 if (isCurrent()) {
                     onDeviceRelated = generated.getOrNull()
                     onDeviceGenerating = false
@@ -1039,9 +1060,13 @@ fun LisaScreen(
             // gets to display.
             if (tryLibrary && onDeviceRelated.isNullOrEmpty()) {
                 if (isCurrent()) libraryGenerating = true
+                Log.d(WHAT_ELSE_LOG_TAG, "requestWhatElse: calling library (serverUrl=$serverUrl) for \"$utterance\"")
                 val fetched = runCatching {
                     ApiClient.sendAssist(baseUrl = serverUrl, apiKey = apiKey, text = utterance)
                 }
+                Log.d(WHAT_ELSE_LOG_TAG, "requestWhatElse: library lookup for \"$utterance\" -> " +
+                    "${fetched.getOrNull()?.related?.size ?: -1} phrases (isCurrent=${isCurrent()}), " +
+                    "error=${fetched.exceptionOrNull()}")
                 if (isCurrent()) {
                     libraryGenerating = false
                     fetched.getOrNull()?.let { result = it }
@@ -2656,6 +2681,8 @@ fun LisaScreen(
             speakingExampleText = null
             demoUiPhase = null
             activeSpeakingCommand = CommandKind.NEXT_SUGGESTION
+            Log.d(WHAT_ELSE_LOG_TAG, "onNextSuggestionCommand: hasUtteranceToActOn=$hasUtteranceToActOn " +
+                "input=\"$input\" lastUtterance=\"$lastUtterance\" assistantState=$assistantState")
             if (hasUtteranceToActOn) {
                 idleCommandHint = null
                 // See onMeaningCommand's own comment on why input is cleared
