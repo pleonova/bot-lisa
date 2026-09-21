@@ -17,6 +17,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -2348,52 +2349,61 @@ fun LisaScreen(
         if (result?.mode == "translate" && result?.translation != null) {
             val r = result!!
             val translation = r.translation!!
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text("Translation:", style = MaterialTheme.typography.labelLarge)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                // Same size as the "Related phrases for: ..."
-                                // query text in the related-phrases card below.
-                                translation.ru,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.tertiary,
-                            )
-                            Text(
-                                r.input,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontStyle = FontStyle.Italic,
-                                fontWeight = FontWeight.Normal,
-                                color = bubbleContentColor(),
-                            )
-                        }
-                        // Offsets past IconButton's own 12.dp touch-target
-                        // padding so the icon itself lands 16.dp from the
-                        // card edge -- same visual inset as the "read aloud"
-                        // icon in the search box above.
-                        IconButton(
-                            onClick = { speaker?.speak(translation.ru) },
-                            modifier = Modifier.offset(x = 12.dp),
+            // Keyed on `result` itself -- a swipe just hides this specific
+            // card, it doesn't touch `result` (which the related-phrases
+            // card below also reads), so a *new* translation naturally shows
+            // its own fresh card again instead of staying dismissed forever.
+            var translateCardDismissed by remember(result) { mutableStateOf(false) }
+            if (!translateCardDismissed) {
+                DismissibleResultCard(onDismiss = { translateCardDismissed = true }) {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.VolumeUp,
-                                contentDescription = "Play translation",
-                                // Teal, matching the translation text right
-                                // above (and "how to say?"'s own teal
-                                // everywhere else) -- this card only ever
-                                // shows a translate-mode result, so there's
-                                // no other accent it could mean.
-                                tint = if (translationSpeaking) {
-                                    MaterialTheme.colorScheme.tertiary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                modifier = Modifier.pulse(translationSpeaking),
-                            )
+                            Text("Translation:", style = MaterialTheme.typography.labelLarge)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        // Same size as the "Related phrases for: ..."
+                                        // query text in the related-phrases card below.
+                                        translation.ru,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.tertiary,
+                                    )
+                                    Text(
+                                        r.input,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontStyle = FontStyle.Italic,
+                                        fontWeight = FontWeight.Normal,
+                                        color = bubbleContentColor(),
+                                    )
+                                }
+                                // Offsets past IconButton's own 12.dp touch-target
+                                // padding so the icon itself lands 16.dp from the
+                                // card edge -- same visual inset as the "read aloud"
+                                // icon in the search box above.
+                                IconButton(
+                                    onClick = { speaker?.speak(translation.ru) },
+                                    modifier = Modifier.offset(x = 12.dp),
+                                ) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.VolumeUp,
+                                        contentDescription = "Play translation",
+                                        // Teal, matching the translation text right
+                                        // above (and "how to say?"'s own teal
+                                        // everywhere else) -- this card only ever
+                                        // shows a translate-mode result, so there's
+                                        // no other accent it could mean.
+                                        tint = if (translationSpeaking) {
+                                            MaterialTheme.colorScheme.tertiary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                        modifier = Modifier.pulse(translationSpeaking),
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -2421,6 +2431,15 @@ fun LisaScreen(
             // yet.
             if (result != null || libraryGenerating) {
                 val displayInput = result?.input ?: lastUtterance
+                // Keyed on the phrase this card is *for*, not on `result`
+                // itself -- a swipe here shouldn't reach into `result` (the
+                // translate card above also reads it), and keying on the
+                // phrase means a genuinely new utterance/query un-dismisses
+                // this card even if `result`'s own reference happens not to
+                // change (e.g. re-asking "what else?" for the same phrase).
+                var relatedCardDismissed by remember(displayInput) { mutableStateOf(false) }
+                if (!relatedCardDismissed) {
+                DismissibleResultCard(onDismiss = { relatedCardDismissed = true }) {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -2489,6 +2508,8 @@ fun LisaScreen(
                         }
                     }
                 }
+                }
+                }
             }
         }
 
@@ -2513,6 +2534,11 @@ fun LisaScreen(
         if (result == null && lastUtterance.isNotBlank() && (eagerMode || whatElseRequested) &&
             (aiAttempted || eagerSkippedForHeat)
         ) {
+            // Keyed on lastUtterance -- a new utterance naturally
+            // un-dismisses this card, same reasoning as the two cards above.
+            var aiCardDismissed by remember(lastUtterance) { mutableStateOf(false) }
+            if (!aiCardDismissed) {
+            DismissibleResultCard(onDismiss = { aiCardDismissed = true }) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -2569,6 +2595,8 @@ fun LisaScreen(
                     }
                 }
             }
+            }
+            }
         }
 
         // The "what does that mean?" command gets its own card, same shape as
@@ -2576,6 +2604,11 @@ fun LisaScreen(
         // result, not a related phrase, and previously only got spoken aloud
         // with nothing left on screen to glance back at.
         meaningResult?.let { (source, english) ->
+            // Keyed on meaningResult itself -- same reasoning as the other
+            // three result cards' own dismissed flags.
+            var meaningCardDismissed by remember(meaningResult) { mutableStateOf(false) }
+            if (!meaningCardDismissed) {
+            DismissibleResultCard(onDismiss = { meaningCardDismissed = true }) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -2623,6 +2656,8 @@ fun LisaScreen(
                         }
                     }
                 }
+            }
+            }
             }
         }
 
@@ -2983,6 +3018,51 @@ fun LisaScreen(
             },
         )
     }
+    }
+}
+
+/** Wraps a result card (translation/meaning/related-phrases) so swiping it
+ * either direction dismisses it, calling [onDismiss] to clear whatever state
+ * is gating that specific card. Every caller keys its own "dismissed" flag
+ * off the data that produced the card (e.g. `remember(result) { ... }`) so a
+ * *new* result/utterance naturally un-dismisses it instead of a swipe
+ * permanently hiding all future cards of that kind. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DismissibleResultCard(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value != SwipeToDismissBoxValue.Settled) onDismiss()
+            true
+        },
+    )
+    SwipeToDismissBox(
+        state = dismissState,
+        backgroundContent = {
+            // A plain red "you're about to remove this" backdrop, the "X"
+            // sliding in from whichever edge the swipe started at -- same
+            // idea as a chat app's swipe-to-delete.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.errorContainer),
+                contentAlignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) {
+                    Alignment.CenterStart
+                } else {
+                    Alignment.CenterEnd
+                },
+            ) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "Dismiss",
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                )
+            }
+        },
+    ) {
+        content()
     }
 }
 
