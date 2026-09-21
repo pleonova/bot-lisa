@@ -14,6 +14,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -28,7 +29,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Search
@@ -39,9 +39,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -1561,7 +1566,8 @@ fun LisaScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(mainScrollState)
-            .padding(20.dp),
+            .padding(horizontal = 20.dp)
+            .padding(top = 10.dp, bottom = 20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         if (showSettings) {
@@ -1598,7 +1604,12 @@ fun LisaScreen(
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            // Negative: pulls the title block up into the logo/settings
+            // row's own vertical space (about half its 48.dp height)
+            // instead of sitting entirely below it -- spacedBy (unlike
+            // Modifier.offset) actually reflows the rows below, so this
+            // closes the dead space instead of just drawing over it.
+            verticalArrangement = Arrangement.spacedBy((-20).dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1617,29 +1628,96 @@ fun LisaScreen(
                     Icon(Icons.Filled.Settings, contentDescription = "Settings")
                 }
             }
-            Text(
-                "Assistant Lisa",
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.clickable { resetToStart() },
-            )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            val tealUnderline = MaterialTheme.colorScheme.tertiary
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                // headlineLarge's box carries a lot of leading below the
+                // glyphs themselves (same reason the underline below has
+                // to reach up into its own box) -- this negative gap pulls
+                // the tagline up past that dead space, actually reflowing
+                // it (unlike Modifier.offset) so nothing below is left
+                // with a matching gap of its own.
+                verticalArrangement = Arrangement.spacedBy((-6).dp),
             ) {
-                Text(
-                    "Your foreign language companion",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Icon(
-                    Icons.Filled.AutoAwesome,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(16.dp),
-                )
+                Row(
+                    verticalAlignment = Alignment.Bottom,
+                    modifier = Modifier.clickable { resetToStart() },
+                ) {
+                    Text(
+                        "Assistant ",
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontFamily = TitleFontFamily,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        "Lisa",
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontFamily = TitleFontFamily,
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.drawBehind {
+                            // A gentle hand-drawn-style swoosh (dips in the
+                            // middle) instead of a flat rule, to match the
+                            // font's own playfulness.
+                            val strokeWidth = 4.dp.toPx()
+                            val dip = 3.dp.toPx()
+                            val y = size.height - strokeWidth - 10.dp.toPx()
+                            val underline = Path().apply {
+                                moveTo(0f, y)
+                                quadraticBezierTo(size.width / 2f, y + dip, size.width, y)
+                            }
+                            drawPath(
+                                path = underline,
+                                color = tealUnderline,
+                                style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                            )
+                        },
+                    )
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        "Your foreign language companion",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    // The exact three star shapes from Icons.Filled.AutoAwesome
+                    // (a single 24x24 path with 3 disjoint contours -- see
+                    // material-icons-extended's AutoAwesome.kt), redrawn as
+                    // 3 separate paths so each can take its own brand color
+                    // instead of AutoAwesome's single flat tint. Same
+                    // layout/proportions as the QUICK TIPS icon below, just
+                    // recolored.
+                    val sparklePrimary = MaterialTheme.colorScheme.primary
+                    val sparkleSecondary = MaterialTheme.colorScheme.secondary
+                    val sparkleTertiary = MaterialTheme.colorScheme.tertiary
+                    Canvas(modifier = Modifier.size(20.dp)) {
+                        val scale = size.width / 24f
+                        fun starPath(points: List<Offset>, originX: Float, originY: Float) =
+                            Path().apply {
+                                points.forEachIndexed { i, p ->
+                                    val x = (p.x + originX) * scale
+                                    val y = (p.y + originY) * scale
+                                    if (i == 0) moveTo(x, y) else lineTo(x, y)
+                                }
+                                close()
+                            }
+                        val bigStar = listOf(
+                            Offset(11.5f, 9.5f), Offset(9f, 4f), Offset(6.5f, 9.5f),
+                            Offset(1f, 12f), Offset(6.5f, 14.5f), Offset(9f, 20f),
+                            Offset(11.5f, 14.5f), Offset(17f, 12f),
+                        )
+                        val smallStar = listOf(
+                            Offset(4f, 8f), Offset(5.25f, 5.25f), Offset(8f, 4f),
+                            Offset(5.25f, 2.75f), Offset(4f, 0f), Offset(2.75f, 2.75f),
+                            Offset(0f, 4f), Offset(2.75f, 5.25f),
+                        )
+                        drawPath(starPath(bigStar, 0f, 0f), color = sparklePrimary)
+                        drawPath(starPath(smallStar, 15f, 1f), color = sparkleSecondary)
+                        drawPath(starPath(smallStar, 15f, 15f), color = sparkleTertiary)
+                    }
+                }
             }
         }
 

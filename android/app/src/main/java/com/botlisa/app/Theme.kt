@@ -6,6 +6,9 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 
 /**
  * App-wide Compose theme -- the "Assistant Lisa" palette from the wireframe
@@ -21,6 +24,12 @@ private val Purple = Color(0xFF8F7FEE)   // primary  -- title, active mic, "Чт
 private val Orange = Color(0xFFFE9F4D)   // secondary -- "Что это значит?" / "Как ответить?"
 private val Teal = Color(0xFF2CB3AE)     // tertiary  -- "Как сказать?" / listening-for-word
 private val OffWhite = Color(0xFFF7F7FA) // light window background
+
+// Baloo 2 (SIL OFL, see app/licenses/baloo2-OFL.txt) -- the rounded, playful
+// weight used for the "Assistant Lisa" header title, in place of the
+// default Material sans-serif which read as too plain/corporate for a
+// mascot-led app.
+val TitleFontFamily = FontFamily(Font(R.font.baloo2_bold, FontWeight.Bold))
 
 private val LightColors = lightColorScheme(
     primary = Purple,
