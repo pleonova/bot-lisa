@@ -973,18 +973,38 @@ fun LisaScreen(
             return
         }
         val language = targetLanguage
+        // Marks this specific call as the authoritative one for `utterance`
+        // *before* either branch below runs -- previously only set inside
+        // the tryAi branch, so a tryLibrary-only call (AI unavailable) never
+        // recorded which utterance it was for at all. Set unconditionally,
+        // right here, so isCurrent() below has something to compare against
+        // no matter which path this call takes.
+        generatingForUtterance = utterance
+        // This job's own writes below all check isCurrent() first --
+        // `scope` isn't cancelled when a newer utterance arrives (unlike the
+        // eager LaunchedEffect, which Compose cancels automatically on its
+        // key changing), so a slow tryAi generation or tryLibrary network
+        // call (up to ~15s) from utterance A could otherwise still be
+        // in-flight when utterance B's own requestWhatElse() call starts and
+        // finishes first -- A's late write would then clobber B's fresh
+        // onDeviceRelated/result/onDeviceGenerating with stale data for a
+        // phrase nobody's looking at anymore. Reported live as "what else
+        // used to show examples for [a word], now it doesn't" right after
+        // trying it on a different (slower-to-resolve) utterance first.
+        fun isCurrent() = generatingForUtterance == utterance
         activeWhatElseJob = scope.launch {
             eagerSkippedForHeat = false // an explicit ask always tries, heat or not
             if (tryAi) {
                 onDeviceGenerating = true
                 aiGenerationAttempted = true
-                generatingForUtterance = utterance
                 val generated = runCatching {
                     OnDeviceLlm.generateWhatElse(context, utterance, language.code)
                 }
                 activeWhatElseJob = null
-                onDeviceRelated = generated.getOrNull()
-                onDeviceGenerating = false
+                if (isCurrent()) {
+                    onDeviceRelated = generated.getOrNull()
+                    onDeviceGenerating = false
+                }
                 // Model marked READY but generation itself blew up (corrupt/
                 // incomplete download despite that, OOM, a native crash in
                 // the inference engine, ...) used to vanish into
@@ -1004,22 +1024,30 @@ fun LisaScreen(
                 // composition" as if generation itself had broken).
                 generated.exceptionOrNull()?.let { e ->
                     if (e is CancellationException) throw e
-                    if (!tryLibrary) errorText = "\"What else?\" generation failed: ${e.message ?: e::class.simpleName}"
+                    if (!tryLibrary && isCurrent()) {
+                        errorText = "\"What else?\" generation failed: ${e.message ?: e::class.simpleName}"
+                    }
                 }
             }
             // Only hit the library when it's the only option (LIBRARY_ONLY)
             // or AI came back empty (BOTH's documented fallback -- see
             // relatedForDisplay) -- not when AI already has something to say,
             // so BOTH doesn't pay for a network round trip it won't use.
+            // onDeviceRelated itself (not isCurrent()) still gates whether to
+            // even try -- a stale, superseded tryAi result above is still a
+            // real answer for *this* utterance, just one this job no longer
+            // gets to display.
             if (tryLibrary && onDeviceRelated.isNullOrEmpty()) {
-                libraryGenerating = true
+                if (isCurrent()) libraryGenerating = true
                 val fetched = runCatching {
                     ApiClient.sendAssist(baseUrl = serverUrl, apiKey = apiKey, text = utterance)
                 }
-                libraryGenerating = false
-                fetched.getOrNull()?.let { result = it }
-                fetched.exceptionOrNull()?.let { e ->
-                    errorText = "\"What else?\" library lookup failed: ${e.message ?: e::class.simpleName}"
+                if (isCurrent()) {
+                    libraryGenerating = false
+                    fetched.getOrNull()?.let { result = it }
+                    fetched.exceptionOrNull()?.let { e ->
+                        errorText = "\"What else?\" library lookup failed: ${e.message ?: e::class.simpleName}"
+                    }
                 }
             }
             // Passing the list explicitly (rather than letting
