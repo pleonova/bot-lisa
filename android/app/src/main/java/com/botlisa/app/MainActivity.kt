@@ -2608,6 +2608,14 @@ fun LisaScreen(
                 // remember to clear whatever the *other* branch last left
                 // behind.
                 speakingExampleText = null
+                // A previous example's (or command's) result/meaning card
+                // otherwise stayed on screen indefinitely -- nothing here
+                // used to clear them, so tapping "сонный" (which shows a
+                // translate-mode result card) and then a completely
+                // different example left that stale card sitting there.
+                result = null
+                meaningResult = null
+                onDeviceRelated = null
                 if (text == wordExample.en) {
                     // The word example's own English bubble ("sleepy") --
                     // previews what the button looks like right after a real
@@ -2648,9 +2656,17 @@ fun LisaScreen(
                     lastUtterance = text
                     inputIsFresher = false
                     speakingExampleText = text
-                    if (speaker?.speak(text) { speakingExampleText = null } != true) {
-                        speakingExampleText = null
+                    // Once heard, translates it and shows/speaks the English
+                    // meaning underneath -- same as tapping "what does that
+                    // mean?" for real would, and the target-language
+                    // equivalent of what the word example's own English
+                    // bubble does (see onWordHeard above). Without this nothing
+                    // but the target-language audio itself ever appeared for
+                    // these two bubbles -- no translation on screen at all.
+                    val onPhraseHeard = { speakMeaningOfLast(); speakingExampleText = null }
+                    if (speaker?.speak(text, onPhraseHeard) != true) {
                         demoUiPhase = null
+                        onPhraseHeard()
                     }
                 }
             },
