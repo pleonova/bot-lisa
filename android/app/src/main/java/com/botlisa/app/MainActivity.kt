@@ -136,7 +136,7 @@ class MainActivity : ComponentActivity() {
  * TranslationSpeaker reports playback state -- but are listed here so the
  * consumers don't need reshaping when that lands.
  */
-enum class UiPhase { IDLE, LISTENING_RU, LISTENING_EN, SPEAKING_TRANSLATION, READING_RECOMMENDATION }
+enum class UiPhase { IDLE, LISTENING_TARGET, LISTENING_EN, SPEAKING_TRANSLATION, READING_RECOMMENDATION }
 
 /**
  * Replaces the idle hint under the record button once a command was
@@ -150,7 +150,7 @@ private data class IdleCommandHint(val kind: CommandKind, val lineOne: String, v
 
 private fun uiPhaseOf(assistantState: SpeechAssistant.State): UiPhase = when (assistantState) {
     SpeechAssistant.State.IDLE -> UiPhase.IDLE
-    SpeechAssistant.State.LISTENING_DEFAULT -> UiPhase.LISTENING_RU
+    SpeechAssistant.State.LISTENING_DEFAULT -> UiPhase.LISTENING_TARGET
     SpeechAssistant.State.LISTENING_FOR_WORD -> UiPhase.LISTENING_EN
 }
 
@@ -169,7 +169,7 @@ fun UiPhase.buttonFillColor(speakingCommand: CommandKind? = null): Color {
     }
     return when (this) {
         UiPhase.IDLE -> MaterialTheme.colorScheme.surfaceVariant
-        UiPhase.LISTENING_RU -> Charcoal
+        UiPhase.LISTENING_TARGET -> Charcoal
         UiPhase.LISTENING_EN -> MaterialTheme.colorScheme.tertiary
         else -> MaterialTheme.colorScheme.primary
     }
@@ -1757,7 +1757,7 @@ fun LisaScreen(
         val isGeneratingSuggestions = whatElseRequested && onDeviceGenerating
         // Pulses (bold, grey -> a color) exactly while the phase needs the
         // caregiver to actually DO something -- tap to start (IDLE), or
-        // speak (LISTENING_RU/LISTENING_EN) -- so the CTA keeps drawing
+        // speak (LISTENING_TARGET/LISTENING_EN) -- so the CTA keeps drawing
         // the eye. Once Lisa herself is the one talking
         // (SPEAKING_TRANSLATION/READING_RECOMMENDATION) nothing is being
         // asked of the caregiver, so it settles to a plain, non-bold,
@@ -1790,7 +1790,7 @@ fun LisaScreen(
         // Same idea as plainIdle above -- "Listening for" / "$language…"
         // across the two reserved lines instead of running long onto the
         // end of one line.
-        val listeningRu = displayPhase == UiPhase.LISTENING_RU
+        val listeningTarget = displayPhase == UiPhase.LISTENING_TARGET
         // Same idea again -- "Now say the word" / "In English".
         val listeningEn = displayPhase == UiPhase.LISTENING_EN
         val greyPulse = lerp(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.onSurfaceVariant, effectivePulse)
@@ -1833,12 +1833,12 @@ fun LisaScreen(
             isGeneratingSuggestions -> "Generating"
             showingHint -> hint!!.lineOne
             plainIdle -> "Tap and speak"
-            listeningRu -> "Listening for"
+            listeningTarget -> "Listening for"
             listeningEn -> "Now say the word"
             playingOneLiner != null -> playingOneLiner
             playingSuffix != null -> "Playing"
             // Every UiPhase is covered by one of the branches above --
-            // IDLE by showingHint/plainIdle, LISTENING_RU/LISTENING_EN by
+            // IDLE by showingHint/plainIdle, LISTENING_TARGET/LISTENING_EN by
             // their own branches, SPEAKING_TRANSLATION/READING_RECOMMENDATION
             // by playingOneLiner/playingSuffix -- so this never actually
             // runs; it's just what an exhaustive `when` over plain boolean
@@ -1934,25 +1934,25 @@ fun LisaScreen(
                                 }
                             isGeneratingSuggestions -> AnnotatedString("suggestions…")
                             plainIdle -> AnnotatedString(targetLanguage.displayName)
-                            listeningRu -> AnnotatedString("${targetLanguage.displayName}…")
+                            listeningTarget -> AnnotatedString("${targetLanguage.displayName}…")
                             listeningEn -> AnnotatedString("In English")
                             playingSuffix != null -> AnnotatedString(playingSuffix)
                             else -> AnnotatedString("")
                         },
                         style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = if (isGeneratingSuggestions || plainIdle || listeningRu || listeningEn || playingSuffix != null) {
+                        fontWeight = if (isGeneratingSuggestions || plainIdle || listeningTarget || listeningEn || playingSuffix != null) {
                             FontWeight.Bold
                         } else {
                             null
                         },
-                        color = if (isGeneratingSuggestions || plainIdle || listeningRu || listeningEn || playingSuffix != null) {
+                        color = if (isGeneratingSuggestions || plainIdle || listeningTarget || listeningEn || playingSuffix != null) {
                             subtitleColor
                         } else {
                             Color.Unspecified
                         },
                         textAlign = TextAlign.Center,
                         modifier = Modifier.clickable(
-                            enabled = isGeneratingSuggestions || showingHint || plainIdle || listeningRu || listeningEn || playingSuffix != null,
+                            enabled = isGeneratingSuggestions || showingHint || plainIdle || listeningTarget || listeningEn || playingSuffix != null,
                         ) { onToggleAssistant() },
                     )
                 }

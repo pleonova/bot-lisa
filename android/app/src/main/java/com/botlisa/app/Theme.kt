@@ -32,7 +32,7 @@ private val OffWhite = Color(0xFFF7F7FA) // light window background
 val Rust = Color(0xFFD8722E)
 
 // Charcoal -- the default hands-free "listening for [language]" state
-// (UiPhase.LISTENING_RU), which used to borrow Purple even though it isn't
+// (UiPhase.LISTENING_TARGET), which used to borrow Purple even though it isn't
 // the "what else?" command. A neutral so the record button/subtitle reads as
 // "ambiently listening" rather than any one brand command. Fixed hex, same
 // in both themes, like the other accents above -- see MainActivity's

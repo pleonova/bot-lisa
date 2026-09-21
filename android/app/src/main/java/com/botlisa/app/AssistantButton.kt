@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.dp
  *
  * Colour and icon follow [phase]:
  *   IDLE                -> grey circle, dark grey mic icon (tap to start)
- *   LISTENING_RU        -> solid purple circle, white mic, pulsing ring
+ *   LISTENING_TARGET    -> solid charcoal circle, white mic, pulsing ring
  *   LISTENING_EN        -> solid teal circle, white mic, pulsing ring
  *   SPEAKING_TRANSLATION/READING_RECOMMENDATION
  *                       -> light [speakingCommand]-accent circle, dark
@@ -60,7 +60,7 @@ fun AssistantButton(
     // ring still follow [phase] as normal, only the glyph itself changes.
     iconOverride: ImageVector? = null,
 ) {
-    val listening = phase == UiPhase.LISTENING_RU || phase == UiPhase.LISTENING_EN
+    val listening = phase == UiPhase.LISTENING_TARGET || phase == UiPhase.LISTENING_EN
     val speaking = phase == UiPhase.SPEAKING_TRANSLATION || phase == UiPhase.READING_RECOMMENDATION
     val active = listening || speaking
 
