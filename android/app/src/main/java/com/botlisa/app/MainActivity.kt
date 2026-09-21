@@ -1184,6 +1184,18 @@ fun LisaScreen(
     // command, if any, is the one currently speaking.
     val isAnyCommandSpeaking = translationSpeaking || englishSpeaking || relatedSpeaking
     val speakingCommand = activeSpeakingCommand.takeIf { isAnyCommandSpeaking }
+    // The record button's own accent while playing -- unlike speakingCommand
+    // above (which InstructionsPanel also uses to decide which card to
+    // highlight solid), this falls back to TRANSLATE when what's actually
+    // playing is the word example's translation bubble, even though
+    // activeSpeakingCommand is deliberately null there (an example isn't a
+    // real command, so it shouldn't highlight the "how to say?" card -- see
+    // onSpeakBubble). Without this fallback the button had no accent to go
+    // on at all in that case and fell back to buttonFillColor()'s generic
+    // purple default instead of teal, even though the subtitle right below
+    // it correctly says "Playing $language translation…".
+    val buttonAccentCommand = speakingCommand
+        ?: CommandKind.TRANSLATE.takeIf { speakingExampleText == wordExample.translated }
 
     // Scrolls to the top once a command's reply finishes playing -- not on
     // the tap itself, so the caregiver can keep reading/tapping elsewhere
@@ -1876,8 +1888,8 @@ fun LisaScreen(
         val subtitleColor = when {
             isGeneratingSuggestions -> CommandKind.NEXT_SUGGESTION.accentColor().copy(alpha = 0.6f)
             displayPhase == UiPhase.IDLE -> greyPulse
-            actionRequired -> lerp(MaterialTheme.colorScheme.outlineVariant, displayPhase.buttonFillColor(speakingCommand), effectivePulse)
-            else -> displayPhase.buttonFillColor(speakingCommand).copy(alpha = 0.6f)
+            actionRequired -> lerp(MaterialTheme.colorScheme.outlineVariant, displayPhase.buttonFillColor(buttonAccentCommand), effectivePulse)
+            else -> displayPhase.buttonFillColor(buttonAccentCommand).copy(alpha = 0.6f)
         }
         // Line two's half of any "Playing ..." state -- null everywhere else.
         // Same speaker as any real command's reply, so translationSpeaking
@@ -1959,7 +1971,7 @@ fun LisaScreen(
                     AssistantButton(
                         phase = displayPhase,
                         onClick = { onToggleAssistant() },
-                        speakingCommand = speakingCommand,
+                        speakingCommand = buttonAccentCommand,
                         iconOverride = if (isGeneratingSuggestions) Icons.Filled.Lightbulb else null,
                     )
                     // One shared Text for line one -- whether that's the demoed
