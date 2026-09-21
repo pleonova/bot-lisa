@@ -2487,8 +2487,13 @@ fun LisaScreen(
                             Icon(
                                 Icons.AutoMirrored.Filled.VolumeUp,
                                 contentDescription = "Play meaning",
+                                // Orange (secondary), matching this card's own
+                                // "meaning" text above -- was purple, which
+                                // belongs to a different command (see the
+                                // translate/related-phrase icons' own tint
+                                // comments for the same rule applied there).
                                 tint = if (englishSpeaking) {
-                                    MaterialTheme.colorScheme.primary
+                                    MaterialTheme.colorScheme.secondary
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 },
