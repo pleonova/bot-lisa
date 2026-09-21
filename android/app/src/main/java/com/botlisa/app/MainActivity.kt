@@ -420,6 +420,22 @@ fun LisaScreen(
     // and running. Found via a real device test where the spinner never
     // showed and "No related phrases" sat there for the whole generation.
     var onDeviceGenerating by remember { mutableStateOf(false) }
+    // Which utterance onDeviceGenerating is actually generating for -- set
+    // alongside it at both call sites (the eager effect, requestWhatElse()'s
+    // own on-demand path). Needed because switching utterances quickly (e.g.
+    // one quick-tips example right after another) doesn't necessarily stop
+    // the *previous* generation the instant lastUtterance changes -- it's
+    // still cancelling (or, if generateWhatElse() doesn't notice the
+    // cancellation until its next checkpoint, still actually running) for a
+    // beat. Without this, requestWhatElse() for the *new* utterance saw
+    // onDeviceGenerating already true and assumed that in-flight generation
+    // was for its own utterance -- just queuing itself behind it
+    // (speakWhenReady = true) instead of starting its own -- so once that
+    // stale generation finally resolved (typically empty, having been
+    // superseded), nothing was ever actually generated for the utterance
+    // just asked about. Reported live as "what else?" doing nothing right
+    // after switching from one quick-tips example to another.
+    var generatingForUtterance by remember { mutableStateOf<String?>(null) }
 
     // The coroutine currently running generateWhatElse() -- from either the
     // eager prefetch effect or requestWhatElse()'s on-demand call, whichever
@@ -852,10 +868,6 @@ fun LisaScreen(
         // anything. Using canGenerate() here made requestWhatElse() give up
         // silently in exactly that window, found as "what else?" going
         // silent right after starting hands-free instead of just slower.
-        if (onDeviceGenerating) {
-            speakWhenReady = true
-            return
-        }
         val source = OnDeviceLlmConfig.getWhatElseSource(context)
         // Whichever of input/lastUtterance is actually fresher wins while
         // idle -- see inputIsFresher's own comment: typing something unsent
@@ -876,6 +888,13 @@ fun LisaScreen(
             lastUtterance
         }
         if (utterance.isBlank()) return
+        // Only defer to an *already in-flight* generation if it's actually
+        // for this utterance -- see generatingForUtterance's own comment for
+        // why onDeviceGenerating alone isn't enough to tell that.
+        if (onDeviceGenerating && generatingForUtterance == utterance) {
+            speakWhenReady = true
+            return
+        }
         // Which source(s) are actually worth trying -- independently, since
         // BOTH should still fall back to the library when AI isn't
         // available rather than doing nothing (see below; this used to
@@ -928,6 +947,7 @@ fun LisaScreen(
             eagerSkippedForHeat = false // an explicit ask always tries, heat or not
             if (tryAi) {
                 onDeviceGenerating = true
+                generatingForUtterance = utterance
                 val generated = runCatching {
                     OnDeviceLlm.generateWhatElse(context, utterance, language.code)
                 }
@@ -1278,6 +1298,7 @@ fun LisaScreen(
                 eagerSkippedForHeat = true
             } else {
                 onDeviceGenerating = true
+                generatingForUtterance = lastUtterance
                 activeWhatElseJob = coroutineContext[Job]
                 val generated = runCatching {
                     OnDeviceLlm.generateWhatElse(context, lastUtterance, targetLanguage.code)
