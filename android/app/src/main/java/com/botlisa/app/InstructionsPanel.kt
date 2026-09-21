@@ -140,7 +140,7 @@ fun InstructionsPanel(
         add(
             Section(
                 color = teal,
-                heading = "FORGOTTEN A WORD?",
+                heading = "FORGOT A WORD?",
                 body = "Say the command, wait for the beep, then say the English word to get a translation.",
                 flow = listOf(
                     FlowItem.CardItem(CardSpec(Icons.Filled.Translate, false, translateTriggerPhrase, TriggerPhraseConfig.TRANSLATE_TRIGGER_EN, onSpeakTranslate, isSpeaking = speakingCommand == CommandKind.TRANSLATE)),
