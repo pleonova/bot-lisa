@@ -2729,17 +2729,16 @@ fun LisaScreen(
                     lastUtterance = text
                     inputIsFresher = false
                     speakingExampleText = text
-                    // Once heard, translates it and shows/speaks the English
-                    // meaning underneath -- same as tapping "what does that
-                    // mean?" for real would -- but only for the *phrase*
-                    // example's two bubbles. The word example's own
-                    // translation bubble ("сонный") doesn't need this: tapping
-                    // "sleepy" already shows that exact pairing in a full
-                    // translate-mode result card (see onWordHeard above), so
-                    // showing a second, separate "meaning" card for the same
-                    // pair right after was redundant, not an actual bug fix.
+                    // Just plays the phrase back -- no meaning/result card of
+                    // its own. An earlier version also called
+                    // speakMeaningOfLast() here so a translation appeared
+                    // underneath, but that produced an unwanted results card
+                    // for a plain example tap (not a real "what does that
+                    // mean?" command), so it's gone; lastUtterance/
+                    // inputIsFresher above are still set so a genuine "what
+                    // else?"/"what does that mean?" tapped afterward acts on
+                    // this phrase.
                     val onPhraseHeard = {
-                        if (text != wordExample.translated) speakMeaningOfLast()
                         speakingExampleText = null
                     }
                     if (speaker?.speak(text, onPhraseHeard) != true) {
