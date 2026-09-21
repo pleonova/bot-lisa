@@ -2077,8 +2077,16 @@ fun LisaScreen(
                     Icon(
                         Icons.AutoMirrored.Filled.VolumeUp,
                         contentDescription = "Read aloud",
+                        // Teal (not purple) specifically while reading a
+                        // translation -- matches the translation text's own
+                        // color right in the card below (and "how to say?"'s
+                        // teal everywhere else), instead of a mismatched
+                        // purple that belongs to a different command.
+                        // Plain purple otherwise (reading whatever's typed,
+                        // an expand-mode lookup with no translate accent of
+                        // its own).
                         tint = if (translationSpeaking) {
-                            MaterialTheme.colorScheme.primary
+                            if (result?.mode == "translate") MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         },
@@ -2235,8 +2243,13 @@ fun LisaScreen(
                             Icon(
                                 Icons.AutoMirrored.Filled.VolumeUp,
                                 contentDescription = "Play translation",
+                                // Teal, matching the translation text right
+                                // above (and "how to say?"'s own teal
+                                // everywhere else) -- this card only ever
+                                // shows a translate-mode result, so there's
+                                // no other accent it could mean.
                                 tint = if (translationSpeaking) {
-                                    MaterialTheme.colorScheme.primary
+                                    MaterialTheme.colorScheme.tertiary
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 },
