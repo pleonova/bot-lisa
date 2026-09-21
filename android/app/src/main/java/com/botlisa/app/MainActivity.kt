@@ -443,6 +443,18 @@ fun LisaScreen(
     // onDeviceRelated != null.
     var aiGenerationAttempted by remember { mutableStateOf(false) }
 
+    // True while requestWhatElse()'s library fallback (ApiClient.sendAssist,
+    // a real network round trip that can take several seconds -- or the
+    // full 15s connect+read timeout on a slow/unreachable server) is
+    // actually in flight. Unlike the on-device path, nothing set `result`
+    // (or any other flag) until this call returns, so the "Related phrases
+    // for ..." card below had no pending state to show at all during that
+    // window -- it just showed nothing until the request finally settled.
+    // Reported live as "what else? does not produce any suggestions" for a
+    // target (Russian) whose on-device model wasn't ready, so every "what
+    // else?" fell through to this library-only path.
+    var libraryGenerating by remember { mutableStateOf(false) }
+
     // The coroutine currently running generateWhatElse() -- from either the
     // eager prefetch effect or requestWhatElse()'s on-demand call, whichever
     // is in flight -- so the "X" on the generating card can cancel it
@@ -1000,9 +1012,11 @@ fun LisaScreen(
             // relatedForDisplay) -- not when AI already has something to say,
             // so BOTH doesn't pay for a network round trip it won't use.
             if (tryLibrary && onDeviceRelated.isNullOrEmpty()) {
+                libraryGenerating = true
                 val fetched = runCatching {
                     ApiClient.sendAssist(baseUrl = serverUrl, apiKey = apiKey, text = utterance)
                 }
+                libraryGenerating = false
                 fetched.getOrNull()?.let { result = it }
                 fetched.exceptionOrNull()?.let { e ->
                     errorText = "\"What else?\" library lookup failed: ${e.message ?: e::class.simpleName}"
@@ -1041,6 +1055,7 @@ fun LisaScreen(
         activeWhatElseJob = null
         onDeviceGenerating = false
         aiGenerationAttempted = false
+        libraryGenerating = false
     }
 
     // Reads one specific related phrase aloud -- the trailing speaker button
@@ -2301,8 +2316,20 @@ fun LisaScreen(
         // mirrors the standalone AI card's own eagerMode/whatElseRequested
         // gate below (which this val is now shared with).
         val eagerMode = OnDeviceLlmConfig.getPrefetchMode(context) == OnDeviceLlmConfig.PrefetchMode.EAGER
-        if (relatedForDisplay.isNotEmpty() || aiPending || eagerMode || whatElseRequested) {
-            result?.let { r ->
+        if (relatedForDisplay.isNotEmpty() || aiPending || libraryGenerating || eagerMode || whatElseRequested) {
+            // `result` itself stays null for the whole libraryGenerating
+            // window -- ApiClient.sendAssist() is a real network call (up to
+            // ~15s on a slow/unreachable server) and nothing sets `result`
+            // until it actually returns. Gating this card on `result?.let`
+            // alone meant the library-only path (no on-device model ready)
+            // showed nothing at all while that request was in flight --
+            // reported live as "what else? does not produce any
+            // suggestions". Falling back to lastUtterance for the display
+            // text keeps this card (and its spinner) showing during that
+            // window instead of waiting for a `result` that hasn't arrived
+            // yet.
+            if (result != null || libraryGenerating) {
+                val displayInput = result?.input ?: lastUtterance
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -2318,7 +2345,7 @@ fun LisaScreen(
                         // eager/on-demand "what else?" suggestions actually show
                         // up here, the same as a spoken utterance's.
                         when {
-                            relatedForDisplay.isNotEmpty() || aiPending -> {
+                            relatedForDisplay.isNotEmpty() || aiPending || libraryGenerating -> {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -2337,6 +2364,9 @@ fun LisaScreen(
                                             // aiPending is only ever true mid-AI-generation, so
                                             // it reads as "AI" even before onDeviceRelated (and
                                             // therefore usingAiSuggestions) has anything in it.
+                                            // libraryGenerating is the mirror case for the
+                                            // network fetch -- neither has a result yet, so
+                                            // usingAiSuggestions alone can't tell them apart.
                                             if (usingAiSuggestions || aiPending) "AI" else "Library",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = Color.White,
@@ -2346,7 +2376,7 @@ fun LisaScreen(
                                 }
                                 if (relatedForDisplay.isNotEmpty()) {
                                     Text(
-                                        r.input,
+                                        displayInput,
                                         style = MaterialTheme.typography.titleMedium,
                                         fontStyle = FontStyle.Italic,
                                         color = MaterialTheme.colorScheme.primary,
@@ -2357,11 +2387,11 @@ fun LisaScreen(
                                     // the phrase and its spinner share one line instead of
                                     // stacking, and there's no second "Generating
                                     // suggestions for ..." sentence repeating the phrase.
-                                    PhrasePendingRow(r.input, onCancel = ::cancelWhatElseGeneration)
+                                    PhrasePendingRow(displayInput, onCancel = ::cancelWhatElseGeneration)
                                 }
                             }
                             else -> Text(
-                                "No related phrases for \"${r.input}\".",
+                                "No related phrases for \"$displayInput\".",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
