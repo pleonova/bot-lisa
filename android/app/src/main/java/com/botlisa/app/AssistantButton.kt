@@ -59,6 +59,15 @@ fun AssistantButton(
     // while "what else?" suggestions are generating) -- fill/border/pulsing
     // ring still follow [phase] as normal, only the glyph itself changes.
     iconOverride: ImageVector? = null,
+    // True while a "what else?" generation is actually running in the
+    // background -- this can happen while [phase] is still IDLE (the
+    // generation is async and doesn't depend on hands-free being active),
+    // so without this the lightbulb from [iconOverride] rendered in
+    // IDLE's plain grey with no pulse at all, giving no visual sense that
+    // anything was happening. Overrides just the icon's own tint + a gentle
+    // scale pulse (see Pulse.kt) -- the button's fill/ring stay exactly as
+    // [phase] dictates otherwise.
+    generating: Boolean = false,
 ) {
     val listening = phase == UiPhase.LISTENING_TARGET || phase == UiPhase.LISTENING_EN
     val speaking = phase == UiPhase.SPEAKING_TRANSLATION || phase == UiPhase.READING_RECOMMENDATION
@@ -73,6 +82,11 @@ fun AssistantButton(
     val accent = phase.buttonFillColor(speakingCommand)
     val fill = if (phase == UiPhase.IDLE || !speaking) accent else accent.copy(alpha = 0.18f)
     val contentColor = when {
+        // Purple (NEXT_SUGGESTION's own accent, see CommandKind.accentColor())
+        // regardless of phase -- generating is most often seen during IDLE,
+        // whose plain grey gave no sense that "what else?" was the command
+        // actually running.
+        generating -> CommandKind.NEXT_SUGGESTION.accentColor()
         phase == UiPhase.IDLE -> MaterialTheme.colorScheme.onSurfaceVariant
         speaking -> accent
         else -> Color.White
@@ -136,7 +150,7 @@ fun AssistantButton(
                 imageVector = iconOverride ?: if (speaking) Icons.AutoMirrored.Filled.VolumeUp else Icons.Filled.Mic,
                 contentDescription = if (phase == UiPhase.IDLE) "Start hands-free mode" else "Stop hands-free mode",
                 tint = contentColor,
-                modifier = Modifier.size(36.dp),
+                modifier = Modifier.size(36.dp).pulse(generating),
             )
         }
     }

@@ -2068,6 +2068,7 @@ fun LisaScreen(
                         onClick = { onToggleAssistant() },
                         speakingCommand = buttonAccentCommand,
                         iconOverride = if (isGeneratingSuggestions) Icons.Filled.Lightbulb else null,
+                        generating = isGeneratingSuggestions,
                     )
                     // One shared Text for line one -- whether that's the demoed
                     // hint's own instruction or the phase's plain subtitle -- so
