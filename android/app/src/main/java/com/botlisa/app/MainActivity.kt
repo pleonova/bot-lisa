@@ -1997,6 +1997,15 @@ fun LisaScreen(
         val playingSuffix = when {
             displayPhase == UiPhase.SPEAKING_TRANSLATION && speakingExampleText == wordExample.translated ->
                 "${targetLanguage.displayName} translation…"
+            // "What does that mean?" reads its English gloss via
+            // englishSpeaker, which -- same as the target-language `speaker`
+            // used for every other command's trigger phrase -- maps to this
+            // same SPEAKING_TRANSLATION phase (see translationSpeaking ||
+            // englishSpeaking above), so without this it fell into the
+            // generic "voice command…" catch-all below, same as any other
+            // command's own trigger-phrase readback.
+            displayPhase == UiPhase.SPEAKING_TRANSLATION && speakingExampleText == null &&
+                speakingCommand == CommandKind.MEANING -> "meaning…"
             displayPhase == UiPhase.SPEAKING_TRANSLATION && speakingExampleText == null -> "voice command…"
             else -> null
         }
