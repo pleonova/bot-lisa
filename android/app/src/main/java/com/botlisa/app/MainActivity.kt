@@ -1701,8 +1701,11 @@ fun LisaScreen(
     // clears the page.
     fun resetToStart(showIntroPopup: Boolean = false) {
         stopHandsFree()
+        stopAllSpeakers()
         idleCommandHint = null
         demoUiPhase = null
+        activeSpeakingCommand = null
+        speakingExampleText = null
         // Drop focus so the field isn't left selected -- a focused field
         // hides the "start typing" helper under the buttons.
         focusManager.clearFocus()
@@ -1718,6 +1721,20 @@ fun LisaScreen(
         assistantError = null
         assistantNotice = null
         suggestionIndex = 0
+        // The standalone "what else?" AI card (see its own visibility
+        // comment) is gated on lastUtterance/whatElseRequested/aiAttempted/
+        // eagerSkippedForHeat, none of which the fields above touch --
+        // without these, tapping "Assistant Lisa" back to the opening state
+        // still left that card (and a stale, possibly still-running
+        // background generation/network call for the utterance just left
+        // behind) on screen.
+        lastUtterance = ""
+        inputIsFresher = false
+        whatElseRequested = false
+        eagerSkippedForHeat = false
+        speakWhenReady = false
+        generatingForUtterance = null
+        cancelWhatElseGeneration()
         showInstructions = true
         showSettings = false
         scope.launch {
