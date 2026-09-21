@@ -437,6 +437,12 @@ fun LisaScreen(
     // after switching from one quick-tips example to another.
     var generatingForUtterance by remember { mutableStateOf<String?>(null) }
 
+    // True once an on-device generation attempt has started for
+    // lastUtterance, whether or not it ends up producing anything -- see
+    // aiAttempted below for why this can't just be derived from
+    // onDeviceRelated != null.
+    var aiGenerationAttempted by remember { mutableStateOf(false) }
+
     // The coroutine currently running generateWhatElse() -- from either the
     // eager prefetch effect or requestWhatElse()'s on-demand call, whichever
     // is in flight -- so the "X" on the generating card can cancel it
@@ -811,7 +817,19 @@ fun LisaScreen(
     // all. False when AI "what else" was never in play (LIBRARY_ONLY mode,
     // an incapable/not-ready device), so no empty placeholder card shows for
     // a mode that was never going to answer.
-    val aiAttempted = onDeviceGenerating || onDeviceRelated != null
+    //
+    // A plain state flag (aiGenerationAttempted), not derived from
+    // onDeviceGenerating || onDeviceRelated != null -- a *failed* generation
+    // (exception, or the model returning nothing usable) leaves
+    // onDeviceGenerating false and onDeviceRelated null, the exact same
+    // state as "never even tried". That made the derived version go back to
+    // false the instant a real attempt finished badly, hiding this card --
+    // and with it its "No suggestions for ..." text -- entirely. Reported
+    // live as "what else? does not show anything" for the phrase-example
+    // quick tip, whose flow never populates the backend `result` the other
+    // card (above) depends on, so this was the only card that could have
+    // shown anything for it.
+    val aiAttempted = aiGenerationAttempted
 
     // Speaks the next related/suggested phrase from relatedForDisplay aloud,
     // cycling through the list and wrapping back to the start once it runs
@@ -947,6 +965,7 @@ fun LisaScreen(
             eagerSkippedForHeat = false // an explicit ask always tries, heat or not
             if (tryAi) {
                 onDeviceGenerating = true
+                aiGenerationAttempted = true
                 generatingForUtterance = utterance
                 val generated = runCatching {
                     OnDeviceLlm.generateWhatElse(context, utterance, language.code)
@@ -1021,6 +1040,7 @@ fun LisaScreen(
         activeWhatElseJob?.cancel()
         activeWhatElseJob = null
         onDeviceGenerating = false
+        aiGenerationAttempted = false
     }
 
     // Reads one specific related phrase aloud -- the trailing speaker button
@@ -1272,6 +1292,7 @@ fun LisaScreen(
     LaunchedEffect(lastUtterance, targetLanguage) {
         onDeviceRelated = null
         onDeviceGenerating = false
+        aiGenerationAttempted = false
         whatElseRequested = false // fresh utterance -> hasn't been asked about yet
         eagerSkippedForHeat = false
         // A fresh utterance means a fresh suggestion list -- without this,
@@ -1298,6 +1319,7 @@ fun LisaScreen(
                 eagerSkippedForHeat = true
             } else {
                 onDeviceGenerating = true
+                aiGenerationAttempted = true
                 generatingForUtterance = lastUtterance
                 activeWhatElseJob = coroutineContext[Job]
                 val generated = runCatching {
