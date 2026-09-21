@@ -2528,13 +2528,6 @@ fun LisaScreen(
                         ::onTranslateCommand,
                     ),
                 )
-                add(
-                    CommandChipSpec(
-                        CommandKind.MEANING, meaningTriggerPhrase,
-                        TriggerPhraseConfig.MEANING_TRIGGER_EN,
-                        ::onMeaningCommand,
-                    ),
-                )
                 if (nextSuggestionSupported) {
                     add(
                         CommandChipSpec(
@@ -2544,6 +2537,13 @@ fun LisaScreen(
                         ),
                     )
                 }
+                add(
+                    CommandChipSpec(
+                        CommandKind.MEANING, meaningTriggerPhrase,
+                        TriggerPhraseConfig.MEANING_TRIGGER_EN,
+                        ::onMeaningCommand,
+                    ),
+                )
                 if (curatedRelatedSupported) {
                     add(
                         CommandChipSpec(
