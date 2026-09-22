@@ -97,14 +97,18 @@ class WhatElseBenchmarkTest {
     /**
      * Single-call PSS footprint of [OnDeviceLlm.generateWhatElse] -- found
      * (2026-09-11, Pixel 11) that the LLM alone already runs at ~3GB, right
-     * at the device's own memory.high cgroup ceiling, before this test's
-     * on-device gloss translation adds anything: idle ~147MB -> ~3004MB
-     * right after LLM generation -> ~3091MB after translating all three
-     * glosses. A single call isn't fatal (memory.high is a soft/throttling
-     * signal, not an instant kill), but [benchmarkGenerateWhatElse]'s 20
-     * back-to-back calls got this process killed outright by the OS after
-     * staying over that line for ~90s. See android/app/benchmarks/README.md
-     * and OnDeviceLlm.generateWhatElse's own "MEMORY" doc comment.
+     * at the device's own memory.high cgroup ceiling: idle ~147MB -> ~3004MB
+     * right after LLM generation. A single call isn't fatal (memory.high is
+     * a soft/throttling signal, not an instant kill), but
+     * [benchmarkGenerateWhatElse]'s 20 back-to-back calls got this process
+     * killed outright by the OS after staying over that line for ~90s. See
+     * android/app/benchmarks/README.md.
+     *
+     * Gloss translation used to run inside generateWhatElse itself (adding
+     * ~90MB on top, per that README's older numbers) but now happens
+     * separately, one phrase at a time, after the caller has already shown
+     * the phrases -- see OnDeviceLlm.generateWhatElse's doc comment -- so
+     * this test's PSS delta no longer includes it.
      */
     @Test
     fun checkMemoryFootprint() = runBlocking {

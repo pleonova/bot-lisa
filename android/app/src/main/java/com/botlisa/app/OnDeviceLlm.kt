@@ -159,10 +159,11 @@ object OnDeviceLlm {
      * PromptComposer. Loads the model on first call (or after an idle
      * unload), reuses it while it stays warm -- but reloads it when
      * [languageCode] changes, since its system prompt can only be set once
-     * per load. Each returned [Phrase.glossEn] is an on-device English
-     * translation of that suggestion (best-effort; empty if translation
-     * fails). Throws on failure -- callers (Phase 7) are expected to catch
-     * and fall back to the network path, not surface this directly.
+     * per load. Each returned [Phrase.glossEn] starts empty -- callers fill
+     * it in afterward, phrase by phrase, via [translateGloss] once the
+     * phrases themselves are already showing (see that function's doc
+     * comment for why). Throws on failure -- callers (Phase 7) are expected
+     * to catch and fall back to the network path, not surface this directly.
      */
     suspend fun generateWhatElse(context: Context, heard: String, languageCode: String): List<Phrase> = mutex.withLock {
         idleUnloadJob?.cancel()
@@ -188,35 +189,6 @@ object OnDeviceLlm {
                 thinkTag.replace(raw, "")
             }
 
-            // English gloss for each suggestion, same on-device ML Kit path
-            // as the hands-free transcript gloss (OnDeviceTranslator.kt) --
-            // reused, not reimplemented, so it shares that model's one-time
-            // download and caching. Sequential rather than concurrent: all
-            // three share one cached Translator instance for this language
-            // pair, and ML Kit's Translator isn't documented as safe for
-            // concurrent translate() calls. Degrades to "" per-phrase on
-            // failure (e.g. model not downloaded yet, no wifi) rather than
-            // failing the whole request -- the phrase itself is the part
-            // that matters; the gloss is a nice-to-have, same reasoning as
-            // the transcript gloss's own "fails silently" doc comment.
-            //
-            // MEMORY -- measured directly on a Pixel 11: the LLM alone
-            // already sits at ~3004MB PSS right here, essentially at the
-            // device's ~3072MB (3GB) memory.high cgroup ceiling, and these
-            // translate() calls add another ~90MB on top. A single request
-            // isn't fatal (memory.high is a soft/throttling signal), but
-            // *sustained* excess is -- 20 back-to-back generateWhatElse
-            // calls got this process killed outright by the OS's
-            // MemoryLimiter after ~90s over the line. PrefetchMode.ON_DEMAND
-            // (OnDeviceLlmConfig.kt) is the mitigation available today;
-            // shrinking the LLM's own footprint (smaller context, a smaller
-            // model) is the real fix if this proves fatal in practice.
-            val targetLanguage = SupportedLanguages.byCode(languageCode)
-            // Materialized to a concrete List first, then mapped separately
-            // -- Sequence's map/filter/take are lazy, so their transform
-            // lambdas run inside a hidden iterator class rather than being
-            // inlined into this function, which the compiler won't let call
-            // a suspend function (translateToEnglish below) from.
             // Despite the persona's explicit "no preamble" instruction, the
             // model occasionally opens with a meta-commentary line instead
             // of (or as well as) the three phrases -- e.g. "Here are three
@@ -236,12 +208,22 @@ object OnDeviceLlm {
                 .filter { it.isNotEmpty() && !it.endsWith(":") && !it.endsWith("：") }
                 .take(3)
                 .toList()
-            val phrases = phraseTexts.map { text ->
-                val gloss = runCatching {
-                    OnDeviceTranslator.translateToEnglish(text, targetLanguage)
-                }.getOrDefault("")
-                Phrase(ru = text, glossEn = gloss)
-            }
+            // glossEn starts empty. Translating it used to happen right
+            // here, eagerly, for all three phrases before returning any of
+            // them: three sequential ML Kit calls (sequential rather than
+            // concurrent because they share one cached Translator instance
+            // for this language pair, and ML Kit's Translator isn't
+            // documented as safe for concurrent translate() calls) that
+            // blocked the caregiver from seeing a single result until all
+            // three finished -- pure added latency on top of generation
+            // itself, for a caption that's a nice-to-have next to the
+            // phrase text that actually answers "what else?". It also piled
+            // ~90MB of ML Kit translator memory on top of the LLM's own
+            // ~3004MB PSS, right at this device's ~3072MB memory.high
+            // ceiling (see android/app/benchmarks/README.md). Callers now
+            // show these phrases immediately and fill in each gloss
+            // afterward, one at a time, via translateGloss().
+            val phrases = phraseTexts.map { text -> Phrase(ru = text, glossEn = "") }
 
             lastError = null
             scheduleIdleUnload()
@@ -260,6 +242,24 @@ object OnDeviceLlm {
         } finally {
             isGenerating = false
         }
+    }
+
+    /**
+     * Best-effort on-device English translation of one [generateWhatElse]
+     * phrase, for [languageCode]'s target language. Meant to be called by
+     * the caller *after* it has already shown the phrase without a gloss --
+     * see [generateWhatElse]'s doc comment for why this isn't done inside
+     * that call. Same on-device ML Kit path as the hands-free transcript
+     * gloss (OnDeviceTranslator.kt), reused rather than reimplemented.
+     * Degrades to "" on failure (e.g. translation model not downloaded yet,
+     * no wifi) rather than throwing -- the gloss is a nice-to-have caption,
+     * not something worth failing a request over.
+     */
+    suspend fun translateGloss(text: String, languageCode: String): String {
+        val targetLanguage = SupportedLanguages.byCode(languageCode)
+        return runCatching {
+            OnDeviceTranslator.translateToEnglish(text, targetLanguage)
+        }.getOrDefault("")
     }
 
     /**

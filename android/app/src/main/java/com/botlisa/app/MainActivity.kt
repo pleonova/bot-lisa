@@ -1037,6 +1037,24 @@ fun LisaScreen(
                     onDeviceRelated = generated.getOrNull()
                     onDeviceGenerating = false
                 }
+                // Phrases are already showing at this point -- fill in each
+                // one's English gloss afterward, one at a time, rather than
+                // making the caregiver wait on it before seeing anything
+                // (see OnDeviceLlm.generateWhatElse's doc comment). Bails if
+                // a newer utterance superseded this one, or if onDeviceRelated
+                // no longer holds the exact list this loop is updating (e.g.
+                // the library fallback replaced it, or another generation
+                // raced ahead of this one).
+                generated.getOrNull()?.let { initial ->
+                    var current = initial
+                    for (i in current.indices) {
+                        if (!isCurrent()) break
+                        val gloss = OnDeviceLlm.translateGloss(current[i].ru, language.code)
+                        if (!isCurrent() || onDeviceRelated !== current) break
+                        current = current.toMutableList().also { it[i] = it[i].copy(glossEn = gloss) }
+                        onDeviceRelated = current
+                    }
+                }
                 // Model marked READY but generation itself blew up (corrupt/
                 // incomplete download despite that, OOM, a native crash in
                 // the inference engine, ...) used to vanish into
@@ -1419,6 +1437,21 @@ fun LisaScreen(
                 activeWhatElseJob = null
                 onDeviceRelated = generated.getOrNull()
                 onDeviceGenerating = false
+                // Same "show the phrases now, fill in glosses after" approach
+                // as requestWhatElse() -- see its comment. No isCurrent()
+                // check needed here: this whole block runs inside
+                // LaunchedEffect(lastUtterance, targetLanguage), so Compose
+                // cancels this coroutine outright the moment either key
+                // changes, same as the generation call above already relies on.
+                generated.getOrNull()?.let { initial ->
+                    var current = initial
+                    for (i in current.indices) {
+                        val gloss = OnDeviceLlm.translateGloss(current[i].ru, targetLanguage.code)
+                        if (onDeviceRelated !== current) break
+                        current = current.toMutableList().also { it[i] = it[i].copy(glossEn = gloss) }
+                        onDeviceRelated = current
+                    }
+                }
                 // Same reasoning as requestWhatElse()'s equivalent comment --
                 // a failure here used to vanish silently, and since this is
                 // the *background* prefetch, it could fail minutes before
