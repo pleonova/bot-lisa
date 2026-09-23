@@ -185,6 +185,41 @@ fun UiPhase.buttonFillColor(speakingCommand: CommandKind? = null): Color {
 // $WHAT_ELSE_LOG_TAG` instead of guessed at.
 private const val WHAT_ELSE_LOG_TAG = "WhatElse"
 
+/**
+ * Whether a newly-heard utterance should reset/regenerate the "what else?"
+ * suggestion list, or leave it (and suggestionIndex) alone. Pulled out as
+ * its own pure function -- no Compose state reads -- so this specific
+ * decision is unit-testable in isolation from the LaunchedEffect it guards
+ * (see MainActivity.kt's `LaunchedEffect(lastUtterance, targetLanguage)`).
+ *
+ * false once the caregiver has actually asked "what else?" for the current
+ * list ([whatElseRequested]) -- without this, *any* later incidental
+ * utterance (hands-free picking up the caregiver reading a suggestion back
+ * to the child, or ambient noise) silently wiped/regenerated the list out
+ * from under them mid-cycle, so whether a repeat "what else?" continued the
+ * existing list or restarted from scratch came down to mic timing. Reported
+ * live as "sometimes it reads the next item, sometimes it regenerates from
+ * scratch" -- the single most disruptive bug in this flow.
+ */
+internal fun shouldRegenerateWhatElseFor(whatElseRequested: Boolean): Boolean = !whatElseRequested
+
+/**
+ * Which utterance the standalone "what else?" card's heading (and its
+ * "No suggestions for ..."/"Skipped generating ..." text) should show.
+ * While a list is being held in place ([whatElseRequested] true --
+ * see [shouldRegenerateWhatElseFor]), that has to be the phrase the *held*
+ * list was actually generated for ([generatingForUtterance], set once at
+ * generation start and left alone until the next real reset), not the
+ * live-drifting [lastUtterance] -- otherwise the heading would drift ahead
+ * to newer incidental speech while the list underneath it stayed on the
+ * older phrase.
+ */
+internal fun whatElseDisplayUtterance(
+    whatElseRequested: Boolean,
+    generatingForUtterance: String?,
+    lastUtterance: String,
+): String = if (whatElseRequested) (generatingForUtterance ?: lastUtterance) else lastUtterance
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LisaScreen(
@@ -702,6 +737,16 @@ fun LisaScreen(
                             related = emptyList(),
                             latencyMs = 0.0,
                         )
+                        // Tags this as the TRANSLATE command the same way
+                        // onTranslateCommand() does for the tapped/demo path --
+                        // without it, the real voice-triggered "как сказать?"
+                        // flow (word captured -> here) left activeSpeakingCommand
+                        // at whatever it was last (often null), so the record
+                        // button fell back to buttonFillColor()'s generic
+                        // purple while playing the translation back instead of
+                        // teal. Reported live as "как сказать" playback showing
+                        // purple, not teal.
+                        activeSpeakingCommand = CommandKind.TRANSLATE
                         res.translation?.let { speaker?.speak(it.ru) }
                         result = res
                         // "Last utterance" for eager prefetch / what-else /
@@ -755,6 +800,10 @@ fun LisaScreen(
                     }
                     // Read the translation back aloud -- the "one earbud in, talking
                     // to the kid" use case. Whatever won above gets spoken.
+                    // See the on-device branch above for why this must set
+                    // activeSpeakingCommand itself rather than relying on
+                    // whatever tap/demo path last set it.
+                    activeSpeakingCommand = CommandKind.TRANSLATE
                     assist.translation?.let { speaker?.speak(it.ru) }
                 }
                 result = assist
@@ -813,6 +862,8 @@ fun LisaScreen(
                     ""
                 }
                 if (offline != null) {
+                    // Same reasoning as the two translate paths above.
+                    activeSpeakingCommand = CommandKind.TRANSLATE
                     offline.translation?.let { speaker?.speak(it.ru) }
                     offline.translation?.let { lastUtterance = it.ru }
                     inputIsFresher = false
@@ -1485,6 +1536,23 @@ fun LisaScreen(
     // no point spending battery/time on a generation nothing will display.
     // See ON_DEVICE_LLM_PLAN.md Phase 7.
     LaunchedEffect(lastUtterance, targetLanguage) {
+        // Once the caregiver has actually asked "what else?" for the current
+        // list, hold it in place -- don't let a *later* incidental utterance
+        // (hands-free picking up the caregiver reading a suggestion back to
+        // the child, or ambient noise) silently wipe/regenerate it out from
+        // under them mid-cycle. Without this guard, every new lastUtterance
+        // reset onDeviceRelated/suggestionIndex unconditionally, so whether a
+        // repeat "what else?" continued the existing list (nothing new heard
+        // in between) or silently restarted on a fresh one (something was)
+        // came down to mic timing -- reported live as "sometimes it reads the
+        // next item, sometimes it regenerates from scratch". requestWhatElse()
+        // already keeps cycling through whatever's here via
+        // relatedForDisplay()/speakNextSuggestion(); this just stops that list
+        // from being pulled out from under it. Only an explicit reset
+        // (resetToStart(), a fresh hands-free session -- see their own
+        // whatElseRequested = false) clears the hold and lets a genuinely new
+        // utterance regenerate again.
+        if (!shouldRegenerateWhatElseFor(whatElseRequested)) return@LaunchedEffect
         onDeviceRelated = null
         onDeviceGenerating = false
         aiGenerationAttempted = false
@@ -2658,9 +2726,20 @@ fun LisaScreen(
         if (result == null && lastUtterance.isNotBlank() && (eagerMode || whatElseRequested) &&
             (aiAttempted || eagerSkippedForHeat)
         ) {
-            // Keyed on lastUtterance -- a new utterance naturally
-            // un-dismisses this card, same reasoning as the two cards above.
-            var aiCardDismissed by remember(lastUtterance) { mutableStateOf(false) }
+            // Once a list is being held in place (see the eager-prefetch
+            // LaunchedEffect's own whatElseRequested guard above), the
+            // heading has to hold with it -- otherwise a later incidental
+            // utterance would still drag lastUtterance forward and this card
+            // would end up saying "Related phrases for: <newer phrase>" over
+            // a list that's actually still the older phrase's suggestions.
+            // generatingForUtterance is exactly the phrase the held list was
+            // generated for (set once at generation start, never touched
+            // again until the next real reset -- see its own declaration).
+            val displayUtterance = whatElseDisplayUtterance(whatElseRequested, generatingForUtterance, lastUtterance)
+            // Keyed on displayUtterance (not the live-drifting lastUtterance)
+            // for the same reason -- a new utterance un-dismisses this card,
+            // but only once it's actually the phrase this card is showing.
+            var aiCardDismissed by remember(displayUtterance) { mutableStateOf(false) }
             if (!aiCardDismissed) {
             DismissibleResultCard(onDismiss = { aiCardDismissed = true }) {
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -2689,7 +2768,7 @@ fun LisaScreen(
                     when {
                         relatedForDisplayNow.isNotEmpty() -> {
                             Text(
-                                lastUtterance,
+                                displayUtterance,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontStyle = FontStyle.Italic,
                                 color = MaterialTheme.colorScheme.primary,
@@ -2702,13 +2781,13 @@ fun LisaScreen(
                             // stacking, and there's no second "Generating
                             // suggestions for ..." sentence repeating the phrase.
                             PhrasePendingRow(
-                                lastUtterance,
+                                displayUtterance,
                                 isFirstTimeSetup = whatElseColdStart,
                                 onCancel = ::cancelWhatElseGeneration,
                             )
                         eagerSkippedForHeat ->
                             Text(
-                                "Skipped generating suggestions for “$lastUtterance” -- " +
+                                "Skipped generating suggestions for “$displayUtterance” -- " +
                                     "device is running warm. Say “$nextSuggestionTriggerPhrase” " +
                                     "to generate one anyway.",
                                 style = MaterialTheme.typography.bodyMedium,
@@ -2716,7 +2795,7 @@ fun LisaScreen(
                             )
                         else ->
                             Text(
-                                "No suggestions for “$lastUtterance”.",
+                                "No suggestions for “$displayUtterance”.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

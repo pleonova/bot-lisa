@@ -28,6 +28,35 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 
 /**
+ * Which of the three fill treatments [AssistantButton] should paint --
+ * [buttonFillColor]'s neutral fill while a "what else?" generation is
+ * running (regardless of [UiPhase]), [UiPhase]'s own solid accent
+ * otherwise, or that same accent lightly tinted while a speaker-icon phase
+ * is actually playing. Pulled out as its own pure function (no Compose/
+ * MaterialTheme dependency) so the decision -- not the actual Color, which
+ * needs a MaterialTheme to resolve -- is unit-testable. See AssistantButtonTest.
+ */
+internal enum class ButtonFillTreatment { GENERATING_NEUTRAL, PHASE_SOLID, PHASE_LIGHT_TINT }
+
+internal fun buttonFillTreatment(phase: UiPhase, generating: Boolean): ButtonFillTreatment {
+    val speaking = phase == UiPhase.SPEAKING_TRANSLATION || phase == UiPhase.READING_RECOMMENDATION
+    return when {
+        // Light grey, not whatever solid color [phase] would otherwise pick --
+        // "what else?" generation runs in the background and can overlap any
+        // phase, most often LISTENING_TARGET (solid Charcoal, a dark grey)
+        // while hands-free is still actively listening. Falling through to
+        // that made the button read as "still listening" instead of
+        // "generating", and looked like a plain dark grey circle rather than
+        // the light grey idle/processing look everywhere else. Reported live
+        // as "the icon background is dark gray, should be light gray" while
+        // "what else?" suggestions were generating.
+        generating -> ButtonFillTreatment.GENERATING_NEUTRAL
+        phase == UiPhase.IDLE || !speaking -> ButtonFillTreatment.PHASE_SOLID
+        else -> ButtonFillTreatment.PHASE_LIGHT_TINT
+    }
+}
+
+/**
  * The big central mic / speaker button -- the primary way to toggle
  * hands-free mode (replaces the old "Start" / "Stop" text button).
  *
@@ -80,7 +109,11 @@ fun AssistantButton(
     // once it's actually playing. Listening (mic icon) and idle keep the
     // original solid-fill/white-icon scheme.
     val accent = phase.buttonFillColor(speakingCommand)
-    val fill = if (phase == UiPhase.IDLE || !speaking) accent else accent.copy(alpha = 0.18f)
+    val fill = when (buttonFillTreatment(phase, generating)) {
+        ButtonFillTreatment.GENERATING_NEUTRAL -> MaterialTheme.colorScheme.surfaceVariant
+        ButtonFillTreatment.PHASE_SOLID -> accent
+        ButtonFillTreatment.PHASE_LIGHT_TINT -> accent.copy(alpha = 0.18f)
+    }
     val contentColor = when {
         // Purple (NEXT_SUGGESTION's own accent, see CommandKind.accentColor())
         // regardless of phase -- generating is most often seen during IDLE,
