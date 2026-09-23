@@ -1391,9 +1391,20 @@ fun LisaScreen(
     // breath pauses) collapses into a single commit instead of firing -- and
     // immediately cancelling -- the eager "what else?" generation below once
     // per fragment.
+    //
+    // 1800ms rather than something snappier: a caregiver saying a
+    // comma-trigger phrase ("Lisa, what else?") naturally pauses right after
+    // the wake word, and SpeechAssistant's own per-session silence timeout
+    // (450ms, see SpeechAssistant.listenOnce) already ends that recognizer
+    // session on "Lisa," alone well before the rest of the command is
+    // spoken. A short debounce here committed that bare wake-word fragment
+    // as its own lastUtterance and reset pendingUtterance to "" before the
+    // caregiver resumed talking, which visibly erased "Lisa," from the field
+    // the instant the next fragment arrived. 1800ms gives a natural pause
+    // room to land within the same pendingUtterance instead.
     LaunchedEffect(pendingUtterance, pendingUtteranceActivity) {
         if (pendingUtterance.isBlank()) return@LaunchedEffect
-        delay(800)
+        delay(1800)
         lastUtterance = pendingUtterance
         inputIsFresher = false
         pendingUtterance = ""

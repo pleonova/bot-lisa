@@ -79,6 +79,18 @@ object TriggerPhraseConfig {
 
     private fun lisaName(languageCode: String): String = LISA_NAME_BY_LANGUAGE[languageCode] ?: "Lisa"
 
+    // The command body alone, with the "<Lisa name>, " wake word lead-in
+    // removed -- so a caregiver who jumps straight to the command (skipping
+    // the wake word entirely, not just pausing after it) still triggers it.
+    // Only strips the wake word actually configured for [languageCode]; a
+    // phrase that doesn't start with it (a from-scratch custom phrase with
+    // no wake word at all) is returned unchanged, which is harmless since
+    // matching it against itself again is a no-op.
+    fun stripWakeWord(languageCode: String, phrase: String): String {
+        val prefix = Regex("^\\s*${Regex.escape(lisaName(languageCode))}\\s*,\\s*", RegexOption.IGNORE_CASE)
+        return phrase.replaceFirst(prefix, "")
+    }
+
     // Each command has a default per target language, meaning the same as
     // its Russian original. A language with no hand-authored entry falls
     // back to the English phrase itself (see getPhrase), so a new language

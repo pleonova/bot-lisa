@@ -298,9 +298,18 @@ class SpeechAssistant(
     // locale, so English speech transcribes less reliably than it would
     // under an English locale -- this is a best-effort second chance, not a
     // guarantee, same fuzzy tolerance either way.
+    //
+    // Also fires on either phrase with its "Lisa, " wake word stripped --
+    // the wake word exists to avoid mistaking ordinary conversation for a
+    // command, but a caregiver who's already learned the command shouldn't
+    // be forced to say "Lisa" every time, and dropping it sidesteps the
+    // wake-word-then-pause timing issue entirely (see pendingUtterance's
+    // comment in MainActivity.kt).
     private fun matchesTrigger(transcript: String, targetPhrase: String, englishPhrase: String, threshold: Double = 0.75): Boolean =
         TriggerPhraseDetector.matches(transcript, targetPhrase, threshold) ||
-            TriggerPhraseDetector.matches(transcript, englishPhrase, threshold)
+            TriggerPhraseDetector.matches(transcript, englishPhrase, threshold) ||
+            TriggerPhraseDetector.matches(transcript, TriggerPhraseConfig.stripWakeWord(getDefaultLanguageCode(), targetPhrase), threshold) ||
+            TriggerPhraseDetector.matches(transcript, TriggerPhraseConfig.stripWakeWord("en", englishPhrase), threshold)
 
     private fun handleTranscript(transcript: String) {
         if (stoppedByUser) return
