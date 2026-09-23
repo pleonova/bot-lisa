@@ -12,7 +12,7 @@ What started as a Russian-only tool has grown into a general bilingual-parenting
 
 | First launch | Home |
 |---|---|
-| <img src="android/design/screenshots/onboarding_popup.png" width="240" alt='Onboarding popup: "Hi, I'm Lisa" — pick who you're talking to'> | <img src="android/design/screenshots/home_main.png" width="240" alt="Home screen with the four voice-command shortcuts"> |
+| <img src="android/design/screenshots/onboarding_popup.png" width="240" alt="Onboarding popup: &quot;Hi, I'm Lisa&quot; — pick who you're talking to"> | <img src="android/design/screenshots/home_main.png" width="240" alt="Home screen with the four voice-command shortcuts"> |
 
 **The four voice commands in action** — say the command (or type/tap the equivalent), then the phrase:
 
@@ -22,7 +22,7 @@ What started as a Russian-only tool has grown into a general bilingual-parenting
 
 | Quick tips | Settings |
 |---|---|
-| <img src="android/design/screenshots/home_quick_tips.png" width="240" alt="Quick tips panel expanded on the home screen"> | <img src="android/design/screenshots/settings.png" width="240" alt='Settings screen: language, appearance, "what else?" timing, server connection'> |
+| <img src="android/design/screenshots/home_quick_tips.png" width="240" alt="Quick tips panel expanded on the home screen"> | <img src="android/design/screenshots/settings.png" width="240" alt="Settings screen: language, appearance, &quot;what else?&quot; timing, server connection"> |
 
 ## The technical part
 

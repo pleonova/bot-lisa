@@ -14,7 +14,7 @@ characters) — no mode toggle needed in the app.
 
 | First launch | Home |
 |---|---|
-| <img src="design/screenshots/onboarding_popup.png" width="240" alt='Onboarding popup: "Hi, I'm Lisa" — pick who you're talking to'> | <img src="design/screenshots/home_main.png" width="240" alt="Home screen with the four voice-command shortcuts"> |
+| <img src="design/screenshots/onboarding_popup.png" width="240" alt="Onboarding popup: &quot;Hi, I'm Lisa&quot; — pick who you're talking to"> | <img src="design/screenshots/home_main.png" width="240" alt="Home screen with the four voice-command shortcuts"> |
 
 | "How to say?" (translate) | "What else?" (AI suggestions, hands-free) | "What does that mean?" (expand) |
 |---|---|---|
@@ -22,7 +22,7 @@ characters) — no mode toggle needed in the app.
 
 | Quick tips | Settings |
 |---|---|
-| <img src="design/screenshots/home_quick_tips.png" width="240" alt="Quick tips panel expanded on the home screen"> | <img src="design/screenshots/settings.png" width="240" alt='Settings screen: language, appearance, "what else?" timing, server connection'> |
+| <img src="design/screenshots/home_quick_tips.png" width="240" alt="Quick tips panel expanded on the home screen"> | <img src="design/screenshots/settings.png" width="240" alt="Settings screen: language, appearance, &quot;what else?&quot; timing, server connection"> |
 
 This talks to `orchestration-service`'s `POST /assist` endpoint directly
 (port 8002), not `ingestion-service`'s `/event/voice` (that endpoint still
