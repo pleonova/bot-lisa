@@ -49,9 +49,9 @@ version meant to be expanded, not a mockup.
 | Perception event bus | Real in-memory pub/sub interface; services currently talk over HTTP directly — see `services/common/events.py` for the Kafka/Redis Streams swap-in point |
 | Microservices split | Real — three independently runnable FastAPI services |
 | Docker / docker-compose | Real, runs locally |
-| Kubernetes manifests | **Scaffold** — correct shape, untested against a real cluster (try k3d/minikube first) |
-| Terraform | **Scaffold** — documents intended resources, no provider wired up yet |
-| CI (GitHub Actions) | Real workflow, runs tests + eval on every push |
+| Kubernetes manifests | **Real, live** — `orchestration-service` and `retrieval-service` are applied against the `bot-lisa-cluster` DOKS cluster (see Hosting below) |
+| Terraform | **Real, applied** — `infra/terraform/main.tf` provisioned the DOKS cluster itself (`digitalocean_kubernetes_cluster.bot_lisa`) |
+| CI (GitHub Actions) | **Not set up** — no `.github/workflows/` exists yet; tests + eval are run manually (see Known issues for a failing-test regression to fix first) |
 
 ## Language models
 
@@ -59,7 +59,7 @@ version meant to be expanded, not a mockup.
 |---|---|---|
 | Claude (`claude-sonnet-4-6` via the Anthropic API) | Generates the "как ответить"-style grounded phrase and translates English → baby-register Russian in `services/orchestration_service/llm_client.py` | **In the app.** Runs in mock mode (no API call, returns the top retrieved phrase verbatim) unless `ANTHROPIC_API_KEY` is set — see the status table above |
 | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (via `fastembed`, ONNX, local) | Dense embeddings for hybrid BM25+embedding retrieval | **In the app** — `services/retrieval_service/embeddings.py` |
-| Qwen3.5, Q4_K_M (4B and 2B GGUF) | On-device generation for "что ещё" (routine relations); "как ответить" (response suggestions) still curated-library only | **In the app** for "что ещё" — runs via `OnDeviceLlm` behind a Settings toggle (`WhatElseSource`) + a model download, with curated-library fallback. See `llm_lab/README.md` and `android/ON_DEVICE_LLM_PLAN.md` |
+| Qwen3.5, Q4_K_M (4B GGUF) | On-device generation for "что ещё" (routine relations); "как ответить" (response suggestions) still curated-library only | **In the app** for "что ещё" — runs via `OnDeviceLlm` behind a Settings toggle (`WhatElseSource`) + a model download, with curated-library fallback. See `llm_lab/README.md` and `android/ON_DEVICE_LLM_PLAN.md`. (The 2B variant was only evaluated in `llm_lab/` for comparison — it isn't wired into the app.) |
 | Gemini Nano/AICore, Gemma 3n via LiteRT-LM, Kimi (Moonshot) | Alternatives considered for the on-device slot above | **Ruled out** — Gemini Nano needs a Pixel 8+ NPU and is closed-weight (against the project's open-source preference); Gemma 3n benchmarks worse than Qwen3.5 for its size class; Kimi's smallest release (48B) has no on-device-class model. Full reasoning in `llm_lab/README.md`'s "Candidate model" section |
 | A bigger model via cloud API / retrieval-only fallback | Fallback plan if Qwen3.5 fails llm_lab's Phase 1 quality gate | **Slated, contingent** — only pursued if the on-device quality check fails |
 | Self-hosted ASR with per-segment language ID (e.g. Whisper/faster-whisper) vs. a cloud multi-language STT API | Needed for the hands-free "Lisa Assistant" mode's continuous listening (`RecognizerIntent` has no built-in language auto-detect) | **Slated, undecided** — see [ROADMAP.md](ROADMAP.md)'s item #2; the open-source-vs-cloud tradeoff needs a decision before build starts |
@@ -155,7 +155,7 @@ infra/
   Dockerfile
   docker-compose.yml
   k8s/                            # orchestration-service + retrieval-service: live on DOKS. paused/: not applied
-  terraform/main.tf              # scaffold, no provider configured
+  terraform/main.tf              # real, applied — provisioned the live DOKS cluster
 tests/test_retrieval.py
 android/                          # Kotlin/Compose app — see android/README.md
   app/                            # MainActivity + Compose UI, SpeechAssistant, TriggerPhraseConfig, PromptComposer, …
@@ -246,7 +246,10 @@ High-level, in rough build order — details live in the status tables above,
 - **Four voice commands**, editable in Settings (`TriggerPhraseConfig.kt`):
   "how to say?", "what does that mean?", and "what else?" localized for
   every language ("what else?" needs a device that can run the on-device
-  model); "how to answer?" is Russian only (curated library).
+  model); "how to answer?" is Russian only (curated library). The wake
+  word ("Lisa") is optional — `stripWakeWord()` recognizes a command
+  phrase said on its own — and a longer debounce tolerates a natural
+  pause between the wake word and the command.
 - **11 target languages** selectable in Settings, including Spanish,
   Mandarin, and Romanian (`SupportedLanguages.ALL`).
 - **Translation under the transcript** — small-print gloss with a play
@@ -294,6 +297,12 @@ High-level, in rough build order — details live in the status tables above,
   test; baselines and a real finding — the LLM alone already runs at this
   device's ~3GB memory ceiling, and sustained eager usage can get the app
   killed by the OS — live in `android/app/benchmarks/README.md`.
+- **Graceful degradation without a configured backend** — lets the APK be
+  shared without a DigitalOcean-hosted server: once a lookup against the
+  default (unconfigured) server URL fails once, later translate-fallback
+  and "what else?" library lookups skip the network round trip and its 5s
+  timeout, showing a calm "not set up on this device" message instead of a
+  connection error.
 
 ## Ideas
 
@@ -452,6 +461,21 @@ server URL to `https://`. Once that's done, also scope
 `android/app/src/main/AndroidManifest.xml` to debug builds only (or drop
 it) — shipping it lets the app be tricked into sending data over plain HTTP
 to any host, not just the dev machine.
+
+### Two `tests/test_retrieval.py` cases fail as of `MIN_EMBED_SIMILARITY=0.7`
+
+`test_hybrid_search_returns_ranked_candidates` and
+`test_retrieval_service_search_endpoint` currently fail against
+`pytest tests/ -v` (the Quickstart's own step 2).
+
+**Why:** `MIN_EMBED_SIMILARITY` was raised from 0.35 to 0.7 in
+`services/common/config.py` to cut down low-relevance matches, but the two
+tests still assert on a `top_k` count that assumed the looser 0.35
+threshold.
+
+**TODO:** update both tests' expected `top_k` to match results under 0.7,
+or parametrize the threshold so the tests aren't coupled to whatever the
+production default happens to be.
 
 ## Contributing
 

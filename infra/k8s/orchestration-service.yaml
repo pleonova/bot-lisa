@@ -1,5 +1,7 @@
-# Scaffold only -- same pattern as retrieval-service.yaml. See that file for
-# the k3d/minikube bootstrap steps.
+# Live and applied against the bot-lisa-cluster DOKS cluster (see
+# infra/terraform/main.tf) -- this is not a scaffold. Deploy changes with
+# `kubectl apply -f infra/k8s/orchestration-service.yaml`, see
+# android/PHONE_DEPLOY.md for the full build/push/deploy runbook.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
