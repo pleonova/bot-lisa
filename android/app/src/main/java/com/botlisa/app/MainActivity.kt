@@ -313,6 +313,20 @@ fun LisaScreen(
     // this so switching language updates the whole screen.
     var targetLanguage by remember { mutableStateOf(LanguageConfig.getTargetLanguage(context)) }
 
+    // Warm the on-device model as soon as the screen opens, not just when
+    // hands-free starts (see startHandsFree()'s own warmUp() call below) --
+    // matters most for a caregiver on OnDeviceLlmConfig.PrefetchMode.ON_DEMAND,
+    // or anyone who asks "what else?" without going hands-free first, where
+    // otherwise the very first request pays the full model-load +
+    // system-prompt cost (~10s, per warmUp()'s own doc comment) on top of
+    // generation. warmUp() is a safe no-op if the device/model isn't ready
+    // yet (e.g. still downloading) or already warm for this language.
+    LaunchedEffect(Unit) {
+        if (OnDeviceLlmConfig.getWhatElseSource(context) != OnDeviceLlmConfig.WhatElseSource.LIBRARY_ONLY) {
+            OnDeviceLlm.warmUp(context, targetLanguage.code)
+        }
+    }
+
     // The curated phrase library + the backend's "expand" mode are
     // Russian-only: that's what powers a typed Russian phrase -> related
     // phrases, and the "how to answer?" lookup.
