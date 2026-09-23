@@ -51,22 +51,29 @@ actually cool throughout.
 
 ## Baselines
 
-| Date | Device | Model | Thermal | Mean | Std dev | Min | Max | n |
-|---|---|---|---|---|---|---|---|---|
-| 2026-09-11 | Pixel 11 | Qwen3.5-4B-Q4_K_M | NONE throughout | 4.54s | 1.33s | 2.94s | 7.73s | 20 |
+| Date | Device | Model | PREDICT_LENGTH | Thermal | Mean | Std dev | Min | Max | n |
+|---|---|---|---|---|---|---|---|---|---|
+| 2026-09-11 | Pixel 11 | Qwen3.5-4B-Q4_K_M | 256 | NONE throughout | 4.54s | 1.33s | 2.94s | 7.73s | 20 |
+| 2026-09-22 | Pixel 11 | Qwen3.5-4B-Q4_K_M | 128 | NONE throughout | 3.83s | 0.94s | 2.62s | 7.16s | 20 |
 
 Per-call cost after warm-up (model load + system-prompt processing, a
 separate ~10s one-time cost handled by `OnDeviceLlm.warmUp`, excluded from
-this table -- see its doc comment). All 20 calls returned exactly 3
-phrases, 0 failures. The spread here (2.9s-7.7s) is real call-to-call
-variance even on a cool, unthrottled device -- some phrases legitimately
-produce more tokens than others -- not measurement noise to explain away.
+this table -- see its doc comment). All 20 calls in both rows returned
+exactly 3 phrases, 0 failures -- lowering `PREDICT_LENGTH` 256 -> 128 (see
+`OnDeviceLlm.kt`) didn't truncate anything, since three phrases under 8
+words each rarely needed more than 128 tokens once the `<think>` prefill
+workaround stopped the model from burning budget on reasoning (see that
+constant's doc comment). The spread within each row (e.g. 2.9s-7.7s on the
+first) is real call-to-call variance even on a cool, unthrottled device --
+some phrases legitimately produce more tokens than others -- not
+measurement noise to explain away.
 
-**Stale as of the on-device English gloss addition** (`generateWhatElse` now
-also runs 3 sequential `OnDeviceTranslator.translateToEnglish` calls per
-request) -- this table predates that and needs a re-run to include it. Not
-re-run yet here because a full 20-call pass reliably hits the memory issue
-below.
+Gloss translation (`OnDeviceTranslator.translateToEnglish`, 3 calls per
+request) used to run inside `generateWhatElse` itself, adding ~90MB and
+roughly 1-1.3s on a warm call; it now happens separately, one phrase at a
+time, after the caller has already shown the phrases -- see
+`OnDeviceLlm.generateWhatElse`'s and `translateGloss`'s doc comments -- so
+neither row above includes it.
 
 ## Memory: the LLM alone already runs at the device's ceiling
 
@@ -97,17 +104,23 @@ how often this window gets hit in real usage (generation only on an actual
 "what else?" ask, not after every phrase); it doesn't remove the ceiling.
 Reducing the LLM's own footprint (shorter context, a smaller model) is the
 real fix if this proves fatal in practice -- see `checkMemoryFootprint`'s
-doc comment and `OnDeviceLlm.generateWhatElse`'s own "MEMORY" comment.
+doc comment.
 
 Levers worth trying against this baseline before assuming a change helped:
 - Shorten the persona/few-shot system prompt (`personas/caregiver_infant.json`,
   `examples/few_shot_examples.caregiver_infant.by_language.json`) -- less to
   process doesn't change *this* number (system-prompt processing happens
   once at warm-up, not per call) but would speed up warm-up itself.
-- Lower `PREDICT_LENGTH` in `OnDeviceLlm.kt` (currently 256) -- three short
-  phrases rarely need it, but a too-low cap risks truncating a longer reply.
-- Native thread tuning in `llama_bridge.cpp` (`N_THREADS_MAX`/
-  `N_THREADS_HEADROOM`) -- untested here, needs its own before/after run.
+- ~~Lower `PREDICT_LENGTH` in `OnDeviceLlm.kt`~~ -- done 2026-09-22, 256 -> 128
+  (see Baselines table above: mean 4.54s -> 3.83s, no truncation across 20
+  calls).
+- ~~Native thread tuning in `llama_bridge.cpp` (`N_THREADS_MAX`/
+  `N_THREADS_HEADROOM`)~~ -- tried 2026-09-22, raising `N_THREADS_MAX` 4 -> 6
+  (5 threads used on this device) made it *worse*: mean 3.83s -> 6.32s, std
+  dev 0.94s -> 2.49s, same cool device and `PREDICT_LENGTH`. Reverted to 4 --
+  see `llama_bridge.cpp`'s comment on `N_THREADS_MAX`. Not worth retrying
+  without a specific reason to expect a different device's core layout to
+  behave differently.
 - A smaller/faster GGUF than the current 4B model -- the biggest likely win,
   and the biggest change (new download, redo the "does it still answer
   well" check from `llm_lab/README.md`).

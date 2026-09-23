@@ -40,6 +40,14 @@ static std::string join(const std::vector<T> &values, const std::string &delim) 
  * LLama resources: context, model, batch and sampler
  */
 constexpr int   N_THREADS_MIN           = 2;
+// Tried raising this to 6 (-> 5 threads on a Pixel 11's 7 online cores,
+// since N_THREADS_HEADROOM below would otherwise be the limiting factor) on
+// the theory that an idle core was being left on the table. Measured worse,
+// not better: WhatElseBenchmarkTest's 20-phrase run went from mean=3.83s
+// std=0.94s (4 threads) to mean=6.32s std=2.49s (5 threads), same cool
+// device, same PREDICT_LENGTH -- more threads meant more contention (likely
+// with the device's other work: UI, hands-free listening, etc.), not more
+// throughput. Left at 4. See android/app/benchmarks/README.md.
 constexpr int   N_THREADS_MAX           = 4;
 constexpr int   N_THREADS_HEADROOM      = 2;
 

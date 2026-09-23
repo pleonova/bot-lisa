@@ -45,9 +45,11 @@ object OnDeviceLlm {
     // mid-thought). llama_bridge.cpp now prefills an empty "<think></think>"
     // onto the assistant turn for reasoning templates -- the same thing
     // Qwen3's own enable_thinking=false does -- so generation goes straight
-    // to the answer and 256 is ample for three short phrases. The <think>
-    // stripping below stays as a backstop.
-    private const val PREDICT_LENGTH = 256
+    // to the answer. With that fixed, three short phrases (persona caps
+    // each at "under 8 words") don't need 256 tokens -- 128 is still ample
+    // headroom and, at ~5 tok/s, directly cuts up to ~25s off worst-case
+    // generation. The <think> stripping below stays as a backstop.
+    private const val PREDICT_LENGTH = 128
 
     // See ON_DEVICE_LLM_PLAN.md Phase 2 risk notes: Build.VERSION.SDK_INT
     // bounds the Java heap, not the native mmap'd model + KV cache -- a
