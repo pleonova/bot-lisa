@@ -150,7 +150,7 @@ fun IntroScreen(
                         modifier = Modifier.size(20.dp),
                     )
                     Text(
-                        "Works best with one headphone",
+                        "Works best with one headphone!",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
