@@ -461,6 +461,15 @@ fun LisaScreen(
     // after switching from one quick-tips example to another.
     var generatingForUtterance by remember { mutableStateOf<String?>(null) }
 
+    // True while the in-flight on-device generation is paying the one-time
+    // model-load cost (~30s, see OnDeviceLlm.warmUp's doc comment) rather
+    // than the ordinary ~4s warm generation -- set once, right before each
+    // OnDeviceLlm.generateWhatElse() call, from OnDeviceLlm.isWarmFor()'s
+    // synchronous check. Lets PhrasePendingRow explain a slow first request
+    // as expected setup instead of leaving a bare "Loading…" spinner
+    // running for 30s, which reads as broken rather than working.
+    var whatElseColdStart by remember { mutableStateOf(false) }
+
     // True once an on-device generation attempt has started for
     // lastUtterance, whether or not it ends up producing anything -- see
     // aiAttempted below for why this can't just be derived from
@@ -1038,6 +1047,7 @@ fun LisaScreen(
         activeWhatElseJob = scope.launch {
             eagerSkippedForHeat = false // an explicit ask always tries, heat or not
             if (tryAi) {
+                whatElseColdStart = !OnDeviceLlm.isWarmFor(context, language.code)
                 onDeviceGenerating = true
                 aiGenerationAttempted = true
                 val generated = runCatching {
@@ -1441,6 +1451,7 @@ fun LisaScreen(
             if (OnDeviceLlm.isThermallyElevated(context)) {
                 eagerSkippedForHeat = true
             } else {
+                whatElseColdStart = !OnDeviceLlm.isWarmFor(context, targetLanguage.code)
                 onDeviceGenerating = true
                 aiGenerationAttempted = true
                 generatingForUtterance = lastUtterance
@@ -2544,7 +2555,11 @@ fun LisaScreen(
                                     // the phrase and its spinner share one line instead of
                                     // stacking, and there's no second "Generating
                                     // suggestions for ..." sentence repeating the phrase.
-                                    PhrasePendingRow(displayInput, onCancel = ::cancelWhatElseGeneration)
+                                    PhrasePendingRow(
+                                        displayInput,
+                                        isFirstTimeSetup = aiPending && whatElseColdStart,
+                                        onCancel = ::cancelWhatElseGeneration,
+                                    )
                                 }
                             }
                             else -> Text(
@@ -2624,7 +2639,11 @@ fun LisaScreen(
                             // the phrase and its spinner share one line instead of
                             // stacking, and there's no second "Generating
                             // suggestions for ..." sentence repeating the phrase.
-                            PhrasePendingRow(lastUtterance, onCancel = ::cancelWhatElseGeneration)
+                            PhrasePendingRow(
+                                lastUtterance,
+                                isFirstTimeSetup = whatElseColdStart,
+                                onCancel = ::cancelWhatElseGeneration,
+                            )
                         eagerSkippedForHeat ->
                             Text(
                                 "Skipped generating suggestions for “$lastUtterance” -- " +
@@ -3120,39 +3139,55 @@ private fun DismissibleResultCard(onDismiss: () -> Unit, content: @Composable ()
  * sentence repeating the phrase. Sized and tinted `primary` (bigger than a
  * bare spinner would be) so it actually catches the eye instead of blending
  * into the row. An optional trailing "X" lets the caregiver cancel a
- * generation that's dragging on instead of waiting it out. */
+ * generation that's dragging on instead of waiting it out.
+ *
+ * [isFirstTimeSetup] adds a second, smaller line explaining *why* this one
+ * is slow: the ordinary warm generation is ~4s, easily read as "working" by
+ * the row above alone, but the one-time model-load case (~30s, see
+ * OnDeviceLlm.warmUp's doc comment) is long enough that the same bare
+ * "Loading…" spinner reads as broken instead -- reported directly as
+ * "looks like the app is slow or broken" when this case wasn't explained. */
 @Composable
-private fun PhrasePendingRow(phrase: String, onCancel: (() -> Unit)? = null) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(
-            phrase,
-            style = MaterialTheme.typography.titleMedium,
-            fontStyle = FontStyle.Italic,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.weight(1f),
-        )
-        CircularProgressIndicator(
-            modifier = Modifier.size(20.dp),
-            strokeWidth = 2.5.dp,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Text(
-            "Loading…",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        if (onCancel != null) {
-            IconButton(onClick = onCancel, modifier = Modifier.size(24.dp)) {
-                Icon(
-                    Icons.Filled.Close,
-                    contentDescription = "Cancel generating suggestions",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+private fun PhrasePendingRow(phrase: String, isFirstTimeSetup: Boolean = false, onCancel: (() -> Unit)? = null) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                phrase,
+                style = MaterialTheme.typography.titleMedium,
+                fontStyle = FontStyle.Italic,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f),
+            )
+            CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                strokeWidth = 2.5.dp,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                "Loading…",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            if (onCancel != null) {
+                IconButton(onClick = onCancel, modifier = Modifier.size(24.dp)) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = "Cancel generating suggestions",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
+        }
+        if (isFirstTimeSetup) {
+            Text(
+                "Loading the AI model for the first time. Future requests will be faster.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

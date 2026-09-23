@@ -332,17 +332,18 @@ object OnDeviceLlm {
 
     /**
      * Pre-loads the model and processes [languageCode]'s system prompt
-     * without generating anything. Model load (~5s) + system-prompt
-     * processing (~5s on a Pixel 11, since the persona + few-shot examples
-     * are a few hundred tokens) together dominate the *first* "what else?"
-     * request's latency far more than actual generation does (~2s) -- call
-     * this as soon as it's plausible the caregiver will ask (e.g. when
-     * hands-free listening starts) so that cost is paid while they're still
-     * getting the mic going, not after they've already spoken and are
-     * waiting on the result card. A no-op if the device/model isn't ready,
-     * or if a warm model already carries this language's system prompt.
-     * Never throws -- a failed warm-up just means the next real
-     * [generateWhatElse] call pays the cost (and reports it) instead.
+     * without generating anything. Model load (measured ~30s on a Pixel 11
+     * -- reading + setting up the ~2.7GB file dominates this, not the
+     * system-prompt processing that follows it) together dominate the
+     * *first* "what else?" request's latency far more than actual
+     * generation does (~4s once warm) -- call this as soon as it's
+     * plausible the caregiver will ask (e.g. when hands-free listening
+     * starts, or the screen opens) so that cost is paid in the background,
+     * not after they've already asked and are staring at a spinner. A
+     * no-op if the device/model isn't ready, or if a warm model already
+     * carries this language's system prompt. Never throws -- a failed
+     * warm-up just means the next real [generateWhatElse] call pays the
+     * cost (and reports it) instead.
      */
     suspend fun warmUp(context: Context, languageCode: String) {
         if (availability(context) != Availability.READY) return
@@ -361,6 +362,22 @@ object OnDeviceLlm {
                 Log.e(TAG, "warmUp failed", e)
             }
         }
+    }
+
+    /**
+     * True if a [generateWhatElse] call for [languageCode] right now would
+     * skip straight to generation (~4s) instead of first paying the
+     * model-load cost (~30s, see [warmUp]'s doc comment) -- i.e. a model is
+     * already resident and already carries this language's system prompt.
+     * Synchronous and cheap (no I/O beyond composing the system prompt
+     * string, the same check [warmUp] and [ensureModelReady] already do).
+     * Meant for the UI to decide whether an in-flight generation is worth
+     * explaining as "first-time setup" rather than the ordinary case.
+     */
+    fun isWarmFor(context: Context, languageCode: String): Boolean {
+        if (!modelLoaded) return false
+        val systemPrompt = PromptComposer.compose(context, "", languageCode).system
+        return systemPrompt == loadedSystemPrompt
     }
 
     private fun scheduleIdleUnload() {
