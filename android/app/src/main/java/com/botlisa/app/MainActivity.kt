@@ -3238,11 +3238,25 @@ fun LisaScreen(
 @Composable
 private fun DismissibleResultCard(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            if (value != SwipeToDismissBoxValue.Settled) onDismiss()
-            true
-        },
+        // Just confirms the swipe -- doesn't call onDismiss() itself. That
+        // used to fire the instant the drag crossed the threshold, which
+        // (since onDismiss() is what makes the caller stop rendering this
+        // composable entirely) yanked the card out of composition mid-swipe
+        // -- cut short before SwipeToDismissBox's own slide-the-rest-of-the-
+        // way-off animation ever got to play, reported live as "it
+        // disappears off the page so quickly there is no trail".
+        confirmValueChange = { value -> value != SwipeToDismissBoxValue.Settled },
     )
+    // Give the slide-off animation below room to actually finish before
+    // handing off to onDismiss() -- SwipeToDismissBoxState.currentValue
+    // flips to Start/EndToStart as soon as the drag is confirmed, well
+    // before the animated settle to that anchor visually completes.
+    LaunchedEffect(dismissState.currentValue) {
+        if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) {
+            delay(400)
+            onDismiss()
+        }
+    }
     SwipeToDismissBox(
         state = dismissState,
         backgroundContent = {
