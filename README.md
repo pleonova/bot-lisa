@@ -6,6 +6,12 @@ Before I moved to the US, the first English word I learned in school was fox (do
 
 A little bit more about me: I grew up speaking Russian at home, but I never formally studied it, so somewhere along the way it turned into a comfortable hybrid I'd call Runglish. I understand conversational Russian just fine, I just don't always have the word I need on hand when I need it. Lisa is my way of closing that gap. When a word or phrase won't come to me, it translates from English to Russian. And based on either the Russian or English phrase, it recommends related phrases so I can keep expanding my vocabulary and hopefully my child's too.
 
+## Screenshots
+
+| First launch | Translate a phrase | Settings |
+|---|---|---|
+| ![Intro popup](android/design/screenshots/intro_popup.png) | ![Main screen showing a translation result](android/design/screenshots/main_translation.png) | ![Settings screen](android/design/screenshots/settings.png) |
+
 ## The technical part
 
 Under the hood: it routes English text to translate-mode and Russian text to expand-mode.

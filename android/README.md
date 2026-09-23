@@ -12,6 +12,10 @@ the child-perception pipeline. One text box (type or dictate):
 Which mode you get is auto-detected on the backend (presence of Cyrillic
 characters) — no mode toggle needed in the app.
 
+| First launch | Translate a phrase | Settings |
+|---|---|---|
+| ![Intro popup](design/screenshots/intro_popup.png) | ![Main screen showing a translation result](design/screenshots/main_translation.png) | ![Settings screen](design/screenshots/settings.png) |
+
 This talks to `orchestration-service`'s `POST /assist` endpoint directly
 (port 8002), not `ingestion-service`'s `/event/voice` (that endpoint still
 exists for the separate child-perception-event flow, just unused by this app
