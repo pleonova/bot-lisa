@@ -13,15 +13,15 @@ Which mode you get is auto-detected on the backend (presence of Cyrillic
 characters) — no mode toggle needed in the app.
 
 | First launch | Home |
-|---|---|
+|:---:|:---:|
 | <img src="design/screenshots/onboarding_popup.png" width="240" alt="Onboarding popup: &quot;Hi, I'm Lisa&quot; — pick who you're talking to"> | <img src="design/screenshots/home_main.png" width="240" alt="Home screen with the four voice-command shortcuts"> |
 
 | "How to say?" (translate) | "What else?" (AI suggestions, hands-free) | "What does that mean?" (expand) |
-|---|---|---|
+|:---:|:---:|:---:|
 | <img src="design/screenshots/how_to_say_result.png" width="240" alt="Как сказать? — sleepy translated to сонный"> | <img src="design/screenshots/what_else_result.png" width="240" alt="Lisa listening hands-free, что ещё — AI-generated related phrases"> | <img src="design/screenshots/what_does_that_mean_result.png" width="240" alt="Что это значит? — meaning of a Russian phrase"> |
 
 | Quick tips | Settings |
-|---|---|
+|:---:|:---:|
 | <img src="design/screenshots/home_quick_tips.png" width="240" alt="Quick tips panel expanded on the home screen"> | <img src="design/screenshots/settings.png" width="240" alt="Settings screen: language, appearance, &quot;what else?&quot; timing, server connection"> |
 
 This talks to `orchestration-service`'s `POST /assist` endpoint directly

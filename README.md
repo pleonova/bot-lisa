@@ -11,17 +11,17 @@ What started as a Russian-only tool has grown into a general bilingual-parenting
 ## Screenshots
 
 | First launch | Home |
-|---|---|
+|:---:|:---:|
 | <img src="android/design/screenshots/onboarding_popup.png" width="240" alt="Onboarding popup: &quot;Hi, I'm Lisa&quot; — pick who you're talking to"> | <img src="android/design/screenshots/home_main.png" width="240" alt="Home screen with the four voice-command shortcuts"> |
 
 **The four voice commands in action** — say the command (or type/tap the equivalent), then the phrase:
 
 | "How to say?" (translate) | "What else?" (AI suggestions, hands-free) | "What does that mean?" (expand) |
-|---|---|---|
+|:---:|:---:|:---:|
 | <img src="android/design/screenshots/how_to_say_result.png" width="240" alt="Как сказать? — sleepy translated to сонный"> | <img src="android/design/screenshots/what_else_result.png" width="240" alt="Lisa listening hands-free, что ещё — AI-generated related phrases"> | <img src="android/design/screenshots/what_does_that_mean_result.png" width="240" alt="Что это значит? — meaning of a Russian phrase"> |
 
 | Quick tips | Settings |
-|---|---|
+|:---:|:---:|
 | <img src="android/design/screenshots/home_quick_tips.png" width="240" alt="Quick tips panel expanded on the home screen"> | <img src="android/design/screenshots/settings.png" width="240" alt="Settings screen: language, appearance, &quot;what else?&quot; timing, server connection"> |
 
 ## The technical part
