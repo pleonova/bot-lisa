@@ -12,9 +12,17 @@ the child-perception pipeline. One text box (type or dictate):
 Which mode you get is auto-detected on the backend (presence of Cyrillic
 characters) — no mode toggle needed in the app.
 
-| First launch | Translate a phrase | Settings |
+| First launch | Home |
+|---|---|
+| ![Onboarding popup: "Hi, I'm Lisa" — pick who you're talking to](design/screenshots/onboarding_popup.png) | ![Home screen with the four voice-command shortcuts](design/screenshots/home_main.png) |
+
+| "How to say?" (translate) | "What does that mean?" (expand) | "What else?" (AI suggestions) |
 |---|---|---|
-| ![Intro popup](design/screenshots/intro_popup.png) | ![Main screen showing a translation result](design/screenshots/main_translation.png) | ![Settings screen](design/screenshots/settings.png) |
+| ![Как сказать? — "sleepy" translated to сонный](design/screenshots/how_to_say_result.png) | ![Что это значит? — meaning of a Russian phrase](design/screenshots/what_does_that_mean_result.png) | ![Что ещё? — AI-generated related phrases](design/screenshots/what_else_result.png) |
+
+| Quick tips | Settings |
+|---|---|
+| ![Quick tips panel expanded on the home screen](design/screenshots/home_quick_tips.png) | ![Settings screen: language, appearance, "what else?" timing, server connection](design/screenshots/settings.png) |
 
 This talks to `orchestration-service`'s `POST /assist` endpoint directly
 (port 8002), not `ingestion-service`'s `/event/voice` (that endpoint still

@@ -8,9 +8,19 @@ A little bit more about me: I grew up speaking Russian at home, but I never form
 
 ## Screenshots
 
-| First launch | Translate a phrase | Settings |
+| First launch | Home |
+|---|---|
+| ![Onboarding popup: "Hi, I'm Lisa" — pick who you're talking to](android/design/screenshots/onboarding_popup.png) | ![Home screen with the four voice-command shortcuts](android/design/screenshots/home_main.png) |
+
+**The four voice commands in action** — say the command (or type/tap the equivalent), then the phrase:
+
+| "How to say?" (translate) | "What does that mean?" (expand) | "What else?" (AI suggestions) |
 |---|---|---|
-| ![Intro popup](android/design/screenshots/intro_popup.png) | ![Main screen showing a translation result](android/design/screenshots/main_translation.png) | ![Settings screen](android/design/screenshots/settings.png) |
+| ![Как сказать? — "sleepy" translated to сонный](android/design/screenshots/how_to_say_result.png) | ![Что это значит? — meaning of a Russian phrase](android/design/screenshots/what_does_that_mean_result.png) | ![Что ещё? — AI-generated related phrases](android/design/screenshots/what_else_result.png) |
+
+| Quick tips | Settings |
+|---|---|
+| ![Quick tips panel expanded on the home screen](android/design/screenshots/home_quick_tips.png) | ![Settings screen: language, appearance, "what else?" timing, server connection](android/design/screenshots/settings.png) |
 
 ## The technical part
 
