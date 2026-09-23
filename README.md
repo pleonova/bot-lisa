@@ -1,10 +1,12 @@
-# Assistant Language Bot (Version 1: Russian)
+# Lisa: A Bilingual Parenting Assistant
 
 ## Why am I building this app
 
 Before I moved to the US, the first English word I learned in school was fox (don't ask me why). Now that I have a baby, I want to teach them Russian, but my vocabulary isn't big enough to do it on my own, so I'm building an app to help. I named it Lisa (лиса), which means fox in Russian. Also, my baby's nursery theme just so happens to be foxes.
 
-A little bit more about me: I grew up speaking Russian at home, but I never formally studied it, so somewhere along the way it turned into a comfortable hybrid I'd call Runglish. I understand conversational Russian just fine, I just don't always have the word I need on hand when I need it. Lisa is my way of closing that gap. When a word or phrase won't come to me, it translates from English to Russian. And based on either the Russian or English phrase, it recommends related phrases so I can keep expanding my vocabulary and hopefully my child's too.
+A little bit more about me: I grew up speaking Russian at home, but I never formally studied it, so somewhere along the way it turned into a comfortable hybrid I'd call Runglish. I understand conversational Russian just fine, I just don't always have the word I need on hand when I need it. Lisa is my way of closing that gap. When a word or phrase won't come to me, it translates it. And based on either the target-language or English phrase, it recommends related phrases so I can keep expanding my vocabulary and hopefully my child's too.
+
+What started as a Russian-only tool has grown into a general bilingual-parenting assistant: the app now supports 11 target languages (Spanish, Mandarin, Hindi, Romanian, and more — see "Supported languages" below), though Russian remains the one with the deepest, hand-tuned support, since it's the language I'm actually raising my kid in.
 
 ## Screenshots
 
@@ -24,7 +26,9 @@ A little bit more about me: I grew up speaking Russian at home, but I never form
 
 ## The technical part
 
-Under the hood: it routes English text to translate-mode and Russian text to expand-mode.
+Under the hood: it routes English text to translate-mode (any of 11 target
+languages) and Russian text to expand-mode (Russian only — see "Supported
+languages & translation" below for why).
 
 A runnable skeleton covering all six build layers. Everything here works with
 **zero external dependencies** (no API keys, no cloud account, no Docker
