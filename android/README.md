@@ -14,15 +14,15 @@ characters) — no mode toggle needed in the app.
 
 | First launch | Home |
 |---|---|
-| ![Onboarding popup: "Hi, I'm Lisa" — pick who you're talking to](design/screenshots/onboarding_popup.png) | ![Home screen with the four voice-command shortcuts](design/screenshots/home_main.png) |
+| <img src="design/screenshots/onboarding_popup.png" width="240" alt='Onboarding popup: "Hi, I'm Lisa" — pick who you're talking to'> | <img src="design/screenshots/home_main.png" width="240" alt="Home screen with the four voice-command shortcuts"> |
 
-| "How to say?" (translate) | "What does that mean?" (expand) | "What else?" (AI suggestions) |
+| "How to say?" (translate) | "What else?" (AI suggestions, hands-free) | "What does that mean?" (expand) |
 |---|---|---|
-| ![Как сказать? — "sleepy" translated to сонный](design/screenshots/how_to_say_result.png) | ![Что это значит? — meaning of a Russian phrase](design/screenshots/what_does_that_mean_result.png) | ![Что ещё? — AI-generated related phrases](design/screenshots/what_else_result.png) |
+| <img src="design/screenshots/how_to_say_result.png" width="240" alt="Как сказать? — sleepy translated to сонный"> | <img src="design/screenshots/what_else_result.png" width="240" alt="Lisa listening hands-free, что ещё — AI-generated related phrases"> | <img src="design/screenshots/what_does_that_mean_result.png" width="240" alt="Что это значит? — meaning of a Russian phrase"> |
 
 | Quick tips | Settings |
 |---|---|
-| ![Quick tips panel expanded on the home screen](design/screenshots/home_quick_tips.png) | ![Settings screen: language, appearance, "what else?" timing, server connection](design/screenshots/settings.png) |
+| <img src="design/screenshots/home_quick_tips.png" width="240" alt="Quick tips panel expanded on the home screen"> | <img src="design/screenshots/settings.png" width="240" alt='Settings screen: language, appearance, "what else?" timing, server connection'> |
 
 This talks to `orchestration-service`'s `POST /assist` endpoint directly
 (port 8002), not `ingestion-service`'s `/event/voice` (that endpoint still
