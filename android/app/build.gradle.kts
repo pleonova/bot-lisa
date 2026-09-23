@@ -106,3 +106,22 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
 }
+
+// `./gradlew assembleDebug` (PHONE_DEPLOY.md's own build command) doesn't
+// pull in the JVM unit tests on its own -- only `build`/`check` do, by AGP
+// default. Without this, a broken test (e.g. AssistantButtonTest,
+// WhatElseHoldTest -- regression coverage for the "what else?" list-loss/
+// color bugs) could sit red indefinitely while every day-to-day phone
+// build/install kept right on succeeding. Wiring each variant's own
+// `assemble*` to depend on that same variant's `test*UnitTest` makes the
+// unit suite a real gate on every build, not just an opt-in `./gradlew
+// test` someone has to remember to run separately.
+afterEvaluate {
+    tasks.matching { it.name.startsWith("assemble") }.configureEach {
+        val variant = name.removePrefix("assemble")
+        val unitTestTask = "test${variant}UnitTest"
+        if (variant.isNotEmpty() && tasks.findByName(unitTestTask) != null) {
+            dependsOn(unitTestTask)
+        }
+    }
+}
