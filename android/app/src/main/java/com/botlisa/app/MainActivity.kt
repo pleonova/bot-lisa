@@ -265,6 +265,14 @@ fun LisaScreen(
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var serverUrl by remember { mutableStateOf(ServerConfig.getBaseUrl(context)) }
     var apiKey by remember { mutableStateOf(ServerConfig.getApiKey(context)) }
+    // Set the first time a backend call fails while still pointed at the
+    // default (unconfigured) server -- e.g. an APK shared with someone who
+    // has no orchestration-service to talk to. Once true, later library /
+    // translate-fallback lookups skip the network round trip (and its 5s
+    // connect timeout) entirely instead of re-showing a spinner for a
+    // result already known not to come. Reset on any Settings edit, since
+    // a newly-entered URL/key might actually be reachable.
+    var backendUnreachable by remember { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     // Auto-shown on every fresh screen, and stays expanded through
     // resetToStart() (fox tap) too, matching showIntro below -- tapping the
@@ -626,11 +634,13 @@ fun LisaScreen(
     fun onServerUrlChange(newUrl: String) {
         serverUrl = newUrl
         ServerConfig.setBaseUrl(context, newUrl)
+        backendUnreachable = false
     }
 
     fun onApiKeyChange(newKey: String) {
         apiKey = newKey
         ServerConfig.setApiKey(context, newKey)
+        backendUnreachable = false
     }
 
     // fun onSend(allowCellularDownload: Boolean = false) below: true only
@@ -658,6 +668,7 @@ fun LisaScreen(
             // caregiver gets the actionable "connect to wifi" reason instead of
             // a generic "couldn't reach the server" that hides the real cause.
             var modelDownloadError: String? = null
+            val usingDefaultServer = serverUrl == ServerConfig.DEFAULT_BASE_URL
             try {
                 // Translate mode -- English (Latin-script) word/phrase in,
                 // selected target language out -- needs no backend, and
@@ -710,6 +721,14 @@ fun LisaScreen(
                     }
                 }
 
+                if (usingDefaultServer && backendUnreachable) {
+                    // Already know the default server isn't reachable (e.g.
+                    // this APK was shared with someone who has no backend to
+                    // point at) -- skip the round trip and its 5s connect
+                    // timeout, and go straight to the same fallback path the
+                    // IOException catch below would otherwise take.
+                    throw IOException("backend already known unreachable")
+                }
                 var assist = ApiClient.sendAssist(baseUrl = serverUrl, apiKey = apiKey, text = input)
                 if (assist.mode == "translate") {
                     // Backend translate result (the on-device path above was
@@ -755,12 +774,15 @@ fun LisaScreen(
                 suggestionIndex = 0
             } catch (e: IOException) {
                 // Server unreachable (wrong URL, backend down, phone off the
-                // dev LAN). The translate path -- English in -> selected
-                // language out -- needs no backend at all, so fall back to
-                // on-device ML Kit rather than blocking translation outright.
-                // Only attempt it when the input is Latin-script: non-Latin
-                // input means the caregiver is typing in the target language
-                // ("expand" mode), which genuinely needs the server.
+                // dev LAN -- or, when usingDefaultServer, an APK shared with
+                // someone who has no backend at all). The translate path --
+                // English in -> selected language out -- needs no backend at
+                // all, so fall back to on-device ML Kit rather than blocking
+                // translation outright. Only attempt it when the input is
+                // Latin-script: non-Latin input means the caregiver is typing
+                // in the target language ("expand" mode), which genuinely
+                // needs the server.
+                if (usingDefaultServer) backendUnreachable = true
                 val hasNonLatinLetters = input.any { it.isLetter() && it.code > 0x024F }
                 val offline = if (!hasNonLatinLetters) {
                     try {
@@ -796,17 +818,29 @@ fun LisaScreen(
                     inputIsFresher = false
                     result = offline
                     suggestionIndex = 0
-                    errorText = "Server unreachable -- translated on-device instead.$emulatorUrlHint"
+                    errorText = if (usingDefaultServer) {
+                        "Translated on-device (the library feature isn't set up on this device)."
+                    } else {
+                        "Server unreachable -- translated on-device instead.$emulatorUrlHint"
+                    }
                 } else if (modelDownloadError != null) {
                     // Neither the server nor on-device translation came
                     // through -- lead with the actionable wifi reason rather
                     // than the generic "server unreachable", since that's
                     // almost certainly the real blocker here (this is the
                     // first use of this language and there's no wifi).
-                    errorText = "$modelDownloadError Also couldn't reach the server: ${e.message}.$emulatorUrlHint"
+                    errorText = if (usingDefaultServer) {
+                        "$modelDownloadError (The library feature also isn't set up on this device.)"
+                    } else {
+                        "$modelDownloadError Also couldn't reach the server: ${e.message}.$emulatorUrlHint"
+                    }
                     offerCellularDownloadRetry = !allowCellularDownload
                 } else {
-                    errorText = "Couldn't reach the server: ${e.message}.$emulatorUrlHint"
+                    errorText = if (usingDefaultServer) {
+                        "This phrase needs the library feature, which isn't set up on this device."
+                    } else {
+                        "Couldn't reach the server: ${e.message}.$emulatorUrlHint"
+                    }
                 }
             } catch (e: Exception) {
                 errorText = "Something went wrong: ${e.message}"
@@ -1112,19 +1146,36 @@ fun LisaScreen(
             // real answer for *this* utterance, just one this job no longer
             // gets to display.
             if (tryLibrary && onDeviceRelated.isNullOrEmpty()) {
-                if (isCurrent()) libraryGenerating = true
-                Log.d(WHAT_ELSE_LOG_TAG, "requestWhatElse: calling library (serverUrl=$serverUrl) for \"$utterance\"")
-                val fetched = runCatching {
-                    ApiClient.sendAssist(baseUrl = serverUrl, apiKey = apiKey, text = utterance)
-                }
-                Log.d(WHAT_ELSE_LOG_TAG, "requestWhatElse: library lookup for \"$utterance\" -> " +
-                    "${fetched.getOrNull()?.related?.size ?: -1} phrases (isCurrent=${isCurrent()}), " +
-                    "error=${fetched.exceptionOrNull()}")
-                if (isCurrent()) {
-                    libraryGenerating = false
-                    fetched.getOrNull()?.let { result = it }
-                    fetched.exceptionOrNull()?.let { e ->
-                        errorText = "\"What else?\" library lookup failed: ${e.message ?: e::class.simpleName}"
+                val usingDefaultServer = serverUrl == ServerConfig.DEFAULT_BASE_URL
+                if (usingDefaultServer && backendUnreachable) {
+                    // Already know the default server isn't reachable (e.g.
+                    // this APK was shared with someone who has no backend to
+                    // point at) -- skip the round trip and its 5s connect
+                    // timeout rather than showing a spinner for a result
+                    // already known not to come.
+                    if (isCurrent()) {
+                        errorText = "\"What else?\" needs the library feature, which isn't set up on this device."
+                    }
+                } else {
+                    if (isCurrent()) libraryGenerating = true
+                    Log.d(WHAT_ELSE_LOG_TAG, "requestWhatElse: calling library (serverUrl=$serverUrl) for \"$utterance\"")
+                    val fetched = runCatching {
+                        ApiClient.sendAssist(baseUrl = serverUrl, apiKey = apiKey, text = utterance)
+                    }
+                    Log.d(WHAT_ELSE_LOG_TAG, "requestWhatElse: library lookup for \"$utterance\" -> " +
+                        "${fetched.getOrNull()?.related?.size ?: -1} phrases (isCurrent=${isCurrent()}), " +
+                        "error=${fetched.exceptionOrNull()}")
+                    if (isCurrent()) {
+                        libraryGenerating = false
+                        fetched.getOrNull()?.let { result = it }
+                        fetched.exceptionOrNull()?.let { e ->
+                            if (usingDefaultServer && e is IOException) backendUnreachable = true
+                            errorText = if (usingDefaultServer) {
+                                "\"What else?\" needs the library feature, which isn't set up on this device."
+                            } else {
+                                "\"What else?\" library lookup failed: ${e.message ?: e::class.simpleName}"
+                            }
+                        }
                     }
                 }
             }
