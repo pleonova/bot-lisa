@@ -1,13 +1,31 @@
 # Installing Bot Lisa on a real phone
 
 Quick reference for getting the app onto a physical Android phone (not the
-emulator) and updating it later. Assumes the backend is already deployed to
-DigitalOcean Kubernetes (see `infra/terraform/main.tf` and `infra/k8s/`) and
-its Load Balancer IP is known.
+emulator) and updating it later. **No backend/server is required** — the app
+degrades gracefully without one: translation (English → target language) and
+"what else?" suggestions run entirely on-device. A server is only needed for
+Russian "expand mode" (looking up a Russian phrase) and "how to answer?" —
+see the README's "What needs the server vs. what runs on-device" table. If
+you want those two features, deploy the backend first (see
+`infra/terraform/main.tf` and `infra/k8s/`) and have its Load Balancer IP on
+hand for the [Configure it](#configure-it-optional) step below.
 
-*In other words: this walks through turning your code into an app file,
-getting that file onto your phone, and telling the app where your server
-lives on the internet.*
+*In other words: this walks through turning your code into an app file and
+getting that file onto your phone — that's enough to use most of the app.
+Only if you also want Russian phrase lookup or "how to answer?" do you need
+to separately tell the app where your server lives on the internet.*
+
+## Deploy with a downloadable file (no cable)
+
+Build the APK (`cd android && ./gradlew assembleDebug`), then upload
+`app/build/outputs/apk/debug/app-debug.apk` to Google Drive (or Dropbox,
+email, etc.). Open that app on the phone, tap the file to download it, then
+open it. On the first install Android prompts to allow installs from that
+source (e.g. "Allow from Drive") — approve it, then **Install** → **Open**.
+
+*In other words: no cable handy? Move the file to the phone yourself (like
+AirDropping a document) and tell Android "yes, install it anyway" — this app
+isn't on the Play Store.*
 
 ## Deploy over USB (quickest)
 
@@ -48,19 +66,10 @@ java -version                    # should print openjdk 17.x
 *In other words: the tool that builds Android apps (Gradle) needs a program
 called Java installed to run at all — this installs it.*
 
-## Alternative: no cable (Drive / email)
+## Configure it (optional)
 
-Build the APK (`cd android && ./gradlew assembleDebug`), then upload
-`app/build/outputs/apk/debug/app-debug.apk` to Google Drive (or Dropbox,
-email, etc.). Open that app on the phone, tap the file to download it, then
-open it. On the first install Android prompts to allow installs from that
-source (e.g. "Allow from Drive") — approve it, then **Install** → **Open**.
-
-*In other words: no cable handy? Move the file to the phone yourself (like
-AirDropping a document) and tell Android "yes, install it anyway" — this app
-isn't on the Play Store.*
-
-## Configure it
+Only needed for Russian "expand mode" and "how to answer?" — every other
+feature (translate, "what else?") works fully on-device with no setup below.
 
 In the app, tap the **gear** (top right) to open settings, then enter:
 
