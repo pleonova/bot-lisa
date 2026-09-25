@@ -1,19 +1,12 @@
 # Installing Bot Lisa on a real phone
 
 Quick reference for getting the app onto a physical Android phone (not the
-emulator) and updating it later. **No backend/server is required** — the app
-degrades gracefully without one: translation (English → target language) and
-"what else?" suggestions run entirely on-device. A server is only needed for
-Russian "expand mode" (looking up a Russian phrase) and "how to answer?" —
-see the README's "What needs the server vs. what runs on-device" table. If
-you want those two features, deploy the backend first (see
-`infra/terraform/main.tf` and `infra/k8s/`) and have its Load Balancer IP on
-hand for the [Configure it](#configure-it-optional) step below.
+emulator) and updating it later. **No backend/server is required** to
+install and try the app — see [Do you need the
+server?](#do-you-need-the-server) for what does and doesn't need one.
 
 *In other words: this walks through turning your code into an app file and
-getting that file onto your phone — that's enough to use most of the app.
-Only if you also want Russian phrase lookup or "how to answer?" do you need
-to separately tell the app where your server lives on the internet.*
+getting that file onto your phone.*
 
 ## Deploy with a downloadable file (no cable)
 
@@ -65,6 +58,22 @@ java -version                    # should print openjdk 17.x
 
 *In other words: the tool that builds Android apps (Gradle) needs a program
 called Java installed to run at all — this installs it.*
+
+## Do you need the server?
+
+The app degrades gracefully without one: translation (English → target
+language) and "what else?" suggestions run entirely on-device. A server is
+only needed for Russian "expand mode" (looking up a Russian phrase) and "how
+to answer?" — see the README's "What needs the server vs. what runs
+on-device" table. If you want those two features, deploy the backend first
+(see `infra/terraform/main.tf` and `infra/k8s/`) and have its Load Balancer
+IP on hand for the [Configure it](#configure-it-optional) step below. If you
+don't, skip straight to [Updating the app
+later](#updating-the-app-later) — there's nothing to configure.
+
+*In other words: most of the app works with no server at all. Only Russian
+phrase lookup and "how to answer?" need one — deploy the backend first if
+you want those, then plug its address into the app in the next step.*
 
 ## Configure it (optional)
 
