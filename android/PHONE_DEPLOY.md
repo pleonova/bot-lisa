@@ -10,15 +10,35 @@ getting that file onto your phone.*
 
 ## Deploy with a downloadable file (no cable)
 
-Build the APK (`cd android && ./gradlew assembleDebug`), then upload
-`app/build/outputs/apk/debug/app-debug.apk` to Google Drive (or Dropbox,
-email, etc.). Open that app on the phone, tap the file to download it, then
-open it. On the first install Android prompts to allow installs from that
-source (e.g. "Allow from Drive") — approve it, then **Install** → **Open**.
+Build the APK first:
+
+```bash
+cd android
+./gradlew assembleDebug
+```
+
+Then get `app/build/outputs/apk/debug/app-debug.apk` onto the phone:
+
+- **Google Drive (or Dropbox, email, etc.)** — upload the APK, then open
+  that app on the phone, tap the file to download it, then open it.
+- **WhatsApp** — WhatsApp blocks sending `.apk` files directly (anti-malware
+  filter), so zip it first:
+  ```bash
+  cd app/build/outputs/apk/debug
+  zip app-debug.zip app-debug.apk
+  ```
+  Send `app-debug.zip` as a WhatsApp document, then on the phone unzip it
+  (most file managers/Files apps handle `.zip` natively — tap it and choose
+  "Extract" or "Unzip") before opening the extracted `.apk`.
+
+On the first install Android prompts to allow installs from that source
+(e.g. "Allow from Drive" or "Allow from WhatsApp") — approve it, then
+**Install** → **Open**.
 
 *In other words: no cable handy? Move the file to the phone yourself (like
 AirDropping a document) and tell Android "yes, install it anyway" — this app
-isn't on the Play Store.*
+isn't on the Play Store. WhatsApp is fussier about the file type, so it gets
+zipped up first and unzipped on the other end.*
 
 ## Deploy over USB (quickest)
 
