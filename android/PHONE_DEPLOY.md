@@ -24,7 +24,7 @@ Then get `app/build/outputs/apk/debug/app-debug.apk` onto the phone:
 - **WhatsApp** — WhatsApp blocks sending `.apk` files directly (anti-malware
   filter), so zip it first:
   ```bash
-  cd app/build/outputs/apk/debug
+  cd android/app/build/outputs/apk/debug
   zip app-debug.zip app-debug.apk
   ```
   Send `app-debug.zip` as a WhatsApp document, then on the phone unzip it
